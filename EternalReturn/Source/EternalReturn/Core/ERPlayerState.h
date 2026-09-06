@@ -35,6 +35,21 @@ public:
 	/** IAbilitySystemInterface */
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	/**
+	 * 소속 팀. INDEX_NONE 은 미배정.
+	 *
+	 * 전체 복제한다 — 적이 어느 팀인지는 모두가 알아야 한다.
+	 * 아군/적군 색 구분, 아군 오사 방지, HUD 표시가 전부 이 값을 쓴다. 숨길 정보가 아니다.
+	 *
+	 * ⚠ 직접 읽지 말고 ERTeamStatics::GetTeamId() 를 쓴다.
+	 *   야생동물처럼 PlayerState 가 없는 액터도 있어서, 호출부가 여기를 직접 캐스팅하면
+	 *   나중에 팀 정보를 옮길 때 전부 고쳐야 한다.
+	 */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Team")
+	int32 TeamId = INDEX_NONE;
+
 protected:
 	/**
 	 * 초기화 전에는 유효하지 않을 수 있다. 호출부는 항상 null 검사를 한다.

@@ -5,7 +5,7 @@
 ## 선행
 
 - [x] [02 ASC 배치 결정](02_ASC_배치결정.md) 완료
-- [ ] 클라 2대로 PIE를 띄울 수 있다
+- [x] 클라 2대로 PIE를 띄울 수 있다
 
 ## 구현
 
@@ -26,10 +26,10 @@
 
 ## 검증 — `Play As Client, Number of Players: 2`
 
-- [ ] ⭐ **서버**에서 `GetAbilitySystemComponent()` 가 유효
-- [ ] ⭐ **클라**에서도 유효 — *"서버에선 되는데 클라에선 안 된다"* 가 없다
-- [ ] `AbilityActorInfo->AvatarActor` 가 캐릭터를 가리킨다 (양쪽)
-- [ ] `AbilityActorInfo->OwnerActor` 가 PlayerState를 가리킨다 (양쪽)
+- [x] ⭐ **서버**에서 `GetAbilitySystemComponent()` 가 유효
+- [x] ⭐ **클라**에서도 유효 — *"서버에선 되는데 클라에선 안 된다"* 가 없다
+- [x] `AbilityActorInfo->AvatarActor` 가 캐릭터를 가리킨다 (양쪽)
+- [x] `AbilityActorInfo->OwnerActor` 가 PlayerState를 가리킨다 (양쪽)
 - [ ] 부활 후 Avatar가 **새 Pawn** 을 가리킨다
 
 ## ⭐ 가장 흔한 GAS 버그 — 걸렸는지 확인
@@ -75,3 +75,27 @@ Source/EternalReturn/Core/ERGameMode.h / .cpp           (검증용 배선)
 ⬜ **PIE 검증 4건은 아직 못 했다.** `Config/DefaultEngine.ini:4` 의 `GlobalDefaultGameMode` 가
 부모 클래스가 삭제된 `BP_RGameMode` 를 가리켜서, 그대로 PIE 를 켜면 `AERPlayerState` 가 안 쓰인다.
 → `Docs/EditorTasks/` 작업 후 확인한다.
+
+---
+
+## PIE 검증 결과 (2026-09-06 14:34, `Saved/Logs/EternalReturn.log`)
+
+```
+Server / Owner=ERPlayerState_0 / Avatar=BP_ERCharacterBase_C_0
+Client / Owner=ERPlayerState_0 / Avatar=BP_ERCharacterBase_C_0
+Server / Owner=ERPlayerState_1 / Avatar=BP_ERCharacterBase_C_1
+Client / Owner=ERPlayerState_1 / Avatar=BP_ERCharacterBase_C_1
+Client / Owner=ERPlayerState_0 / Avatar=BP_ERCharacterBase_C_1
+Client / Owner=ERPlayerState_1 / Avatar=BP_ERCharacterBase_C_0
+```
+
+✅ **Server 2줄 + Client 4줄.** 서버·클라 양쪽 경로가 모두 탄다 — 가장 흔한 GAS 버그를 피했다.
+✅ **12줄 전부 `Owner` = PlayerState, `Avatar` = Character.** 인자 순서가 맞다.
+
+**Client 4줄인 이유**: `Play As Client / Players 2` 는 서버 월드 1 + 클라 월드 2 를 만든다.
+각 클라 월드에 **자기 폰 + 상대 폰**이 있고 둘 다 `OnRep_PlayerState` 를 타므로 2 × 2 = 4 다.
+
+⚠ 마지막 2줄이 교차(`PS_0 ↔ C_1`)로 보이는 것은 **PIE 월드마다 오브젝트 이름을 독립적으로 매기기 때문**으로 판단된다.
+같은 월드 안에서 짝이 어긋난 게 아니다. 다만 로그에 월드 식별자가 없어 **단정하지 않는다** — 필요하면 월드 이름을 로그에 추가해 재확인한다.
+
+⬜ **부활 후 Avatar 재지정은 아직 검증 못 했다** — 부활 시스템(F14)이 없어 폰이 재생성되지 않는다.

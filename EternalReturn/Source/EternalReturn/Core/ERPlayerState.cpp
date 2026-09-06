@@ -2,6 +2,7 @@
 
 #include "Core/ERPlayerState.h"
 #include "AbilitySystemComponent.h"
+#include "Net/UnrealNetwork.h"
 
 AERPlayerState::AERPlayerState()
 {
@@ -26,4 +27,13 @@ AERPlayerState::AERPlayerState()
 UAbilitySystemComponent* AERPlayerState::GetAbilitySystemComponent() const
 {
 	return AbilitySystemComponent;
+}
+
+void AERPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	// ⭐ UPROPERTY(Replicated) 를 추가하면 여기에도 반드시 등록한다.
+	//   빠뜨리면 컴파일도 되고 에러도 없는데 값만 안 온다.
+	DOREPLIFETIME(AERPlayerState, TeamId);
 }
