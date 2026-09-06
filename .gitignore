@@ -13,7 +13,7 @@
 
 # JetBrains Rider
 .idea/
-
+ 
 # macOS
 .DS_Store
 
@@ -96,3 +96,6 @@ Modeling/*
 
 # 게임 추출 애셋 (원본 저작물 - 커밋 금지)
 ER_Asset/
+ERYoutube/
+EternalReturn/Docs/.f01-ppt-build/
+EternalReturn/Docs/Output/
