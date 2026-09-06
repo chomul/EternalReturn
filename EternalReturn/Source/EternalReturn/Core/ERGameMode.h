@@ -1,13 +1,8 @@
-<<<<<<< HEAD
 // Copyright Epic Games, Inc. All Rights Reserved.
-=======
-// Fill out your copyright notice in the Description page of Project Settings.
->>>>>>> 6100863f0a6ea62466e1603dfe2b39fdbd5c6654
 
 #pragma once
 
 #include "CoreMinimal.h"
-<<<<<<< HEAD
 #include "GameFramework/GameModeBase.h"
 #include "ERGameMode.generated.h"
 
@@ -27,22 +22,4 @@ class AERGameMode : public AGameModeBase
 
 public:
 	AERGameMode();
-=======
-#include "GameFramework/GameMode.h"
-#include "ERGameMode.generated.h"
-
-/**
- * 
- */
-UCLASS()
-class ETERNALRETURN_API AERGameMode : public AGameMode
-{
-	GENERATED_BODY()
-	
-public:
-	AERGameMode();
-	
-	virtual void PostLogin(APlayerController* NewPlayer) override;
-	virtual void Logout(AController* Exiting) override;
->>>>>>> 6100863f0a6ea62466e1603dfe2b39fdbd5c6654
 };
