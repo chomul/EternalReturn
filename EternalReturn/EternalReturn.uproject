@@ -10,8 +10,12 @@
 			"LoadingPhase": "Default",
 			"AdditionalDependencies": [
 				"Engine",
+<<<<<<< HEAD
 				"AIModule",
 				"CoreUObject"
+=======
+				"AIModule"
+>>>>>>> 6100863f0a6ea62466e1603dfe2b39fdbd5c6654
 			]
 		}
 	],
@@ -22,6 +26,7 @@
 			"TargetAllowList": [
 				"Editor"
 			]
+<<<<<<< HEAD
 		},
 		{
 			"Name": "GameplayAbilities",
@@ -29,3 +34,8 @@
 		}
 	]
 }
+=======
+		}
+	]
+}
+>>>>>>> 6100863f0a6ea62466e1603dfe2b39fdbd5c6654

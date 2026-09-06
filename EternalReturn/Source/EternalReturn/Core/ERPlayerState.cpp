@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Core/ERPlayerState.h"
@@ -27,3 +28,13 @@ UAbilitySystemComponent* AERPlayerState::GetAbilitySystemComponent() const
 {
 	return AbilitySystemComponent;
 }
+=======
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "Core/ERPlayerState.h"
+
+
+
+
+>>>>>>> 6100863f0a6ea62466e1603dfe2b39fdbd5c6654

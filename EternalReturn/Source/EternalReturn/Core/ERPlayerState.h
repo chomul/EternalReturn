@@ -1,9 +1,14 @@
+<<<<<<< HEAD
 // Copyright Epic Games, Inc. All Rights Reserved.
+=======
+// Fill out your copyright notice in the Description page of Project Settings.
+>>>>>>> 6100863f0a6ea62466e1603dfe2b39fdbd5c6654
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
+<<<<<<< HEAD
 #include "AbilitySystemInterface.h"
 #include "ERPlayerState.generated.h"
 
@@ -43,4 +48,19 @@ protected:
 	 */
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+=======
+#include "ERPlayerState.generated.h"
+
+/**
+ * 
+ */
+UCLASS()
+class ETERNALRETURN_API AERPlayerState : public APlayerState
+{
+	GENERATED_BODY()
+	
+	
+	
+	
+>>>>>>> 6100863f0a6ea62466e1603dfe2b39fdbd5c6654
 };

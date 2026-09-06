@@ -89,6 +89,7 @@ EternalReturn/Package/*
 
 # Xcode
 *.xcodeproj
+<<<<<<< HEAD
 
 # Modeling
 Modeling/*
@@ -96,3 +97,6 @@ Modeling/*
 
 # 게임 추출 애셋 (원본 저작물 - 커밋 금지)
 ER_Asset/
+=======
+*.xcworkspace
+>>>>>>> 6100863f0a6ea62466e1603dfe2b39fdbd5c6654
