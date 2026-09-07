@@ -8,6 +8,8 @@
 #include "ERCharacterBase.generated.h"
 
 class UAbilitySystemComponent;
+class UCameraComponent;
+class USpringArmComponent;
 
 /**
  * 모든 실험체의 베이스.
@@ -48,4 +50,19 @@ protected:
 	 *   부활로 폰이 새로 생기면 Avatar 가 바뀌므로 다시 불린다.
 	 */
 	void InitAbilityActorInfo();
+
+	/**
+	 * 탑다운 카메라 팔.
+	 *
+	 * 캐릭터가 어느 쪽을 보든 시점은 고정이다 — 절대 회전을 쓰고
+	 * 폰 컨트롤 회전을 따라가지 않는다. 벽에 닿아도 카메라를 당기지 않는다
+	 * (탑다운에서 시야가 갑자기 좁아지면 조작이 끊긴다).
+	 *
+	 * ⚠ 카메라는 로컬 전용이다. 복제하지 않는다.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<USpringArmComponent> CameraBoom;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
+	TObjectPtr<UCameraComponent> TopDownCamera;
 };
