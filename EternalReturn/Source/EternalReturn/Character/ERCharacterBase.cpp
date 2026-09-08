@@ -6,6 +6,8 @@
 #include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Character/ERCharacterData.h"
+#include "GAS/ERAttributeInit.h"
 
 AERCharacterBase::AERCharacterBase()
 {
@@ -94,4 +96,33 @@ void AERCharacterBase::InitAbilityActorInfo()
 		TEXT("[GAS] InitAbilityActorInfo — %s / Owner=%s / Avatar=%s"),
 		HasAuthority() ? TEXT("Server") : TEXT("Client"),
 		*GetNameSafe(ERPlayerState), *GetNameSafe(this));
+
+	// 어트리뷰트에 값을 넣는 건 여기부터다. ASC 가 준비된 뒤여야 GE 가 먹는다.
+	if (HasAuthority())
+	{
+		InitDefaultStats();
+	}
+}
+
+void AERCharacterBase::InitDefaultStats()
+{
+	// Override 로 다시 박히면 전투 중에 체력이 만피로 돌아간다.
+	if (bDefaultStatsApplied)
+	{
+		return;
+	}
+
+	// GAS 는 없는 걸 조용히 건너뛴다. 읽는 쪽이 직접 검사하고 로그를 남긴다.
+	if (!CharacterData)
+	{
+		UE_LOG(LogEternalReturn, Error,
+			TEXT("[초기스탯] %s 의 Character Data 가 비어 있다. 실험체 데이터 애셋을 지정해야 한다."),
+			*GetNameSafe(this));
+		return;
+	}
+
+	if (ERAttributeInit::ApplyStatRow(GetAbilitySystemComponent(), InitStatsEffect, CharacterData->BaseStats))
+	{
+		bDefaultStatsApplied = true;
+	}
 }

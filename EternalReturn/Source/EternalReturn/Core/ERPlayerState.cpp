@@ -2,6 +2,7 @@
 
 #include "Core/ERPlayerState.h"
 #include "AbilitySystemComponent.h"
+#include "GAS/ERAttributeSet.h"
 #include "Net/UnrealNetwork.h"
 
 AERPlayerState::AERPlayerState()
@@ -22,6 +23,10 @@ AERPlayerState::AERPlayerState()
 	//   bAlwaysRelevant = true 라 24명분이 전원에게 가므로, 봇 24명 + NET ACTIVE +
 	//   stat unit 으로 재본 뒤 낮춘다.
 	NetUpdateFrequency = 100.f;
+
+	// 생성자에서 만든 AttributeSet 은 ASC 가 자동으로 SpawnedAttributes 에 등록한다.
+	// 초기값은 여기서 넣지 않는다 - 실험체별 값을 데이터 테이블에서 읽어 GE 로 적용한다.
+	AttributeSet = CreateDefaultSubobject<UERAttributeSet>(TEXT("AttributeSet"));
 }
 
 UAbilitySystemComponent* AERPlayerState::GetAbilitySystemComponent() const

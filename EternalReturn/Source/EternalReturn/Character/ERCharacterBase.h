@@ -8,6 +8,8 @@
 #include "ERCharacterBase.generated.h"
 
 class UAbilitySystemComponent;
+class UERCharacterData;
+class UGameplayEffect;
 class UCameraComponent;
 class USpringArmComponent;
 
@@ -50,6 +52,40 @@ protected:
 	 *   부활로 폰이 새로 생기면 Avatar 가 바뀌므로 다시 불린다.
 	 */
 	void InitAbilityActorInfo();
+
+	/**
+	 * 데이터 애셋에서 이 실험체의 1레벨 스탯을 읽어 초기화 GE 로 넣는다.
+	 *
+	 * ⚠ 서버 전용. 클라는 복제로 받는다.
+	 * ⚠ InitAbilityActorInfo 가 끝난 뒤에만 부른다 - 그 전이면 조용히 실패한다.
+	 */
+	void InitDefaultStats();
+
+	/**
+	 * 이 캐릭터가 어느 실험체인지.
+	 *
+	 * ⚠ 실험체 하나당 애셋 하나다. 안 쓰는 실험체는 로드되지 않는다.
+	 *   근거: Docs/4_Argument/4_스탯데이터_저장방식.md
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "스탯")
+	TObjectPtr<UERCharacterData> CharacterData;
+
+	/**
+	 * 초기 스탯을 넣는 Instant GameplayEffect.
+	 *
+	 * ⚠ 애셋이다(에디터에서 만든다). 모디파이어 33줄의 이름·순서·SetByCaller 키는
+	 *   ERAttributeInit::ValidateInitEffect 가 검사해서 어긋나면 로그로 알린다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "스탯")
+	TSubclassOf<UGameplayEffect> InitStatsEffect;
+
+	/**
+	 * ⭐ 초기 스탯을 이미 넣었는가.
+	 *
+	 * InitAbilityActorInfo 는 여러 번 불릴 수 있다(PossessedBy 재호출 등).
+	 * 빗장이 없으면 그때마다 Override 로 다시 박혀 **전투 중에 체력이 만피로 돌아간다.**
+	 */
+	bool bDefaultStatsApplied = false;
 
 	/**
 	 * 탑다운 카메라 팔.

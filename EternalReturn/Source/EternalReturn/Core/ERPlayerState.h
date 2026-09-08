@@ -8,6 +8,7 @@
 #include "ERPlayerState.generated.h"
 
 class UAbilitySystemComponent;
+class UERAttributeSet;
 
 /**
  * 플레이어의 ASC 소유자.
@@ -58,4 +59,15 @@ protected:
 	 */
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
+
+	/**
+	 * 공통 스탯. 생성자에서 만들면 ASC 가 자동으로 SpawnedAttributes 에 넣는다.
+	 *
+	 * ⭐ 캐릭터 고유 리소스(에키온 VF 게이지 등)는 여기 넣지 않는다.
+	 *   별도 AttributeSet 을 만들어 **병렬로 추가**한다. 상속하지 않는다 -
+	 *   ASC 조회가 IsA() 라 같은 계층 둘을 등록하면 조용히 틀린 세트를 쓴다.
+	 *   근거: Docs/4_Argument/3_어트리뷰트셋_구조.md E절
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "GAS")
+	TObjectPtr<UERAttributeSet> AttributeSet;
 };

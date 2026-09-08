@@ -29,4 +29,38 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_BasicAttack, "Damage.Type.BasicAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_Skill,       "Damage.Type.Skill");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_True,        "Damage.Type.True");
+
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_MaxHP,                "SetByCaller.MaxHP");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_MaxVP,                "SetByCaller.MaxVP");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_HP,                   "SetByCaller.HP");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_VP,                   "SetByCaller.VP");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_HPRegen,              "SetByCaller.HPRegen");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_VPRegen,              "SetByCaller.VPRegen");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_AttackPower,          "SetByCaller.AttackPower");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Defense,              "SetByCaller.Defense");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_AttackSpeed,          "SetByCaller.AttackSpeed");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_MoveSpeed,            "SetByCaller.MoveSpeed");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Sight,                "SetByCaller.Sight");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_AttackRange,          "SetByCaller.AttackRange");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_CritChance,           "SetByCaller.CritChance");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_CritDamageUp,         "SetByCaller.CritDamageUp");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SkillAmp,             "SetByCaller.SkillAmp");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_BasicAtkAmp,          "SetByCaller.BasicAtkAmp");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_DefPenPercent,        "SetByCaller.DefPenPercent");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_DefPenFlat,           "SetByCaller.DefPenFlat");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_DamageUp,             "SetByCaller.DamageUp");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_FinalDamageUpPercent, "SetByCaller.FinalDamageUpPercent");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_FinalDamageUpFlat,    "SetByCaller.FinalDamageUpFlat");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SkillHaste,           "SetByCaller.SkillHaste");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_DamageDown,           "SetByCaller.DamageDown");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_BasicAtkDamageDown,   "SetByCaller.BasicAtkDamageDown");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SkillDamageDown,      "SetByCaller.SkillDamageDown");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowResist,           "SetByCaller.SlowResist");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_CCResist,             "SetByCaller.CCResist");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Lifesteal,            "SetByCaller.Lifesteal");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_OmniLifesteal,        "SetByCaller.OmniLifesteal");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_HealAmp,              "SetByCaller.HealAmp");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_OutOfCombatRegen,     "SetByCaller.OutOfCombatRegen");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_ModeDamageUp,         "SetByCaller.ModeDamageUp");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_ModeDamageDown,       "SetByCaller.ModeDamageDown");
 }
