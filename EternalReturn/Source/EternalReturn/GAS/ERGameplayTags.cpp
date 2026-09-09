@@ -63,4 +63,18 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_OutOfCombatRegen,     "SetByCaller.OutOfCombatRegen");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_ModeDamageUp,         "SetByCaller.ModeDamageUp");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_ModeDamageDown,       "SetByCaller.ModeDamageDown");
+
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_HealAmount,           "SetByCaller.HealAmount");
+
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Base,             "Data.Damage.Base");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_APRatio,          "Data.Damage.APRatio");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_BonusAPRatio,     "Data.Damage.BonusAPRatio");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_SkillAmpRatio,    "Data.Damage.SkillAmpRatio");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_MaxHPRatio,       "Data.Damage.MaxHPRatio");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_CurHPRatio,       "Data.Damage.CurHPRatio");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_LostHPRatio,      "Data.Damage.LostHPRatio");
+
+	UE_DEFINE_GAMEPLAY_TAG(Damage_Shape_AoE,    "Damage.Shape.AoE");
+	UE_DEFINE_GAMEPLAY_TAG(Actor_Type_Wildlife, "Actor.Type.Wildlife");
+	UE_DEFINE_GAMEPLAY_TAG(Actor_Type_Boss,     "Actor.Type.Boss");
 }

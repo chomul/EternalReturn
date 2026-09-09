@@ -96,4 +96,37 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_OutOfCombatRegen);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_ModeDamageUp);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_ModeDamageDown);
+
+	// ⚠ 흡혈 회복 GE 가 쓰는 키. 위 33개는 **어트리뷰트 이름**이라 SetByCaller.Lifesteal 은
+	//   "흡혈률 어트리뷰트를 세팅" 이라는 뜻으로 이미 쓰이고 있다. 회복량은 다른 키를 쓴다.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_HealAmount);
+
+	// ── 데미지 계수 (어빌리티 -> Execution) ────────────────────
+	//
+	// ⭐ 어빌리티는 **"몇 배"만** 넘긴다. 스탯을 읽어 곱하는 것은 ERDamageExecution 하나뿐이다.
+	//   어빌리티가 곱하면 계산식이 스킬 수만큼 복제된다.
+	//   근거: Docs/4_Argument/5_추가공격력_산출방식.md
+	//
+	// ⚠ 이 태그들은 SetByCaller 지만 접두사가 "SetByCaller." 가 아니다.
+	//   그 접두사는 **GE 애셋의 모디파이어 선택기**가 요구하는 것이고
+	//   (GameplayEffect.h:257), 이쪽은 C++ 이 넣고 C++ 이 읽어서 선택기를 안 탄다.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Base);            // 스킬 고정 피해량
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_APRatio);         // 공격력 계수
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_BonusAPRatio);    // **추가** 공격력 계수
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_SkillAmpRatio);   // 스킬 증폭 계수
+
+	// 체력 비례 피해 계수. ⚠ 최대/현재를 혼동하면 스킬 성격이 정반대가 된다 -
+	//   재키 Q 는 **현재** 체력 비례라 대상이 죽어갈수록 약해지는데,
+	//   최대 체력으로 계산하면 처형기가 된다.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_MaxHPRatio);      // 대상 **최대** 체력 비례
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_CurHPRatio);      // 대상 **현재** 체력 비례
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_LostHPRatio);     // **자신이 잃은** 체력 비례
+
+	// ── 판정 형상 · 액터 유형 ──────────────────────────────
+	//
+	// 흡혈의 치유 감소 조건이다. ⭐ Execution 이 Cast<> 로 클래스를 검사하지 않는다 -
+	// 그러면 F03(데미지)이 F12(야생동물)에 의존하게 된다.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Shape_AoE);   // 어빌리티가 GE Spec 에 붙인다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Actor_Type_Wildlife); // 야생동물 액터가 갖는다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Actor_Type_Boss);     // 보스 액터가 갖는다 (F12 책임)
 }

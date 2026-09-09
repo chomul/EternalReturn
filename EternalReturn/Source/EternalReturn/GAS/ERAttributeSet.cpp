@@ -94,6 +94,27 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 	Super::PostGameplayEffectExecute(Data);
 
 	// 여기는 서버에서만 불린다 (GE 실행은 서버 권위).
+
+	// ── 회복 통로 ───────────────────────────────────────────
+	//
+	// ⭐ 회복을 메타로 받는 이유는 HealAmp(회복량 증폭)를 **한 곳에서** 곱하기 위해서다.
+	//   HP 를 직접 올리는 경로를 만들면 그때마다 HealAmp 를 곱해야 하고 언젠가 빠뜨린다.
+	//   근거: Docs/4_Argument/6_흡혈_적용경로.md ①
+	if (Data.EvaluatedData.Attribute == GetIncomingHealingAttribute())
+	{
+		const float Healing = GetIncomingHealing();
+
+		// ⭐ 통로를 반드시 비운다. IncomingDamage 와 같은 이유다.
+		SetIncomingHealing(0.f);
+
+		if (Healing > 0.f)
+		{
+			// 상한(최대 체력)은 PreAttributeChange 가 자른다. 여기서 또 자르지 않는다.
+			SetHP(GetHP() + Healing * (1.f + GetHealAmp()));
+		}
+		return;
+	}
+
 	if (Data.EvaluatedData.Attribute != GetIncomingDamageAttribute())
 	{
 		return;

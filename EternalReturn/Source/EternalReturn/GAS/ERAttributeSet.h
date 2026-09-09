@@ -89,6 +89,42 @@ public:
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnOutOfHealth, AActor* /*Instigator*/);
 	mutable FOnOutOfHealth OnOutOfHealth;
 
+	// ═══════════════════════════════════════════════════════════
+	//  어트리뷰트 변화를 듣는 법  (F02-06)
+	// ═══════════════════════════════════════════════════════════
+	//
+	// ⭐ **자체 변경 델리게이트를 만들지 않았다.** ASC 가 이미 제공한다.
+	//   (CLAUDE.md §8 - GAS 가 제공하는 것을 다시 만들지 않는다)
+	//
+	//   ASC->GetGameplayAttributeValueChangeDelegate(UERAttributeSet::GetHPAttribute())
+	//      .AddUObject(this, &UMyWidget::OnHPChanged);
+	//
+	//   void UMyWidget::OnHPChanged(const FOnAttributeChangeData& Data)
+	//   {
+	//       // Data.NewValue / Data.OldValue / Data.GEModData
+	//   }
+	//
+	// ⭐ **어트리뷰트 단위로 구독된다.** 체력만 듣는 위젯은 공격력이 변해도 안 깨어난다.
+	//   서버·클라 양쪽에서 발동하므로 UI 는 클라에서 그대로 쓴다.
+	//
+	// ⚠ **구독 시점**: ASC 초기화(InitAbilityActorInfo) 이후여야 한다.
+	//   클라는 AERCharacterBase::OnRep_PlayerState 이후가 그 시점이다.
+	//
+	// ⚠ **구독 해제를 반드시 한다.** 안 하면 dangling 델리게이트가 남는다.
+	//
+	//   ASC->GetGameplayAttributeValueChangeDelegate(Attr).RemoveAll(this);
+	//
+	// ⚠ **UMG Property Binding 을 쓰지 마라.** 매 프레임 호출된다 -
+	//   24명분 체력바를 바인딩으로 만들면 매 프레임 전부 돈다.
+	//   근거: Docs/0_GameDesign/Systems/UI_HUD_역기획서.md
+	//
+	// ⭐ **이 클래스는 UI 를 모른다.** 구독은 **듣는 쪽**이 한다.
+	//   여기에 위젯을 아는 코드가 한 줄도 없어야 F17 없이 F02 가 완성된다.
+	//
+	// 사망은 위의 OnOutOfHealth 를 쓴다. 어트리뷰트 델리게이트와 달리
+	// **서버에서만** 발동한다 (PostGameplayEffectExecute 가 서버 전용).
+	// ═══════════════════════════════════════════════════════════
+
 private:
 	/**
 	 * ⭐ OnOutOfHealth 를 **한 번만** 쏘기 위한 빗장.
@@ -272,6 +308,22 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Meta")
 	FGameplayAttributeData IncomingDamage;
 	ATTRIBUTE_ACCESSORS(UERAttributeSet, IncomingDamage)
+
+	/**
+	 * [Meta] 이번 한 번의 회복량. IncomingDamage 와 같은 형태의 통로다.
+	 *
+	 * 회복을 여기로 모으는 이유는 **HealAmp(회복량 증폭)를 한 곳에서 적용**하기 위해서다.
+	 * HP 를 직접 올리면 회복 경로마다 HealAmp 를 곱해야 하고, 언젠가 하나를 빠뜨린다.
+	 * 근거: Docs/4_Argument/6_흡혈_적용경로.md ①
+	 *
+	 * 지금 이걸 쓰는 것은 흡혈(F03-05) 하나뿐이다.
+	 * 회복 스킬·아이템(F08/F15)이 생기면 같은 통로를 쓴다.
+	 *
+	 * ⭐ 복제하지 않는다. IncomingDamage 와 같은 이유다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Meta")
+	FGameplayAttributeData IncomingHealing;
+	ATTRIBUTE_ACCESSORS(UERAttributeSet, IncomingHealing)
 
 protected:
 	UFUNCTION() void OnRep_HP(const FGameplayAttributeData& OldValue);
