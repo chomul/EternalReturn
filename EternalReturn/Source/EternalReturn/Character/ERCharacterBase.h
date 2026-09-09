@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
+#include "GameplayEffectTypes.h"   // FOnAttributeChangeData
 #include "ERCharacterBase.generated.h"
 
 class UAbilitySystemComponent;
@@ -44,6 +45,45 @@ public:
 	/** [클라] PlayerState 가 복제되어 도착한 뒤 */
 	virtual void OnRep_PlayerState() override;
 
+	/**
+	 * 카메라 오프셋을 리그에 반영한다. **컨트롤러가 부른다.**
+	 *
+	 * ⭐ 리그는 여기(캐릭터)가 갖고, 잠금 상태·오프셋은 컨트롤러가 갖는다.
+	 *   컨트롤러는 폰과 수명이 달라서 부활해도 상태가 살아남는다.
+	 *   근거: Docs/4_Argument/8_카메라_각도거리_소유주체.md 파트 2
+	 *
+	 * ⚠ 로컬 전용이다. 복제하지 않는다.
+	 */
+	void SetCameraTargetOffset(const FVector& Offset);
+
+	/** 카메라가 보는 방향(월드 Yaw). 가장자리 스크롤이 이걸로 화면->월드 축을 계산한다. */
+	float GetCameraYaw() const { return CameraYaw; }
+
+	/**
+	 * ⚠⚠ 카메라 Yaw. **0 이 아니다.**
+	 *
+	 * 원작은 월드 축에 대해 비스듬히 본다 - 같은 도로를 원작은 대각선으로,
+	 * Yaw 0 인 우리는 직각으로 봤다. 근거: Docs/4_Argument/8_카메라_각도거리_소유주체.md
+	 *
+	 * ⭐ **찾아낸 과정** (Docs/4_Argument/8_카메라_각도거리_소유주체.md 파트 1-B):
+	 *
+	 *   0    -> 도로가 화면에서 **수평**. 원작은 대각선이다              -> Yaw != 0
+	 *   -45  -> 도로가 **좌상->우하**. 원작은 좌하->우상이다             -> 부호 반대
+	 *   +45  -> 기울기는 맞는데 **장면 전체가 정반대**                   -> 180 도 부족
+	 *   -135 -> 기울기 유지 + 장면 방향 정상                            <- 현재
+	 *
+	 * ⚠⚠ **기울기만 보고 Yaw 를 정하면 180 도 틀린 채로 맞았다고 착각한다.**
+	 *   지면의 **선은 방향이 없어서** tan 의 주기(180 도)만큼 같은 기울기가 나온다:
+	 *     tan(월드각 - Yaw - 180) = tan(월드각 - Yaw)
+	 *   기울기 외에 **장면의 좌우 배치**(어디에 잔디가 있고 어디에 건물이 있는지)를
+	 *   같이 봐야 180 도 오류를 잡는다.
+	 *
+	 * ⚠ 크기(135)는 여전히 **미확정**이다. 화면 기울기는
+	 *     tan(화면각) = tan(월드각 - Yaw) x sin(피치)
+	 *   라서 Yaw 와 피치에 **동시에** 의존한다. 피치를 먼저 확정해야 풀린다.
+	 */
+	static constexpr float CameraYaw = -135.f;
+
 protected:
 	/**
 	 * ⭐ 서버와 클라 양쪽에서 각각 불러야 한다.
@@ -59,7 +99,25 @@ protected:
 	 * ⚠ 서버 전용. 클라는 복제로 받는다.
 	 * ⚠ InitAbilityActorInfo 가 끝난 뒤에만 부른다 - 그 전이면 조용히 실패한다.
 	 */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	void InitDefaultStats();
+
+	/**
+	 * MoveSpeed 어트리뷰트를 CharacterMovementComponent 에 반영한다.
+	 *
+	 * ⭐ **Tick 으로 매 프레임 동기화하지 않는다.** F02-06 의 변경 델리게이트를 구독해
+	 *   값이 **변할 때만** 갱신한다 (CLAUDE.md §2).
+	 *
+	 * ⚠ 서버·클라 **양쪽에서** 구독한다. 각자 자기 CMC 를 갱신해야
+	 *   둔화(F06-02)가 양쪽에서 같이 보인다.
+	 */
+	void BindMoveSpeed();
+	void OnMoveSpeedChanged(const FOnAttributeChangeData& Data);
+	void ApplyMoveSpeed(float MetersPerSecond);
+
+	/** 구독 해제용. 안 풀면 dangling 델리게이트가 남는다. */
+	FDelegateHandle MoveSpeedHandle;
 
 	/**
 	 * 이 캐릭터가 어느 실험체인지.
