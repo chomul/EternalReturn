@@ -5,9 +5,12 @@
 #include "Character/ERInputConfig.h"
 #include "EternalReturn.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "GAS/ERGameplayTags.h"
 #include "NavigationSystem.h"
 
 AERPlayerController::AERPlayerController()
@@ -228,6 +231,18 @@ bool AERPlayerController::ResolveNavigableDestination(const FVector& ClickPoint,
 
 void AERPlayerController::OnMoveToCursor()
 {
+	// ── 이중 게이트 ① 입력 레이어 ──────────────────────────
+	//
+	// ⚠ **이건 방어선이 아니다.** 못 갈 명령을 서버에 안 보내서 반응을 자연스럽게
+	//   하는 것이 목적이다. 이걸 우회해도 CMC 가 속도를 0 으로 만든다
+	//   (UERCharacterMovementComponent). 그쪽이 실제 방어선이다.
+	//
+	// 근거: 역기획서 §9.2 · Docs/4_Argument/10_CC_차단축_태그설계.md
+	if (IsMovementBlockedByCC())
+	{
+		return;
+	}
+
 	FHitResult Hit;
 	if (!GetHitResultUnderCursor(ECC_Visibility, /*bTraceComplex=*/false, Hit))
 	{
@@ -252,6 +267,22 @@ void AERPlayerController::OnMoveToCursor()
 	ServerSetDestination(Hit.ImpactPoint);
 }
 
+bool AERPlayerController::IsMovementBlockedByCC() const
+{
+	const APawn* ControlledPawn = GetPawn();
+	if (!ControlledPawn)
+	{
+		return false;
+	}
+
+	const UAbilitySystemComponent* ASC =
+		UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ControlledPawn);
+
+	// ⚠ ASC 가 없는 순간이 정상적으로 존재한다 (PlayerState 복제 전).
+	//   그때는 막지 않는다 — 스폰 직후 조작이 먹지 않게 된다.
+	return ASC && ASC->HasMatchingGameplayTag(ERTags::State_Block_Movement);
+}
+
 bool AERPlayerController::ServerSetDestination_Validate(const FVector& Destination)
 {
 	// ⭐ 여기서 거부하면 **연결이 끊긴다.** 명백히 조작된 값만 잡는다.
@@ -267,7 +298,21 @@ void AERPlayerController::ServerSetDestination_Implementation(const FVector& Des
 		return;
 	}
 
-	// ⭐ 검증 ① 거리. 화면 밖을 찍는 텔레포트 시도를 막는다.
+	// ⭐ 검증 ① 이동할 수 있는 상태인가 (CC · 이동 차단).
+	//
+	//   ⚠ **이게 방어의 전부는 아니다.** 클라가 이 RPC 를 아예 안 보내고 움직여도
+	//     서버 CMC 의 GetMaxSpeed() 가 0 을 반환해서 막힌다(F06). 그쪽이 실제 방어선이다.
+	//     여기서 거르는 이유는 **못 갈 목적지를 서버 상태에 남기지 않기 위해서**다.
+	//
+	//   ⚠ 사망 검증은 아직 못 한다 — 사망 태그가 F11 에서 생긴다. 그때 여기에 추가한다.
+	if (IsMovementBlockedByCC())
+	{
+		UE_LOG(LogEternalReturn, Verbose,
+			TEXT("[이동] CC 로 막혀 있어 목적지를 받지 않는다. %s"), *GetNameSafe(ControlledPawn));
+		return;
+	}
+
+	// ⭐ 검증 ② 거리. 화면 밖을 찍는 텔레포트 시도를 막는다.
 	const float DistSq = FVector::DistSquared(ControlledPawn->GetActorLocation(), Destination);
 	if (DistSq > FMath::Square(MaxClickDistance))
 	{
@@ -277,7 +322,7 @@ void AERPlayerController::ServerSetDestination_Implementation(const FVector& Des
 		return;
 	}
 
-	// ⭐ 검증 ② 갈 수 있는 곳인가. **클라와 같은 함수**로 다시 푼다 -
+	// ⭐ 검증 ③ 갈 수 있는 곳인가. **클라와 같은 함수**로 다시 푼다 -
 	//   클라가 보낸 좌표를 믿지 않는다.
 	FVector Resolved;
 	if (!ResolveNavigableDestination(Destination, Resolved))
@@ -286,18 +331,24 @@ void AERPlayerController::ServerSetDestination_Implementation(const FVector& Des
 		return;
 	}
 
-	// ⚠ **서버는 검증만 하고 직접 이동을 구동하지 않는다.**
+	// ── 서버가 무엇을 하고 무엇을 하지 않는가 ──────────────
 	//
-	//   역기획서 §3.3 은 "경로는 양쪽 계산" 이라고 적었지만, 플레이어가 조종하는 폰에서
-	//   서버가 독립적으로 PathFollowing 을 돌리면 **클라가 보낸 이동과 충돌한다.**
-	//   언리얼의 네트워크 캐릭터 이동은 클라가 입력을 만들고 서버가 그것을 재생·검증하는
-	//   모델이라(CMC), 서버가 따로 구동하면 서로를 덮어쓴다.
+	// ⚠ **서버는 이동을 구동하지 않는다.** 서버가 독립적으로 PathFollowing 을 돌리면
+	//   클라가 ServerMove 로 보낸 입력의 재생과 서로를 덮어쓴다 (E07).
 	//
-	//   → 서버의 권위는 **목적지 검증**과 CMC 의 ServerMove 검증에 있다.
-	//     이게 텔레포트를 막는 실제 방어선이다.
+	// ⭐ **정확한 표현:**
+	//     서버는 경로를 알지도, 신뢰하지도 않는다.
+	//     서버는 CMC 가 전달한 movement input(Acceleration)을 authoritative 하게 처리한다.
+	//     클라의 NavPath 는 그 입력을 만들어내는 로컬 로직일 뿐이다.
 	//
-	//   ⚠ 이 판단은 문서와 다르므로 Docs/5_ErrorReport 에 근거를 남긴다.
-	UE_LOG(LogEternalReturn, Verbose, TEXT("[이동] 목적지 승인 %s"), *Resolved.ToString());
+	// ⚠⚠ 그래서 **텔레포트를 막는 것은 이 RPC 가 아니다.**
+	//   CMC 의 ServerMove 위치 검증과 GetMaxSpeed() 가 막는다.
+	//   이 RPC 는 "못 갈 목적지를 애초에 받지 않는" 필터이고, 그 이상을 주장하지 않는다.
+	//
+	// 근거: Docs/4_Argument/11_클릭이동_서버검증_수준.md (방안 B)
+	ServerDestination = Resolved;
+
+	UE_LOG(LogEternalReturn, Verbose, TEXT("[이동] 목적지 승인 %s"), *ServerDestination.ToString());
 }
 
 void AERPlayerController::StartMoveTo(const FVector& Destination)

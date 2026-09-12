@@ -14,7 +14,14 @@ namespace ERTags
 
 	UE_DEFINE_GAMEPLAY_TAG(State_Stealth,        "State.Stealth");
 	UE_DEFINE_GAMEPLAY_TAG(State_Invulnerable,   "State.Invulnerable");
+	UE_DEFINE_GAMEPLAY_TAG(State_DamageImmune,   "State.DamageImmune");
+	UE_DEFINE_GAMEPLAY_TAG(State_Unstoppable,    "State.Unstoppable");
+	UE_DEFINE_GAMEPLAY_TAG(State_Untargetable,   "State.Untargetable");
 	UE_DEFINE_GAMEPLAY_TAG(State_CCImmune,       "State.CCImmune");
+
+	UE_DEFINE_GAMEPLAY_TAG(State_Block_Movement,    "State.Block.Movement");
+	UE_DEFINE_GAMEPLAY_TAG(State_Block_BasicAttack, "State.Block.BasicAttack");
+	UE_DEFINE_GAMEPLAY_TAG(State_Block_Skill,       "State.Block.Skill");
 
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Form_Channeled,      "Ability.Form.Channeled");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Form_NextAttackBuff, "Ability.Form.NextAttackBuff");
@@ -29,6 +36,10 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_BasicAttack, "Damage.Type.BasicAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_Skill,       "Damage.Type.Skill");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_True,        "Damage.Type.True");
+
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_CCDuration,           "SetByCaller.CCDuration");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowPercent,          "SetByCaller.SlowPercent");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowMultiplier,       "SetByCaller.SlowMultiplier");
 
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_MaxHP,                "SetByCaller.MaxHP");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_MaxVP,                "SetByCaller.MaxVP");

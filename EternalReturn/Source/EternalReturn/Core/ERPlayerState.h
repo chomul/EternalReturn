@@ -39,6 +39,16 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	/**
+	 * ⭐ 둔화 재계산을 ASC 에 연결하는 자리다 (F06-02).
+	 *
+	 * ⚠ **폰이 아니라 여기서 거는 이유**: AERCharacterBase::InitAbilityActorInfo 는
+	 *   PossessedBy · OnRep_PlayerState · 재소유 때마다 **여러 번 불린다.**
+	 *   거기서 걸면 델리게이트가 중복 등록되어 재계산이 N번 돈다.
+	 *   PlayerState 는 ASC 와 수명이 같고 BeginPlay 가 한 번만 불린다.
+	 */
+	virtual void BeginPlay() override;
+
+	/**
 	 * 소속 팀. INDEX_NONE 은 미배정.
 	 *
 	 * 전체 복제한다 — 적이 어느 팀인지는 모두가 알아야 한다.

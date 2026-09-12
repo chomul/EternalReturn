@@ -2,6 +2,7 @@
 
 #include "Core/ERPlayerState.h"
 #include "AbilitySystemComponent.h"
+#include "GAS/ERCCLibrary.h"
 #include "GAS/ERAttributeSet.h"
 #include "Net/UnrealNetwork.h"
 
@@ -27,6 +28,18 @@ AERPlayerState::AERPlayerState()
 	// 생성자에서 만든 AttributeSet 은 ASC 가 자동으로 SpawnedAttributes 에 등록한다.
 	// 초기값은 여기서 넣지 않는다 - 실험체별 값을 데이터 테이블에서 읽어 GE 로 적용한다.
 	AttributeSet = CreateDefaultSubobject<UERAttributeSet>(TEXT("AttributeSet"));
+}
+
+void AERPlayerState::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// ⚠ 서버에서만 건다. 둔화 재계산은 서버 권위이고, 결과인 MoveSpeed 는
+	//   어트리뷰트라 클라에 복제된다 (CLAUDE.md §6).
+	if (HasAuthority())
+	{
+		ERCC::BindSlowRecalculation(AbilitySystemComponent);
+	}
 }
 
 UAbilitySystemComponent* AERPlayerState::GetAbilitySystemComponent() const

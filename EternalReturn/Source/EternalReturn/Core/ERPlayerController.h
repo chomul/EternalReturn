@@ -52,7 +52,17 @@ private:
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerSetDestination(const FVector& Destination);
 
-	/** 실제 이동 시작. 서버·클라 각자 부른다. */
+	/**
+	 * 실제 이동 시작.
+	 *
+	 * ⚠ **호출하는 곳은 OnMoveToCursor 한 곳뿐이다** — 즉 조종 중인 클라이언트다.
+	 *   서버는 이 함수를 부르지 않는다. 서버가 따로 경로 추적을 돌리면 클라 예측과
+	 *   충돌한다 (Docs/5_ErrorReport/E07).
+	 *
+	 * ⭐ 서버는 대신 **클라가 ServerMove 로 보낸 Acceleration 을 재생**한다.
+	 *   그게 성립하려면 경로 추적이 Acceleration 경로를 타야 한다
+	 *   → UERCharacterMovementComponent 의 bUseAccelerationForPaths (E08)
+	 */
 	void StartMoveTo(const FVector& Destination);
 
 	/**
@@ -67,6 +77,33 @@ private:
 	 * @return 갈 수 있는 지점을 찾으면 true
 	 */
 	bool ResolveNavigableDestination(const FVector& ClickPoint, FVector& OutDestination) const;
+
+	/**
+	 * CC 로 이동이 막혀 있는가 (이중 게이트의 입력 쪽).
+	 *
+	 * ⚠ 실제 방어선은 UERCharacterMovementComponent 다. 여기는 반응성용이다.
+	 *
+	 * ⭐ 서버의 ServerSetDestination 도 이 함수를 쓴다 — 양쪽이 같은 판정을 쓴다.
+	 */
+	bool IsMovementBlockedByCC() const;
+
+	/**
+	 * ⭐ [서버 전용] 서버가 승인한 마지막 목적지.
+	 *
+	 * ⚠ **이 값 자체는 방어가 아니다.** 서버는 이 목적지로 이동을 구동하지 않고,
+	 *   실제 이동은 클라가 ServerMove 로 보낸 Acceleration 이 정한다.
+	 *
+	 * ⭐ 그래도 저장하는 이유: **네비메시 이탈 감지(방안 D)의 전제**다.
+	 *   CMC 는 네비메시를 모르고 콜리전만 보기 때문에, 콜리전은 있고 네비는 없는
+	 *   지형으로 걸어가는 것을 아무도 막지 못한다. 그걸 나중에 검사하려면
+	 *   "서버가 승인한 목적지" 가 남아 있어야 한다.
+	 *   ⚠ D 는 F13 에서 네비 설정을 확정한 뒤에 켠다 — 그전에 켜면 오탐이 난다.
+	 *
+	 * ⚠ 복제하지 않는다. 클라는 자기 목적지를 이미 안다.
+	 *
+	 * 근거: Docs/4_Argument/11_클릭이동_서버검증_수준.md
+	 */
+	FVector ServerDestination = FVector::ZeroVector;
 
 	/**
 	 * 네비메시 투영 반경 (cm).
