@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "GameplayTagContainer.h"   // TMap 의 키라 전방 선언 불가
 
 #include "ERInputConfig.generated.h"
 
@@ -59,4 +60,20 @@ public:
 	/** 카메라 잠금 토글. F05-03 에서 쓴다. */
 	UPROPERTY(EditDefaultsOnly, Category = "카메라")
 	TObjectPtr<UInputAction> ToggleCameraLock;
+
+	// ── 스킬 슬롯 (F07-01) ──────────────────────────────────
+	//
+	// ⭐ **액션 하나 = 슬롯 태그 하나.** 컨트롤러가 이 표를 순회해 바인딩하고,
+	//   눌리면 그 태그로 TryActivateAbilitiesByTag 를 부른다.
+	//   슬롯이 늘어도(F 슬롯 등) 코드를 안 고친다 — 여기 한 줄 추가하면 된다.
+	//
+	// ⚠ **슬롯 인덱스와 키를 분리한다.** 역기획서 §1.1 — "F 는 D 키와 스왑 가능하다".
+	//   태그(슬롯)와 액션(키)이 이 표로 묶이므로 키 재배치는 IMC 애셋에서만 바뀐다.
+	//
+	// ⚠ D 슬롯은 무기가 소유하지만(F11) **입력 액션은 여기 둔다.** 키는 캐릭터 것이다.
+	//   어빌리티가 안 붙어 있으면 TryActivate 가 그냥 실패한다 — 에러가 아니다.
+
+	/** 슬롯 태그 → 입력 액션. Ability.Slot.P/Q/W/E/R/D 를 넣는다. */
+	UPROPERTY(EditDefaultsOnly, Category = "스킬", meta = (Categories = "Ability.Slot"))
+	TMap<FGameplayTag, TObjectPtr<UInputAction>> SkillSlotActions;
 };

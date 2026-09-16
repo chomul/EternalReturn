@@ -6,6 +6,8 @@
 #include "Engine/DataAsset.h"
 #include "GAS/ERAttributeTypes.h"
 
+class UERSkillData;
+
 #include "ERCharacterData.generated.h"
 
 /**
@@ -37,4 +39,21 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "스탯")
 	FERCharStats BaseStats;
+
+	/**
+	 * 이 실험체의 스킬. P / Q / W / E / R.
+	 *
+	 * ⭐ **하드 참조다.** 실험체를 로드하면 스킬은 반드시 필요하고 따로 언로드할 일이 없다
+	 *   (Docs/6_Lyra참조/03 §5 의 기준 — "따로 로드/언로드할 일이 있나? 없으면 하드").
+	 *
+	 * ⚠ **D 슬롯은 여기 없다.** 무기가 소유한다 (역기획서 §1.2). F11 에서 무기 데이터에 붙는다.
+	 *
+	 * ⚠ 순서에 의미가 없다. 슬롯은 각 UERSkillData 의 SlotTag 가 정한다.
+	 *   같은 슬롯이 둘 있으면 둘 다 부여되고 입력이 둘 다 발동시킨다 — 애셋 실수다.
+	 *   GrantSkills 가 검사한다.
+	 *
+	 * 근거: Docs/4_Argument/15_스킬데이터_위치.md (방안 B)
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "스킬")
+	TArray<TObjectPtr<UERSkillData>> Skills;
 };

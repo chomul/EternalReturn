@@ -29,6 +29,7 @@ namespace ERCC
 	 * @param TargetASC   대상
 	 * @param CCEffect    CC GE 애셋 클래스 (HasDuration 이어야 한다)
 	 * @param DurationSeconds  지속시간. GE 의 SetByCaller.CCDuration 으로 들어간다
+	 * @param SlowPercent  둔화 GE 일 때만. 감소율(0.6 = 60%). SetByCaller.SlowPercent 로 들어간다. 0 이면 안 넣는다 (F07-07)
 	 * @return 실제로 적용됐으면 true
 	 *
 	 * ⚠ 실패하면 **반드시 로그를 남긴다.** 조용히 false 를 돌려주지 않는다.
@@ -37,7 +38,8 @@ namespace ERCC
 		UAbilitySystemComponent* SourceASC,
 		UAbilitySystemComponent* TargetASC,
 		TSubclassOf<UGameplayEffect> CCEffect,
-		float DurationSeconds);
+		float DurationSeconds,
+		float SlowPercent = 0.f);
 
 	/**
 	 * [서버] 둔화를 다시 계산해 UERSlowEffect 를 갱신한다.

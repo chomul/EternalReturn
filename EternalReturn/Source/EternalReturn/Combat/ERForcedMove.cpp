@@ -19,36 +19,20 @@ namespace ERForcedMove
 
 const FName ForceName(TEXT("ERForcedMove"));
 
+namespace
+{
+	/**
+	 * 넉백과 자기 이동의 공통 몸통 — 검증, 소스 추가, Multicast, 벽 감시.
+	 * 면역 검사만 밖에 있다: ApplyForcedMove 는 하고, ApplySelfMove 는 안 한다 (F07-06).
+	 */
+	bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, const TCHAR* Label);
+}
+
 bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration)
 {
 	if (!Target)
 	{
 		UE_LOG(LogEternalReturn, Error, TEXT("[강제이동] 대상이 없다."));
-		return false;
-	}
-
-	// ⚠ 서버 권위다. 방향·거리·시간을 서버가 정하고, 벽 충돌도 서버가 판정한다
-	//   (역기획서 §3.5). 클라가 부르면 각 머신이 다른 결과를 낸다.
-	if (!Target->HasAuthority())
-	{
-		UE_LOG(LogEternalReturn, Error,
-			TEXT("[강제이동] 서버가 아니다. 강제 이동은 서버 권위다. (%s)"), *GetNameSafe(Target));
-		return false;
-	}
-
-	const FVector Dir = Direction.GetSafeNormal2D();
-	if (Dir.IsNearlyZero())
-	{
-		// ⚠ 시전자와 대상이 정확히 겹치면 방향이 나오지 않는다. 실제로 일어난다.
-		UE_LOG(LogEternalReturn, Warning,
-			TEXT("[강제이동] 방향이 0 이다. 밀어낼 방향을 정할 수 없다. (%s)"), *GetNameSafe(Target));
-		return false;
-	}
-
-	if (DistanceUU <= 0.f || Duration <= 0.f)
-	{
-		UE_LOG(LogEternalReturn, Error,
-			TEXT("[강제이동] 거리(%.1f) 또는 시간(%.2f)이 0 이하다."), DistanceUU, Duration);
 		return false;
 	}
 
@@ -67,6 +51,51 @@ bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float Distanc
 				TEXT("[강제이동] %s 는 이동 방해 면역이다. 무시한다."), *GetNameSafe(Target));
 			return false;
 		}
+	}
+
+	return StartMove(Target, Direction, DistanceUU, Duration, TEXT("강제이동"));
+}
+
+bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration)
+{
+	// 면역 검사 없음 — 자기가 시작하는 이동은 "방해" 가 아니다.
+	return StartMove(Target, Direction, DistanceUU, Duration, TEXT("자기이동"));
+}
+
+namespace
+{
+
+bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, const TCHAR* Label)
+{
+	if (!Target)
+	{
+		UE_LOG(LogEternalReturn, Error, TEXT("[%s] 대상이 없다."), Label);
+		return false;
+	}
+
+	// ⚠ 서버 권위다. 방향·거리·시간을 서버가 정하고, 벽 충돌도 서버가 판정한다
+	//   (역기획서 §3.5). 클라가 부르면 각 머신이 다른 결과를 낸다.
+	if (!Target->HasAuthority())
+	{
+		UE_LOG(LogEternalReturn, Error,
+			TEXT("[%s] 서버가 아니다. 이동은 서버 권위다. (%s)"), Label, *GetNameSafe(Target));
+		return false;
+	}
+
+	const FVector Dir = Direction.GetSafeNormal2D();
+	if (Dir.IsNearlyZero())
+	{
+		// ⚠ 시전자와 대상이 정확히 겹치면 방향이 나오지 않는다. 실제로 일어난다.
+		UE_LOG(LogEternalReturn, Warning,
+			TEXT("[%s] 방향이 0 이다. 이동 방향을 정할 수 없다. (%s)"), Label, *GetNameSafe(Target));
+		return false;
+	}
+
+	if (DistanceUU <= 0.f || Duration <= 0.f)
+	{
+		UE_LOG(LogEternalReturn, Error,
+			TEXT("[%s] 거리(%.1f) 또는 시간(%.2f)이 0 이하다."), Label, DistanceUU, Duration);
+		return false;
 	}
 
 	const FVector StartLocation  = Target->GetActorLocation();
@@ -90,15 +119,18 @@ bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float Distanc
 		// ⚠ 야생동물 등 AERCharacterBase 가 아닌 캐릭터는 아직 전파 경로가 없다.
 		//   서버에서만 움직이므로 클라에서 튄다. F12 에서 같은 RPC 를 붙인다.
 		UE_LOG(LogEternalReturn, Warning,
-			TEXT("[강제이동] %s 는 AERCharacterBase 가 아니라 클라에 전파되지 않는다."),
-			*GetNameSafe(Target));
+			TEXT("[%s] %s 는 AERCharacterBase 가 아니라 클라에 전파되지 않는다."),
+			Label, *GetNameSafe(Target));
 	}
 
-	UE_LOG(LogEternalReturn, Verbose, TEXT("[강제이동] %s — %.0fcm, %.2f초"),
-		*GetNameSafe(Target), DistanceUU, Duration);
+	UE_LOG(LogEternalReturn, Log, TEXT("[%s] %s — %.0fcm, %.2f초, %s -> %s"),
+		Label, *GetNameSafe(Target), DistanceUU, Duration,
+		*StartLocation.ToCompactString(), *TargetLocation.ToCompactString());
 
 	return true;
 }
+
+} // namespace
 
 void AddForcedMoveSource(ACharacter* Target, const FVector& StartLocation,
 	const FVector& TargetLocation, float Duration)

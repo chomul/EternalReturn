@@ -5,6 +5,7 @@
 #include "Character/ERInputConfig.h"
 #include "EternalReturn.h"
 
+#include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
@@ -76,6 +77,139 @@ void AERPlayerController::SetupInputComponent()
 	{
 		EnhancedInput->BindAction(InputConfig->ToggleCameraLock, ETriggerEvent::Started,
 			this, &AERPlayerController::OnToggleCameraLock);
+	}
+
+	// ── 스킬 슬롯 (F07-01) ──────────────────────────────────
+	//
+	// ⭐ 표를 순회해 바인딩한다. 슬롯마다 핸들러를 따로 만들지 않는다 —
+	//   BindAction 의 페이로드 오버로드로 **슬롯 태그를 같이 넘긴다.**
+	for (const TPair<FGameplayTag, TObjectPtr<UInputAction>>& Pair : InputConfig->SkillSlotActions)
+	{
+		if (!Pair.Key.IsValid() || !Pair.Value)
+		{
+			// ⚠ 표에 빈 줄이 있다. 애셋 실수다. 나머지는 계속 바인딩한다.
+			UE_LOG(LogEternalReturn, Warning,
+				TEXT("[입력] Skill Slot Actions 에 빈 항목이 있다 (태그=%s, 액션=%s)."),
+				*Pair.Key.ToString(), *GetNameSafe(Pair.Value));
+			continue;
+		}
+
+		EnhancedInput->BindAction(Pair.Value, ETriggerEvent::Started,
+			this, &AERPlayerController::OnSkillSlotPressed, Pair.Key);
+
+		UE_LOG(LogEternalReturn, Log, TEXT("[입력] 슬롯 바인딩: %s -> %s"),
+			*Pair.Key.ToString(), *GetNameSafe(Pair.Value));
+	}
+
+	// ⚠ 표가 비어 있으면 스킬 키가 하나도 안 먹는다. 조용히 넘어가면 원인을 못 찾는다.
+	if (InputConfig->SkillSlotActions.IsEmpty())
+	{
+		UE_LOG(LogEternalReturn, Warning,
+			TEXT("[입력] Skill Slot Actions 가 비어 있다. 스킬 키가 동작하지 않는다."));
+	}
+}
+
+void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
+{
+	UAbilitySystemComponent* ASC =
+		UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPawn());
+	if (!ASC)
+	{
+		return;
+	}
+
+	// ⭐ **클라에서 부르면 GAS 가 서버로 보낸다.** 별도 RPC 가 필요 없다.
+	//   NetExecutionPolicy 가 ServerInitiated 라 클라에서는 예측 실행 없이
+	//   ServerTryActivateAbility 로 요청만 가고, 서버가 실행한 뒤 클라가 따라 실행한다.
+	//
+	// ⚠⚠ **TryActivateAbilitiesByTag 를 쓰면 안 된다.** 그 함수는 어빌리티 **클래스**의
+	//   AbilityTags 만 본다 (AbilitySystemComponent_Abilities.cpp:1475) —
+	//   GrantSkills 가 스펙의 **DynamicAbilityTags** 에 심은 슬롯 태그는 안 본다.
+	//   E10 에서 이걸로 하루를 썼다. Docs/5_ErrorReport/E10 참조.
+	//
+	// ⭐ Lyra 와 같은 방식으로 **직접 순회**한다 (LyraAbilitySystemComponent.cpp:198-200).
+	//   DynamicAbilityTags 에 있어야 "같은 로직 클래스를 여러 슬롯이 쓴다" 가 성립한다 —
+	//   클래스 태그에 박으면 GA_Projectile 이 Q 인지 W 인지 애셋마다 갈라야 한다.
+	//
+	// ⚠ CC 차단은 여기서 검사하지 않는다. 어빌리티의 ActivationBlockedTags 가 막는다 (F06-01 · UERGameplayAbility 생성자).
+	//   여기서 또 막으면 규칙이 두 곳에 생긴다.
+	//
+	// ⭐ F07-05: TryActivateAbility 대신 **조준을 실어** 서버로 보낸다 (Docs/4_Argument/18).
+	//   TryActivateAbility 가 하던 클라 선판정(CanActivateAbility)은 여기서 **인스턴스**로 직접 한다 —
+	//   엔진의 클라 선판정은 CDO 에서 돌아 쿨다운 태그를 못 본다 (E12). 인스턴스로 하면 쿨다운 중 헛 RPC 도 안 보낸다.
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (!Spec.Ability || !Spec.DynamicAbilityTags.HasTagExact(SlotTag))
+		{
+			continue;
+		}
+
+		const UGameplayAbility* Instance = Spec.GetPrimaryInstance();
+		const UGameplayAbility* Checker = Instance ? Instance : Spec.Ability.Get();
+		if (!Checker->CanActivateAbility(Spec.Handle, ASC->AbilityActorInfo.Get()))
+		{
+			UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] %s -> 클라 선판정 실패 (쿨다운 · CC · 레벨 0 · 코스트)"), *SlotTag.ToString());
+			return;
+		}
+
+		// 조준 = 커서 아래 지점 + 액터. 못 찾으면 빈 핸들 — 서버가 시전자 정면으로 대신한다.
+		//
+		// ⚠ **ECC_Pawn 으로 먼저 잰다.** 캐릭터 캡슐(Pawn 프로파일)은 Visibility 를 **무시**해서
+		//   Visibility 트레이스는 캐릭터 위에서도 바닥을 잡는다 — SingleTarget 평타가 항상 적중 0 이었다 (2026-09-14, E13).
+		//   메시가 있으면 메시가 Visibility 를 막아 주지만 그건 연출 메시에 판정을 맡기는 것이라 캡슐로 간다.
+		//   바닥도 Pawn 채널을 막으므로(걸을 수 있어야 하니) 캐릭터 위가 아니면 바닥 지점이 나온다. 그것도 못 찾으면 Visibility.
+		FGameplayAbilityTargetDataHandle Aim;
+		FHitResult Hit;
+		if (GetHitResultUnderCursor(ECC_Pawn, /*bTraceComplex=*/false, Hit)
+			|| GetHitResultUnderCursor(ECC_Visibility, /*bTraceComplex=*/false, Hit))
+		{
+			Aim = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(Hit);
+		}
+
+		ServerActivateSkill(SlotTag, Aim);
+		UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] %s -> 발동 요청 (조준 %s)"),
+			*SlotTag.ToString(), Aim.Num() > 0 ? *Hit.ImpactPoint.ToCompactString() : TEXT("없음"));
+		return;
+	}
+
+	UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] %s -> 슬롯에 스킬이 없다"), *SlotTag.ToString());
+}
+
+bool AERPlayerController::ServerActivateSkill_Validate(FGameplayTag SlotTag, FGameplayAbilityTargetDataHandle Aim)
+{
+	// 조작된 태그만 끊는다. 좌표는 어빌리티가 클램프한다 — 여기서 끊으면 연결이 닫힌다.
+	return SlotTag.IsValid() && SlotTag.MatchesTag(ERTags::Ability_Slot);
+}
+
+void AERPlayerController::ServerActivateSkill_Implementation(FGameplayTag SlotTag, FGameplayAbilityTargetDataHandle Aim)
+{
+	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPawn());
+	if (!ASC)
+	{
+		return;
+	}
+
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (!Spec.Ability || !Spec.DynamicAbilityTags.HasTagExact(SlotTag))
+		{
+			continue;
+		}
+
+		// ⭐ 서버(권위)에서는 TriggerAbilityFromGameplayEvent 가 허용된다 (AbilitySystemComponent_Abilities.cpp:2567-2579).
+		//   내부에서 CanActivateAbility(인스턴스) 를 다시 검사한다 — 클라 선판정을 믿지 않는다.
+		//   Payload.TargetData 가 어빌리티의 ActivateAbility(TriggerEventData) 로 간다.
+		FGameplayEventData Payload;
+		Payload.EventTag = ERTags::Event_Skill_Aim;
+		Payload.Instigator = GetPawn();
+		Payload.TargetData = Aim;
+
+		const bool bActivated = ASC->TriggerAbilityFromGameplayEvent(
+			Spec.Handle, ASC->AbilityActorInfo.Get(), ERTags::Event_Skill_Aim, &Payload, *ASC);
+
+		UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] 서버 %s -> %s"),
+			*SlotTag.ToString(), bActivated ? TEXT("발동") : TEXT("거부 (쿨다운 · CC · 레벨 0 · 코스트)"));
+		return;
 	}
 }
 
@@ -330,6 +464,12 @@ void AERPlayerController::ServerSetDestination_Implementation(const FVector& Des
 		// 갈 수 없는 곳이다. 크래시가 아니라 무시가 맞다.
 		return;
 	}
+
+	// ⭐ 이동이 **수락됐다** 는 것을 어빌리티에 알린다 (F07-04).
+	//   이동 취소형 스킬의 선딜을 끊고, 후딜을 일찍 끝낸다. 듣는 어빌리티가 없으면 아무 일도 없다.
+	//   PC 는 어빌리티 내부를 모른다 — 이벤트 태그 하나가 경계다 (Docs/4_Argument/17).
+	//   ⚠ 검증 ①(CC · Block.Movement)을 통과한 뒤라야 한다 — 이동 차단형 선딜은 여기까지 못 온다.
+	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(GetPawn(), ERTags::Event_Input_Move, FGameplayEventData());
 
 	// ── 서버가 무엇을 하고 무엇을 하지 않는가 ──────────────
 	//

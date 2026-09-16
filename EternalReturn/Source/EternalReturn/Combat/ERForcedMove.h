@@ -47,6 +47,13 @@ namespace ERForcedMove
 	bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration);
 
 	/**
+	 * [서버] 자기 이동 (돌진 · 도약 · 백스텝, F07-06). ApplyForcedMove 와 **같은 몸통**이고
+	 * 딱 하나 — **이동 방해 면역(State.CCImmune)을 검사하지 않는다.** 매그너스 R 중에도 자기 돌진은 된다.
+	 * 방향 · 거리 · 시간의 의미는 ApplyForcedMove 와 같다. 벽 감시도 같이 켜진다.
+	 */
+	bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration);
+
+	/**
 	 * [모든 머신] 실제로 RootMotionSource 를 붙인다. **직접 부르지 않는다** —
 	 * ApplyForcedMove 가 서버에서, Multicast RPC 가 각 클라에서 부른다.
 	 */

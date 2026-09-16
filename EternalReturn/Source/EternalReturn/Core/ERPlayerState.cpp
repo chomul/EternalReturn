@@ -4,6 +4,9 @@
 #include "AbilitySystemComponent.h"
 #include "GAS/ERCCLibrary.h"
 #include "GAS/ERAttributeSet.h"
+#include "EternalReturn.h"
+#include "GAS/ERGameplayTags.h"
+#include "GAS/ERSkillData.h"
 #include "Net/UnrealNetwork.h"
 
 AERPlayerState::AERPlayerState()
@@ -54,4 +57,51 @@ void AERPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	// ⭐ UPROPERTY(Replicated) 를 추가하면 여기에도 반드시 등록한다.
 	//   빠뜨리면 컴파일도 되고 에러도 없는데 값만 안 온다.
 	DOREPLIFETIME(AERPlayerState, TeamId);
+
+	// 남의 포인트는 볼 일이 없다. 24명분을 전원에게 보내지 않는다.
+	DOREPLIFETIME_CONDITION(AERPlayerState, SkillPoints, COND_OwnerOnly);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 스킬 포인트
+// ─────────────────────────────────────────────────────────────
+
+void AERPlayerState::AddSkillPoints(int32 Amount)
+{
+	if (!HasAuthority() || Amount <= 0)
+	{
+		return;
+	}
+
+	SkillPoints += Amount;
+	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 포인트 +%d -> %d"), *GetName(), Amount, SkillPoints);
+}
+
+bool AERPlayerState::ServerLevelUpSkill_Validate(FGameplayTag SlotTag)
+{
+	// 조작된 태그(빈 값·슬롯 계열이 아님)만 끊는다. "포인트 없음" 은 정상 실패라 Validate 로 끊지 않는다 —
+	// 끊으면 연결이 닫힌다.
+	return SlotTag.IsValid() && SlotTag.MatchesTag(ERTags::Ability_Slot);
+}
+
+void AERPlayerState::ServerLevelUpSkill_Implementation(FGameplayTag SlotTag)
+{
+	if (SkillPoints <= 0)
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[스킬] %s 포인트가 없다 (%s 요청)."), *GetName(), *SlotTag.ToString());
+		return;
+	}
+
+	// ⭐ 레벨을 올린 뒤에만 포인트를 뺀다. 실패(상한·미부여)면 포인트가 그대로다.
+	if (ERSkill::LevelUpSkill(AbilitySystemComponent, SlotTag))
+	{
+		SkillPoints -= 1;
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 포인트 -1 -> %d"), *GetName(), SkillPoints);
+	}
+}
+
+void AERPlayerState::OnRep_SkillPoints()
+{
+	// UI 가 생기면 여기서 갱신한다. 지금은 로그만.
+	UE_LOG(LogEternalReturn, Verbose, TEXT("[스킬] %s 포인트 복제 -> %d"), *GetName(), SkillPoints);
 }

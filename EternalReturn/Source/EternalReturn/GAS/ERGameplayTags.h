@@ -84,17 +84,57 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Block_BasicAttack); // 평타 차단
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Block_Skill);       // 스킬 차단
 
+	// ── 스킬 페이즈 (F07-04) ───────────────────────────────────
+	// UERSkillPhaseEffect 가 동적 부여 태그로 심는다. 전원에게 복제된다(Mixed).
+	//   근거: Docs/4_Argument/17_시전상태_표현과_취소경로.md (①A)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Casting);           // 선딜(캐스팅) 중 — CC(State.Block.Skill) 로 끊긴다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Recovering);        // 후딜 중 — 스킬 발동 차단, 이동 입력이 끝낸다
+
+	// 다음 기본 공격 강화 대기 (F07-07). UERNextAttackBuffEffect 가 부여, 평타가 적중 시 소비.
+	//   카티야 P · 재키 W · 시셀라 Q · 권총 D 가 같은 GE 를 쓴다 (역기획서 §8 "4곳이 같은 구조").
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_NextAttackBuff);
+
+	// ── 게임플레이 이벤트 ──────────────────────────────────────
+	// 입력 → 어빌리티. PC 가 어빌리티 내부를 모르게 하는 통로 (SendGameplayEventToActor).
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Input_Move);        // 이동 명령이 서버에서 수락됨
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Skill_Aim);         // 스킬 발동 요청에 실린 조준 데이터 (Docs/4_Argument/18)
+
 	// ── 어빌리티 형태 ──────────────────────────────────────────
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Form_Channeled);      // 채널링 — CC로 중단된다
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Form_NextAttackBuff); // 다음 평타 강화 — 무장 해제가 이것도 막아야 한다
 
 	// ── 어빌리티 슬롯 ──────────────────────────────────────────
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot);         // 부모 — RPC 가 "슬롯 계열인지" 검증할 때
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_P);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Q);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_W);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_E);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_R);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_D);       // 무기가 소유하는 슬롯
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Attack);  // 기본 공격 (F07-07). 무기가 소유 (F11). 포인트 대상 아님
+
+	// ── 쿨다운 (슬롯별) ────────────────────────────────────────
+	// ⭐ 쿨다운 GE 는 UERCooldownEffect **하나**다. 어느 슬롯의 쿨인지는 이 태그가 말한다 —
+	//   어빌리티가 ApplyCooldown 에서 DynamicGrantedTags 로 심고, GetCooldownTags 로 돌려준다.
+	//   GE 애셋의 GrantedTags 가 아니라서 GE 를 슬롯마다 만들 필요가 없다.
+	//   근거: Docs/4_Argument/16_쿨다운_가속환산_위치.md
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_P);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Q);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_W);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_E);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_R);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_D);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Attack);   // 평타 간격 = 1 / AttackSpeed
+
+	// ── 리캐스트 윈도우 (F07-07) ───────────────────────────────
+	// UERRecastWindowEffect 가 동적 부여. 있으면 그 슬롯은 쿨다운 중에도 발동된다 (재키 Q "적중 시 3초 내 재사용").
+	//   근거: Docs/4_Argument/19_평타_다음평타강화_리캐스트_구조.md ③A
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Recast_Slot_P);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Recast_Slot_Q);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Recast_Slot_W);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Recast_Slot_E);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Recast_Slot_R);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Recast_Slot_D);
 
 	// ── 피해 채널 ──────────────────────────────────────────────
 	// 방어력·치명타 적용 여부가 이 셋으로 갈린다. 데미지 GE 에 반드시 하나가 붙어야 한다.
@@ -119,6 +159,20 @@ namespace ERTags
 	//   ⚠ 값을 안 넣으면 지속시간이 0 이 되어 CC 가 안 걸린다. ERCCLibrary 가 검사한다.
 	//   근거: Docs/4_Argument/9_CC효과_표현방식.md (방안 A)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_CCDuration);
+
+	// ⭐ 쿨다운 길이(초). **스킬 가속이 이미 반영된 최종값**이다 —
+	//   UERGameplayAbility::ApplyCooldown 이 계산해서 넣는다. GE 는 받기만 한다.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Cooldown);
+
+	// ⭐ 코스트 차감량(양수). UERVPCostEffect · UERHPCostEffect 가 받아 -값으로 뺀다.
+	//   HP 하한(1)은 UERGameplayAbility::ApplyCost 가 미리 깎아서 넣는다 — 어트리뷰트셋은 모른다 (F02-04).
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Cost);
+
+	// 스킬 페이즈(선딜·후딜) GE 의 길이(초). UERGameplayAbility 가 SkillData 의 CastTime/RecoveryTime 을 넣는다.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_PhaseDuration);
+
+	// 상태 GE(다음 평타 강화 · 리캐스트 윈도우)의 길이(초). 0 이하면 어빌리티가 Infinite 클래스를 쓴다.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_StateDuration);
 
 	// ⭐ 둔화 — 태그가 **2개**인 이유: 담는 값의 의미가 다르다.
 	//

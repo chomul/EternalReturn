@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
+#include "GameplayTagContainer.h"
 #include "ERPlayerState.generated.h"
 
 class UAbilitySystemComponent;
@@ -61,7 +62,29 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Team")
 	int32 TeamId = INDEX_NONE;
 
+	// ── 스킬 포인트 (F07-03) ───────────────────────────────────
+	// ⭐ 포인트는 여기, 스킬 레벨은 ASC 의 스펙에 있다. 둘 다 서버가 바꾸고 소유자에게 복제된다.
+	//   ⚠ 지급은 F10(성장·레벨)이 한다. 지금은 시작 포인트도 안 준다 — 디버그 명령으로 넣는다.
+
+	/** 미배분 포인트. 소유자만 본다 (COND_OwnerOnly). */
+	UPROPERTY(ReplicatedUsing = OnRep_SkillPoints, BlueprintReadOnly, Category = "Skill")
+	int32 SkillPoints = 0;
+
+	/** [서버] 포인트 지급. F10 레벨업이 부른다. */
+	void AddSkillPoints(int32 Amount);
+
+	/**
+	 * [클라 -> 서버] 이 슬롯에 1포인트 쓴다. 서버가 검증한다 — 클라 값을 믿지 않는다:
+	 *   포인트 > 0 · 슬롯 존재 · bUsesSkillPoints · Level < MaxLevel (뒤 셋은 ERSkill::LevelUpSkill).
+	 * ⚠ "포인트가 남았는데 전부 만렙" 은 정상이다 (역기획서 §2.1 — 20레벨에 2포인트 남는다). assert 없음.
+	 */
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerLevelUpSkill(FGameplayTag SlotTag);
+
 protected:
+	UFUNCTION()
+	void OnRep_SkillPoints();
+
 	/**
 	 * 초기화 전에는 유효하지 않을 수 있다. 호출부는 항상 null 검사를 한다.
 	 * 실제 초기화(InitAbilityActorInfo)는 AERCharacterBase 가 한다 —

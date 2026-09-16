@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
 #include "GameplayEffectTypes.h"   // FOnAttributeChangeData
+#include "GAS/ERSkillData.h"        // FERGrantedSkillHandles (USTRUCT 라 전방 선언 불가)
 #include "ERCharacterBase.generated.h"
 
 class UAbilitySystemComponent;
@@ -161,6 +162,15 @@ protected:
 	void InitDefaultStats();
 
 	/**
+	 * [서버] CharacterData 의 스킬을 ASC 에 부여한다.
+	 *
+	 * ⚠ InitDefaultStats 와 같은 빗장(bSkillsGranted)이 있다 — InitAbilityActorInfo 가
+	 *   여러 번 불리므로 없으면 스킬이 **중복 부여**되어 Q 가 두 번 나간다.
+	 * ⚠ 서버 전용. 클라는 ASC 가 스펙을 복제해서 받는다.
+	 */
+	void GrantSkills();
+
+	/**
 	 * MoveSpeed 어트리뷰트를 CharacterMovementComponent 에 반영한다.
 	 *
 	 * ⭐ **Tick 으로 매 프레임 동기화하지 않는다.** F02-06 의 변경 델리게이트를 구독해
@@ -201,6 +211,17 @@ protected:
 	 * 빗장이 없으면 그때마다 Override 로 다시 박혀 **전투 중에 체력이 만피로 돌아간다.**
 	 */
 	bool bDefaultStatsApplied = false;
+
+	/** ⭐ 스킬을 이미 부여했는가. bDefaultStatsApplied 와 같은 이유의 빗장. */
+	bool bSkillsGranted = false;
+
+	/**
+	 * 부여한 스킬의 핸들. 회수할 때 쓴다 (F11 무기 교체 · 사망 시 정리).
+	 *
+	 * ⚠ USTRUCT 라 UPROPERTY 로 든다. 안 그러면 핸들 배열이 GC 추적 밖이다.
+	 */
+	UPROPERTY()
+	FERGrantedSkillHandles GrantedSkills;
 
 	/**
 	 * 탑다운 카메라 팔.

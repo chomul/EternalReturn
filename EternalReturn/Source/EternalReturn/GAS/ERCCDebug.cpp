@@ -301,7 +301,9 @@ void CCKnockback(const TArray<FString>& Args, UWorld* World)
 	const float AngleDeg  = (Args.Num() >= 3) ? FCString::Atof(*Args[2]) : 0.f;
 
 	// ⚠ 역기획서는 m 로 적혀 있고 언리얼은 cm 다. 여기서 환산한다.
-	constexpr float MetersToUU = 100.f;
+	//   이름이 MetersToUU 가 아닌 이유: 유니티 빌드에서 ERTargeting.cpp 의 파일 스코프 상수와
+	//   합쳐지면 C4459(전역 선언 가림)가 에러로 잡힌다.
+	constexpr float KnockbackMetersToUU = 100.f;
 
 	// ⭐ 캐릭터가 보는 방향이 아니라 **카메라 기준**이다. 탑다운이라 캐릭터는
 	//   아무 데나 보고 있을 수 있어서, 눈으로 확인하려면 화면 기준이 맞다.
@@ -328,7 +330,7 @@ void CCKnockback(const TArray<FString>& Args, UWorld* World)
 			});
 	}
 
-	if (!ERForcedMove::ApplyForcedMove(Character, Direction, DistanceM * MetersToUU, Duration))
+	if (!ERForcedMove::ApplyForcedMove(Character, Direction, DistanceM * KnockbackMetersToUU, Duration))
 	{
 		UE_LOG(LogEternalReturn, Warning, TEXT("[CC디버그] 넉백 실패 (위 로그 참조)"));
 		return;

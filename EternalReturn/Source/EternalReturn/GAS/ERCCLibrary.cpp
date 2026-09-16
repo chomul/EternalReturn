@@ -16,7 +16,8 @@ bool ApplyCC(
 	UAbilitySystemComponent* SourceASC,
 	UAbilitySystemComponent* TargetASC,
 	TSubclassOf<UGameplayEffect> CCEffect,
-	float DurationSeconds)
+	float DurationSeconds,
+	float SlowPercent)
 {
 	// ── ① 대상 ────────────────────────────────────────────────
 	if (!TargetASC)
@@ -123,6 +124,12 @@ bool ApplyCC(
 	}
 
 	SpecHandle.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_CCDuration, DurationSeconds);
+
+	// 둔화 GE 는 감소율도 받는다 (F06-02). 스킬이 넣는 경로 — ER.CC.Slow 가 손으로 하던 것 (F07-07).
+	if (SlowPercent > 0.f)
+	{
+		SpecHandle.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_SlowPercent, SlowPercent);
+	}
 
 	const FActiveGameplayEffectHandle Applied =
 		Instigator->ApplyGameplayEffectSpecToTarget(*SpecHandle.Data, TargetASC);

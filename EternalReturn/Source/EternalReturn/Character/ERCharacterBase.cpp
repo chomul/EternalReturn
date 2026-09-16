@@ -229,6 +229,9 @@ void AERCharacterBase::InitAbilityActorInfo()
 	if (HasAuthority())
 	{
 		InitDefaultStats();
+
+		// ⭐ 스킬도 같은 자리. ASC 가 준비돼야 GiveAbility 가 먹는다 (F07-01).
+		GrantSkills();
 	}
 
 	// ⭐ 서버·클라 양쪽에서 건다. 각자 자기 CMC 를 갱신한다.
@@ -295,6 +298,34 @@ void AERCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void AERCharacterBase::GrantSkills()
+{
+	// InitAbilityActorInfo 가 여러 번 불려도 한 번만. 안 그러면 Q 가 두 번 나간다.
+	if (bSkillsGranted)
+	{
+		return;
+	}
+
+	if (!CharacterData)
+	{
+		// InitDefaultStats 가 이미 같은 에러를 냈다. 여기서 또 내면 같은 원인이 두 줄로 보인다.
+		return;
+	}
+
+	if (CharacterData->Skills.IsEmpty())
+	{
+		// ⚠ 에러가 아니다. 테스트 캐릭터는 스킬이 없을 수 있다. 다만 조용히 넘어가면
+		//   "Q 를 눌렀는데 아무 일도 없다" 의 원인을 못 찾으니 Log 는 남긴다.
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 의 Skills 가 비어 있다. 부여할 스킬이 없다."),
+			*GetNameSafe(CharacterData));
+		bSkillsGranted = true;
+		return;
+	}
+
+	ERSkill::GrantSkills(GetAbilitySystemComponent(), CharacterData->Skills, GrantedSkills);
+	bSkillsGranted = true;
 }
 
 void AERCharacterBase::InitDefaultStats()

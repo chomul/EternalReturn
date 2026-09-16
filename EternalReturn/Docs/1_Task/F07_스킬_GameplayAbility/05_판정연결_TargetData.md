@@ -22,6 +22,14 @@ F04 ERTargeting::Query* → TargetData → GE Spec → F03 ERDamageExecution
 
 조준 데이터 전송은 `FGameplayAbilityTargetData` 가 한다 (`CLAUDE.md` §8).
 
+## 조준 데이터 (2026-09-13 결정)
+
+클라 PC 가 커서 `FHitResult` 를 `FGameplayAbilityTargetData_SingleTargetHit` 로 감싸 `ServerActivateSkill` RPC 에 싣고,
+서버가 `TriggerAbilityFromGameplayEvent` 로 어빌리티에 넘긴다. 어빌리티는 `ResolveAim` 에서 **사거리 클램프** 후 `AimPoint/AimDirection/AimActor` 로 든다.
+근거 [`../../4_Argument/18_조준데이터_전달경로.md`](../../4_Argument/18_조준데이터_전달경로.md) — 엔진이 ServerInitiated 의 클라→서버 이벤트 데이터 경로를 안 열어 둬서 RPC 는 PC 에 있다.
+
+⚠ 시셀라 R 자기 피해 하한 100 은 시셀라 R 파생 어빌리티의 일 (HP 코스트 하한 1 과 같은 `min` 처리) → M6.
+
 ## AoE 태그를 여기서 붙인다
 
 F03-05 의 흡혈 치유 감소가 `Damage.Shape.AoE` 를 읽는다.

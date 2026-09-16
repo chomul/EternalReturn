@@ -26,18 +26,45 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Form_Channeled,      "Ability.Form.Channeled");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Form_NextAttackBuff, "Ability.Form.NextAttackBuff");
 
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot,   "Ability.Slot");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_P, "Ability.Slot.P");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Q, "Ability.Slot.Q");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_W, "Ability.Slot.W");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_E, "Ability.Slot.E");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_R, "Ability.Slot.R");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_D, "Ability.Slot.D");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Attack, "Ability.Slot.Attack");
+
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_P, "Cooldown.Slot.P");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Q, "Cooldown.Slot.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_W, "Cooldown.Slot.W");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_E, "Cooldown.Slot.E");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_R, "Cooldown.Slot.R");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_D, "Cooldown.Slot.D");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Attack, "Cooldown.Slot.Attack");
+
+	UE_DEFINE_GAMEPLAY_TAG(Recast_Slot_P, "Recast.Slot.P");
+	UE_DEFINE_GAMEPLAY_TAG(Recast_Slot_Q, "Recast.Slot.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Recast_Slot_W, "Recast.Slot.W");
+	UE_DEFINE_GAMEPLAY_TAG(Recast_Slot_E, "Recast.Slot.E");
+	UE_DEFINE_GAMEPLAY_TAG(Recast_Slot_R, "Recast.Slot.R");
+	UE_DEFINE_GAMEPLAY_TAG(Recast_Slot_D, "Recast.Slot.D");
 
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_BasicAttack, "Damage.Type.BasicAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_Skill,       "Damage.Type.Skill");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_True,        "Damage.Type.True");
 
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_CCDuration,           "SetByCaller.CCDuration");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Cooldown,             "SetByCaller.Cooldown");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Cost,                 "SetByCaller.Cost");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_PhaseDuration,        "SetByCaller.PhaseDuration");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_StateDuration,        "SetByCaller.StateDuration");
+
+	UE_DEFINE_GAMEPLAY_TAG(State_Casting,    "State.Casting");
+	UE_DEFINE_GAMEPLAY_TAG(State_Recovering, "State.Recovering");
+	UE_DEFINE_GAMEPLAY_TAG(State_NextAttackBuff, "State.NextAttackBuff");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Input_Move, "Event.Input.Move");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Skill_Aim,  "Event.Skill.Aim");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowPercent,          "SetByCaller.SlowPercent");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowMultiplier,       "SetByCaller.SlowMultiplier");
 

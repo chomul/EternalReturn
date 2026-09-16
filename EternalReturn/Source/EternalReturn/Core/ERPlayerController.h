@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "GameplayTagContainer.h"   // OnSkillSlotPressed 의 인자
+#include "Abilities/GameplayAbilityTargetTypes.h"   // ServerActivateSkill 의 인자
 #include "ERPlayerController.generated.h"
 
 class UERInputConfig;
@@ -42,6 +44,25 @@ protected:
 private:
 	/** 우클릭 — 커서 아래 지점으로 이동한다. */
 	void OnMoveToCursor();
+
+	/**
+	 * 스킬 슬롯 키. 슬롯 태그로 어빌리티를 찾아 발동을 요청한다 (F07-01).
+	 *
+	 * ⭐ 슬롯마다 함수를 따로 두지 않는다. BindAction 페이로드로 태그를 받는다.
+	 * ⚠ 클라 로컬에서 불리지만 실행은 서버다 — GAS 가 알아서 보낸다.
+	 */
+	void OnSkillSlotPressed(FGameplayTag SlotTag);
+
+	/**
+	 * [클라 -> 서버] 슬롯 스킬 발동 요청 + 조준 (F07-05).
+	 *
+	 * ⭐ 왜 PC 에 있나: 클라가 ServerInitiated 어빌리티에 이벤트 데이터를 실어 보내는 길을 엔진이 안 열어 뒀다
+	 *   (TriggerAbilityFromGameplayEvent 는 클라 거부 · ServerTryActivateAbilityWithEventData 는 protected).
+	 *   그래서 ServerSetDestination 과 같은 자리에서 보내고, 서버가 권위로 TriggerAbilityFromGameplayEvent 를 부른다.
+	 *   그릇은 GAS 의 FGameplayAbilityTargetData 다 — 자체 구조체 없음. 근거: Docs/4_Argument/18_조준데이터_전달경로.md
+	 */
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerActivateSkill(FGameplayTag SlotTag, FGameplayAbilityTargetDataHandle Aim);
 
 	/**
 	 * 목적지를 서버에 알린다.
