@@ -48,6 +48,9 @@ public:
 	 */
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
+	/** 이 캐릭터의 실험체 데이터. 장착 검사(F08-02) 등이 읽는다. 초기화 전엔 nullptr 일 수 있다. */
+	const UERCharacterData* GetCharacterData() const { return CharacterData; }
+
 	/** [서버] 컨트롤러가 이 폰을 소유한 직후 */
 	virtual void PossessedBy(AController* NewController) override;
 

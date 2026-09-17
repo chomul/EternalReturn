@@ -10,6 +10,7 @@
 
 class UAbilitySystemComponent;
 class UERAttributeSet;
+class UERInventoryComponent;
 
 /**
  * 플레이어의 ASC 소유자.
@@ -103,4 +104,12 @@ protected:
 	 */
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
 	TObjectPtr<UERAttributeSet> AttributeSet;
+
+public:
+	/** 인벤토리 (F08). ⭐ ASC 와 같은 액터에 — 장비 GE 와 핸들의 수명이 같다 (Docs/4_Argument/21). */
+	UERInventoryComponent* GetInventory() const { return Inventory; }
+
+protected:
+	UPROPERTY(VisibleAnywhere, Category = "Item")
+	TObjectPtr<UERInventoryComponent> Inventory;
 };

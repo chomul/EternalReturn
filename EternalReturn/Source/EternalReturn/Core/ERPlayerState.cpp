@@ -7,6 +7,7 @@
 #include "EternalReturn.h"
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERSkillData.h"
+#include "Item/ERInventoryComponent.h"
 #include "Net/UnrealNetwork.h"
 
 AERPlayerState::AERPlayerState()
@@ -31,6 +32,9 @@ AERPlayerState::AERPlayerState()
 	// 생성자에서 만든 AttributeSet 은 ASC 가 자동으로 SpawnedAttributes 에 등록한다.
 	// 초기값은 여기서 넣지 않는다 - 실험체별 값을 데이터 테이블에서 읽어 GE 로 적용한다.
 	AttributeSet = CreateDefaultSubobject<UERAttributeSet>(TEXT("AttributeSet"));
+
+	// 인벤토리 — PlayerState (Argument 21). 컴포넌트 자체가 복제되고, 안의 장착 배열은 컴포넌트가 DOREPLIFETIME 한다.
+	Inventory = CreateDefaultSubobject<UERInventoryComponent>(TEXT("Inventory"));
 }
 
 void AERPlayerState::BeginPlay()
@@ -42,6 +46,20 @@ void AERPlayerState::BeginPlay()
 	if (HasAuthority())
 	{
 		ERCC::BindSlowRecalculation(AbilitySystemComponent);
+
+		// ⭐ 사망 → 시체 드롭 (F08-05). F02-04 가 "알리기만 한다" 로 둔 델리게이트를 여기서 받는다.
+		//   사망 처리 자체(폰 파괴 · 부활)는 F14 — 여기서는 시체만 만든다. 원본 인벤토리는 그대로 (원작 확인: 복사 드롭).
+		if (AttributeSet)
+		{
+			AttributeSet->OnOutOfHealth.AddWeakLambda(this, [this](AActor* Killer)
+			{
+				const APawn* MyPawn = GetPawn();
+				if (Inventory && MyPawn)
+				{
+					Inventory->SpawnDeathDrop(MyPawn->GetActorLocation());
+				}
+			});
+		}
 	}
 }
 

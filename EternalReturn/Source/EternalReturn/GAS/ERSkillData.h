@@ -42,10 +42,14 @@ enum class ESkillCostType : uint8
 UENUM()
 enum class ESkillDamageType : uint8
 {
-	None,        // 피해 없음 (카티야 W 같은 유틸리티 · 자기 이동)
-	Skill,       // 방어력 O / 치명타 X
-	BasicAttack, // 방어력 O / 치명타 O — 평타 (UERBasicAttackAbility). 흡혈(Lifesteal)은 이 채널만
-	Fixed,  // 고정 피해(True damage) — 방어력 X / 치명타 X. UHT 가 "True" 라는 이름을 금지해서 Fixed
+	/** 피해 없음 (카티야 W 같은 유틸리티 · 자기 이동) */
+	None,
+	/** 방어력 O / 치명타 X */
+	Skill,
+	/** 방어력 O / 치명타 O — 평타 (UERBasicAttackAbility). 흡혈(Lifesteal)은 이 채널만 */
+	BasicAttack,
+	/** 고정 피해(True damage) — 방어력 X / 치명타 X. UHT 가 "True" 라는 이름을 금지해서 Fixed */
+	Fixed,
 };
 
 /** 시전자 자기 이동 (F07-06). ERForcedMove::ApplySelfMove 로 실행 — 넉백과 같은 RootMotionSource 경로. */
@@ -53,9 +57,12 @@ UENUM()
 enum class ESkillSelfMove : uint8
 {
 	None,
-	TowardAim,    // 조준 방향으로 SelfMoveDistance — 재키 Q · 다니엘 E (돌진)
-	AwayFromAim,  // ⚠ 조준 **반대**로 SelfMoveDistance — 카티야 E (백스텝). 뒤집는 것을 빠뜨리기 쉽다
-	ToAimPoint,   // 클램프된 조준점까지 (거리 = 조준점까지, SelfMoveDistance 무시) — 재키 E (위치 지정 도약)
+	/** 조준 방향으로 SelfMoveDistance — 재키 Q · 다니엘 E (돌진) */
+	TowardAim,
+	/** ⚠ 조준 **반대**로 SelfMoveDistance — 카티야 E (백스텝). 뒤집는 것을 빠뜨리기 쉽다 */
+	AwayFromAim,
+	/** 클램프된 조준점까지 (거리 = 조준점까지, SelfMoveDistance 무시) — 재키 E (위치 지정 도약) */
+	ToAimPoint,
 };
 
 /**

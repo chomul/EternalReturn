@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GAS/ERAttributeTypes.h"
+#include "Item/ERItemTypes.h"
 
 class UERSkillData;
 
@@ -56,4 +57,13 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "스킬")
 	TArray<TObjectPtr<UERSkillData>> Skills;
+
+	/**
+	 * 이 실험체가 들 수 있는 무기군 (F08-02). 무기 역기획서 §5.1 — 카티야 [SniperRifle] · 재키 [Dagger, TwoHandSword, Axe, DualSword] …
+	 *
+	 * ⭐ "무기가 캐릭터를 고른다" (장비 역기획서 §2) — 장착 검사는 ERItem::CanEquip 이 이 배열을 본다. **서버가 검사한다.**
+	 * ⚠ 비어 있으면 어떤 무기도 못 든다 — 방어구는 제한이 없으니 영향 없음. 6인 밖 실험체는 (미확인).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "무기")
+	TArray<EERWeaponType> WeaponTypes;
 };
