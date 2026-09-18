@@ -8,6 +8,8 @@
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERSkillData.h"
 #include "Item/ERInventoryComponent.h"
+#include "Growth/ERGrowthComponent.h"
+#include "Growth/ERGrowthSettings.h"
 #include "Net/UnrealNetwork.h"
 
 AERPlayerState::AERPlayerState()
@@ -35,6 +37,9 @@ AERPlayerState::AERPlayerState()
 
 	// 인벤토리 — PlayerState (Argument 21). 컴포넌트 자체가 복제되고, 안의 장착 배열은 컴포넌트가 DOREPLIFETIME 한다.
 	Inventory = CreateDefaultSubobject<UERInventoryComponent>(TEXT("Inventory"));
+
+	// 성장 — 같은 이유로 PlayerState (Argument 22). 레벨은 전원, 경험치는 소유자만 컴포넌트가 복제한다.
+	Growth = CreateDefaultSubobject<UERGrowthComponent>(TEXT("Growth"));
 }
 
 void AERPlayerState::BeginPlay()
@@ -47,6 +52,33 @@ void AERPlayerState::BeginPlay()
 	{
 		ERCC::BindSlowRecalculation(AbilitySystemComponent);
 
+		// ⭐ 스킬 포인트 지급 (F10-03) — 시작 포인트 + 레벨업마다 테이블 행의 SkillPointGranted.
+		//   Growth 가 스탯 GE 를 먼저 적용한 뒤 브로드캐스트한다 (F10-02). P 도 포인트로 찍는다 — 자동 강화 없음.
+		AddSkillPoints(UERGrowthSettings::Get().StartingSkillPoints);
+
+		// ⭐ 무기 교체 → 숙련도 증폭 GE 갱신 (F10-04). 장비 GE 와 별개 핸들.
+		if (Inventory && Growth)
+		{
+			Inventory->OnEquippedChanged.AddWeakLambda(this, [this](EEREquipSlot Slot)
+			{
+				if (Slot == EEREquipSlot::Weapon)
+				{
+					Growth->RefreshProficiencyBonus();
+				}
+			});
+		}
+		if (Growth)
+		{
+			Growth->OnLevelUp.AddWeakLambda(this, [this](int32 NewLevel)
+			{
+				// Lv.N-1 → N 행이 이번 레벨업의 지급량이다.
+				if (const FERLevelExpRow* Row = UERGrowthComponent::FindLevelRow(NewLevel - 1))
+				{
+					AddSkillPoints(Row->SkillPointGranted);
+				}
+			});
+		}
+
 		// ⭐ 사망 → 시체 드롭 (F08-05). F02-04 가 "알리기만 한다" 로 둔 델리게이트를 여기서 받는다.
 		//   사망 처리 자체(폰 파괴 · 부활)는 F14 — 여기서는 시체만 만든다. 원본 인벤토리는 그대로 (원작 확인: 복사 드롭).
 		if (AttributeSet)
@@ -57,6 +89,23 @@ void AERPlayerState::BeginPlay()
 				if (Inventory && MyPawn)
 				{
 					Inventory->SpawnDeathDrop(MyPawn->GetActorLocation());
+				}
+
+				// ⭐ 처치 경험치 (F10-01) + 처치 숙련도 (F10-04). Killer 는 GE 컨텍스트의 OriginalInstigator = 가해자의 ASC 소유자 = PlayerState.
+				//   자기 자신(자해) · 환경 피해(null) · 야생동물(PlayerState 아님) 은 제외. 어시스트 분배 없음 `[자체]`.
+				if (const AERPlayerState* KillerPS = Cast<AERPlayerState>(Killer); KillerPS && KillerPS != this && KillerPS->GetGrowth())
+				{
+					KillerPS->GetGrowth()->AddExp(UERGrowthSettings::Get().PlayerKillExp, EERExpSource::PlayerKill);
+					KillerPS->GetGrowth()->AddEquippedWeaponProficiencyExp(UERGrowthSettings::Get().ProficiencyExpPerPlayerKill, TEXT("실험체 처치"));
+				}
+			});
+
+			// ⭐ 내가 맞은 피해 → 가해자의 숙련도 (F10-04). 처치 경험치와 같은 경로 — 어트리뷰트셋은 알리기만 한다.
+			AttributeSet->OnDamageTaken.AddWeakLambda(this, [this](AActor* Attacker, float Damage)
+			{
+				if (const AERPlayerState* AttackerPS = Cast<AERPlayerState>(Attacker); AttackerPS && AttackerPS != this && AttackerPS->GetGrowth())
+				{
+					AttackerPS->GetGrowth()->OnDamageDealt(GetPawn(), Damage);
 				}
 			});
 		}
@@ -111,7 +160,7 @@ void AERPlayerState::ServerLevelUpSkill_Implementation(FGameplayTag SlotTag)
 	}
 
 	// ⭐ 레벨을 올린 뒤에만 포인트를 뺀다. 실패(상한·미부여)면 포인트가 그대로다.
-	if (ERSkill::LevelUpSkill(AbilitySystemComponent, SlotTag))
+	if (ERSkill::LevelUpSkill(AbilitySystemComponent, SlotTag, Growth ? Growth->GetLevel() : 1))
 	{
 		SkillPoints -= 1;
 		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 포인트 -1 -> %d"), *GetName(), SkillPoints);

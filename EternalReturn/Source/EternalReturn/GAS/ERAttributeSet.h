@@ -89,6 +89,13 @@ public:
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnOutOfHealth, AActor* /*Instigator*/);
 	mutable FOnOutOfHealth OnOutOfHealth;
 
+	/**
+	 * 최종 피해가 체력에서 빠질 때마다 (서버). Instigator = 가해자의 ASC 소유자 (PlayerState · 야생동물 폰), 환경 피해면 null.
+	 * ⭐ 알리기만 한다 — 숙련도 분배(F10-04) 는 AERPlayerState 가 받아서 한다. 어트리뷰트셋이 성장을 알지 않는다.
+	 */
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnDamageTaken, AActor* /*Instigator*/, float /*Damage*/);
+	mutable FOnDamageTaken OnDamageTaken;
+
 	// ═══════════════════════════════════════════════════════════
 	//  어트리뷰트 변화를 듣는 법  (F02-06)
 	// ═══════════════════════════════════════════════════════════

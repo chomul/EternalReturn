@@ -275,8 +275,7 @@ public:
 	// ── 레벨 규칙 ─────────────────────────────────────────────
 	// ⭐ **슬롯이 아니라 스킬이 자기 규칙을 든다.** "R 은 3" 이 아니다 — 궁이 4레벨인 실험체,
 	//   E 가 1레벨로 시작하는 실험체가 있다. 코드에 "슬롯이 R 이면" 분기를 두지 않는다.
-	// ⚠ 실험체 레벨에 따른 자동 강화(P 3단계 · "N레벨에 자동 습득") 와 R 해금 레벨은 **F10(성장)** 이
-	//   실험체 레벨을 만든 뒤 이 자리에 붙인다 (예: TArray<int32> AutoLevelAtCharacterLevels). 지금은 없다.
+	// ⚠ 실험체 레벨 조건(R 해금)은 **맨 아래** MinCharacterLevel (F10-03).
 
 	/** 부여 시 레벨. 0 = 미습득(시전 불가). P 나 "1레벨로 시작하는 E" 는 1. */
 	UPROPERTY(EditDefaultsOnly, Category = "레벨", meta = (ClampMin = "0"))
@@ -286,9 +285,21 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "레벨", meta = (ClampMin = "1"))
 	int32 MaxLevel = 5;
 
-	/** 스킬 포인트로 올릴 수 있는가. P(자동 강화) · D(무기 숙련도, F11) 는 false. */
+	/** 스킬 포인트로 올릴 수 있는가. D(무기 숙련도, F11) 는 false. ⭐ P 도 true — 1레벨로 시작하고 나머지는 포인트로 찍는다 (사용자 확인 2026-09-18). */
 	UPROPERTY(EditDefaultsOnly, Category = "레벨")
 	bool bUsesSkillPoints = true;
+
+	// ── 실험체 레벨 조건 (F10-03) ──────────────────────────────
+	// ⭐ 코드에 "R 이면 6레벨" 분기가 없다 — 스킬이 자기 조건을 든다 (위 레벨 규칙과 같은 결정).
+	// ⚠ "실험체 레벨에 따른 자동 강화" 는 없다 — P 도 포인트로 찍는다. 자동으로 오르는 건 D(무기 숙련도, F11)뿐이고 그건 숙련도 축이다.
+
+	/**
+	 * [i] = 스킬 Lv.(i+1) 을 **포인트로 찍는 데** 필요한 실험체 레벨. 비어 있거나 짧으면 그 레벨은 제한 없음.
+	 * ⚠ 자체 결정값 — R 해금 시점 원작 (미확인) (스킬 역기획서 §2 표 · F07-03 조사 실패). 출발값 R = [6, 11, 16] (LoL 관례).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "레벨", meta = (EditCondition = "bUsesSkillPoints"))
+	TArray<int32> MinCharacterLevel;
+
 };
 
 /**
@@ -341,9 +352,9 @@ namespace ERSkill
 	/**
 	 * [서버] 슬롯의 스킬 레벨을 1 올린다. 성공하면 true.
 	 *
-	 * 검증(전부 그 스펙의 UERSkillData 기준): 슬롯 스펙 존재 · bUsesSkillPoints · Level < MaxLevel.
+	 * 검증(전부 그 스펙의 UERSkillData 기준): 슬롯 스펙 존재 · bUsesSkillPoints · Level < MaxLevel · MinCharacterLevel[Level] <= CharacterLevel (F10-03).
 	 * ⚠ 포인트 잔량은 여기서 보지 않는다 — 포인트는 PlayerState 의 것이다 (AERPlayerState::ServerLevelUpSkill).
 	 * ⚠ 실패 사유는 로그로 남긴다. 클라 피드백(Client RPC)은 UI 작업 때.
 	 */
-	bool LevelUpSkill(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag);
+	bool LevelUpSkill(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int32 CharacterLevel);
 }

@@ -65,6 +65,10 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	/** [서버] 장착 칸이 바뀐 뒤 (장착 · 해제 · 교체). F10-04 숙련도 증폭 · F11 D 교체가 받는다. */
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnEquippedChanged, EEREquipSlot /*Slot*/);
+	FOnEquippedChanged OnEquippedChanged;
+
 	// ── 가방 (F08-04) ──────────────────────────────────────────
 
 	/**

@@ -169,7 +169,7 @@ FGameplayTag RecastTagForSlot(const FGameplayTag& SlotTag)
 	return FGameplayTag();   // 평타 등 — 리캐스트 없음. 로그 안 남김 (정상)
 }
 
-bool LevelUpSkill(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag)
+bool LevelUpSkill(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int32 CharacterLevel)
 {
 	if (!ASC || !ASC->IsOwnerActorAuthoritative())
 	{
@@ -212,6 +212,14 @@ bool LevelUpSkill(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag)
 	if (Found->Level >= Skill->MaxLevel)
 	{
 		UE_LOG(LogEternalReturn, Warning, TEXT("[스킬] %s 는 이미 최대 레벨(%d)이다."), *GetNameSafe(Skill), Skill->MaxLevel);
+		return false;
+	}
+
+	// ⭐ 실험체 레벨 조건 (F10-03) — 다음 스킬 레벨 = Found->Level + 1, 그 요구치는 [Found->Level].
+	if (Skill->MinCharacterLevel.IsValidIndex(Found->Level) && CharacterLevel < Skill->MinCharacterLevel[Found->Level])
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[스킬] %s Lv.%d 은 실험체 레벨 %d 필요 (지금 %d)."),
+			*GetNameSafe(Skill), Found->Level + 1, Skill->MinCharacterLevel[Found->Level], CharacterLevel);
 		return false;
 	}
 

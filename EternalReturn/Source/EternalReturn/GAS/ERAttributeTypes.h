@@ -157,3 +157,57 @@ struct FERCharStats
 	UPROPERTY(EditDefaultsOnly, Category = "모드 보정")
 	float ModeDamageDown = 0.f;
 };
+
+/**
+ * 레벨당 스탯 증가 (F10-02). 성장이 **선형**이라 (역기획서 §2.4 실측) `기본값 + 레벨당 × (Lv−1)` — 20행 테이블이 없다.
+ *
+ * ⭐ **필드가 4개뿐인 이유**: 이동 속도 · 공격 속도 · 나머지는 레벨로 안 오른다 (§2.4). 필드가 없으면 실수로도 못 올린다.
+ * ⭐⭐ 레벨업마다 **Instant** GE 로 BaseValue 에 더한다 — 장비(Infinite · CurrentValue)와 반대. Infinite 로 넣으면
+ *   레벨분이 전부 "추가 공격력" 으로 잡혀 BonusAPRatio 스킬이 폭주한다 (Docs/4_Argument/5_추가공격력_산출방식.md).
+ * ⚠ 실험체마다 다르다 (재키 95 / 4.7 / 3 / 0.077 · 아야 76 / 4.1 / 2.3 / 0.06) — 개별 밸런싱 파라미터라 실험체 애셋에 둔다.
+ */
+USTRUCT(BlueprintType)
+struct FERCharStatGrowth
+{
+	GENERATED_BODY()
+
+	/** 레벨당 최대 체력. 현재 체력도 같은 양만큼 오른다 (자체 결정값 — LoL 관례, 원작 (미확인)). */
+	UPROPERTY(EditDefaultsOnly, Category = "성장")
+	float MaxHPPerLevel = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "성장")
+	float AttackPowerPerLevel = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "성장")
+	float DefensePerLevel = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "성장")
+	float HPRegenPerLevel = 0.f;
+};
+
+/** 무기 숙련도가 올리는 증폭의 종류 (F10-04). ⭐ 둘 중 하나 — "둘 다 두고 한쪽 0" 은 데이터에서 금지 (역기획서 §8). */
+UENUM(BlueprintType)
+enum class EERAmpType : uint8
+{
+	/** 기본 공격 증폭 (BasicAtkAmp). 재키 단검 2.4 · 양손검 2.2 · 도끼 2.1 [확인] */
+	BasicAttack,
+	/** 스킬 증폭 (SkillAmp). 레니 권총 4.4 · 시셀라 암기 4.0 [확인] */
+	Skill,
+};
+
+/**
+ * 실험체 × 무기군 하나의 숙련도 증폭 계수 (F10-04). UERCharacterData.WeaponProficiencyAmp 의 값 (Docs/4_Argument/23).
+ * ⚠ 미확인 조합은 "스킬형 4%대 / 평타형 2%대" 출발값 `[자체]` (역기획서 §3.2 역산).
+ */
+USTRUCT(BlueprintType)
+struct FERWeaponAmp
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly)
+	EERAmpType AmpType = EERAmpType::BasicAttack;
+
+	/** 숙련도 레벨당 증폭 (%). 2.4 = 레벨당 +2.4%. 적용값 = AmpPerLevel × 레벨 (Lv.1 부터 1단 — 자체 결정값, 원작 (미확인)). */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	float AmpPerLevel = 0.f;
+};

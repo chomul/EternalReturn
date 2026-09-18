@@ -11,6 +11,7 @@
 class UAbilitySystemComponent;
 class UERAttributeSet;
 class UERInventoryComponent;
+class UERGrowthComponent;
 
 /**
  * 플레이어의 ASC 소유자.
@@ -63,20 +64,20 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Team")
 	int32 TeamId = INDEX_NONE;
 
-	// ── 스킬 포인트 (F07-03) ───────────────────────────────────
+	// ── 스킬 포인트 (F07-03 · F10-03) ──────────────────────────
 	// ⭐ 포인트는 여기, 스킬 레벨은 ASC 의 스펙에 있다. 둘 다 서버가 바꾸고 소유자에게 복제된다.
-	//   ⚠ 지급은 F10(성장·레벨)이 한다. 지금은 시작 포인트도 안 준다 — 디버그 명령으로 넣는다.
+	//   지급: 시작 포인트(BeginPlay · ERGrowthSettings.StartingSkillPoints) + 레벨업(Growth->OnLevelUp · FERLevelExpRow.SkillPointGranted).
 
 	/** 미배분 포인트. 소유자만 본다 (COND_OwnerOnly). */
 	UPROPERTY(ReplicatedUsing = OnRep_SkillPoints, BlueprintReadOnly, Category = "Skill")
 	int32 SkillPoints = 0;
 
-	/** [서버] 포인트 지급. F10 레벨업이 부른다. */
+	/** [서버] 포인트 지급. 레벨업 훅과 디버그가 부른다. */
 	void AddSkillPoints(int32 Amount);
 
 	/**
 	 * [클라 -> 서버] 이 슬롯에 1포인트 쓴다. 서버가 검증한다 — 클라 값을 믿지 않는다:
-	 *   포인트 > 0 · 슬롯 존재 · bUsesSkillPoints · Level < MaxLevel (뒤 셋은 ERSkill::LevelUpSkill).
+	 *   포인트 > 0 · 슬롯 존재 · bUsesSkillPoints · Level < MaxLevel · 실험체 레벨(MinCharacterLevel) (뒤 넷은 ERSkill::LevelUpSkill).
 	 * ⚠ "포인트가 남았는데 전부 만렙" 은 정상이다 (역기획서 §2.1 — 20레벨에 2포인트 남는다). assert 없음.
 	 */
 	UFUNCTION(Server, Reliable, WithValidation)
@@ -112,4 +113,12 @@ public:
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Item")
 	TObjectPtr<UERInventoryComponent> Inventory;
+
+public:
+	/** 성장 — 경험치 · 레벨 (F10). 부활해도 남아야 하니 여기 (Docs/4_Argument/22). */
+	UERGrowthComponent* GetGrowth() const { return Growth; }
+
+protected:
+	UPROPERTY(VisibleAnywhere, Category = "Growth")
+	TObjectPtr<UERGrowthComponent> Growth;
 };

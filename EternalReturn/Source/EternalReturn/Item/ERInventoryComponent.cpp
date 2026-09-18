@@ -464,6 +464,7 @@ bool UERInventoryComponent::ApplyEquip(const FName ItemId, const FERItemRow& Ite
 
 	UE_LOG(LogEternalReturn, Log, TEXT("[장비] %s <- %s 장착 (%s, 스탯 %d개)"),
 		*GetNameSafe(GetOwner()), *ItemId.ToString(), *UEnum::GetValueAsString(Item->Slot), Applied);
+	OnEquippedChanged.Broadcast(Item->Slot);
 	return true;
 }
 
@@ -499,5 +500,6 @@ bool UERInventoryComponent::Unequip(EEREquipSlot Slot)
 		*GetNameSafe(GetOwner()), *ItemId.ToString(), *UEnum::GetValueAsString(Slot));
 	Equipped.RemoveAt(Index);
 	AddItem(ItemId, 1);
+	OnEquippedChanged.Broadcast(Slot);
 	return true;
 }

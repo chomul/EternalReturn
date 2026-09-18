@@ -135,6 +135,9 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 	// 실제 클램프는 PreAttributeChange 가 한다.
 	SetHP(GetHP() - Damage);
 
+	// 피해 종단 알림 (F10-04 숙련도가 받는다). 한 줄 — F03 내부는 그대로.
+	OnDamageTaken.Broadcast(Data.EffectSpec.GetEffectContext().GetOriginalInstigator(), Damage);
+
 	// 사망 정의는 "0 **이하**"다. 0 미만이 아니다 - 클램프가 이미 0 에서 잘라내므로
 	// 0 미만은 애초에 나올 수 없고, 미만으로 쓰면 아무도 죽지 않는다.
 	// (원작이 0 에서 죽는지 0 미만에서 죽는지는 미확인 - 자체 결정값이다)

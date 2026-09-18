@@ -36,7 +36,7 @@ public:
 	 * 1레벨 기본 스탯.
 	 *
 	 * ⚠ 값이 전부 0 이면 어트리뷰트도 0 이 된다. MoveSpeed 0 은 하한으로 잘린다.
-	 * 레벨 성장은 F10 이 별도 GE 로 처리한다.
+	 * 레벨 성장은 아래 Growth 로 F10 이 별도 GE 로 처리한다.
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "스탯")
 	FERCharStats BaseStats;
@@ -66,4 +66,15 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "무기")
 	TArray<EERWeaponType> WeaponTypes;
+
+	/** 레벨당 스탯 증가 (F10-02). 레벨업마다 UERLevelUpEffect(Instant) 로 BaseStats 위에 더해진다. */
+	UPROPERTY(EditDefaultsOnly, Category = "스탯")
+	FERCharStatGrowth Growth;
+
+	/**
+	 * 무기군별 숙련도 증폭 계수 (F10-04). 키는 WeaponTypes 와 같은 집합이어야 한다 — 들 수 있는데 여기 없으면 계수 0 + Warning.
+	 * 테이블이 아니라 여기인 이유: 실험체를 식별할 키가 애셋뿐이다 (Docs/4_Argument/23_숙련도증폭계수_위치.md 방안 B).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "무기")
+	TMap<EERWeaponType, FERWeaponAmp> WeaponProficiencyAmp;
 };
