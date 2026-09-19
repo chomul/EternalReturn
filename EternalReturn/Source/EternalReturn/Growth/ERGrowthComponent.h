@@ -65,6 +65,9 @@ public:
 	/** [서버] **장착 중인 무기군**에 숙련도 경험치. 무기가 없으면 아무것도 안 한다 — 자체 결정값 (맨손 (미확인)). */
 	void AddEquippedWeaponProficiencyExp(float Amount, const TCHAR* Reason);
 
+	/** [서버] 무기를 제작했다 (F09-02 → UERInventoryComponent::OnItemCrafted) — 그 무기군 숙련도 += 등급값 × (최초 1 + FirstCraftBonus). 무기가 아니면 무시. */
+	void OnItemCrafted(FName ResultId, bool bFirstTime);
+
 	/**
 	 * [서버] 내가 Target 에게 Damage 를 입혔다 — 피해 100당 실험체 63 / 야생동물 5 (대상 태그 Actor.Type.Wildlife) 를 장착 무기군에.
 	 * 피격자의 UERAttributeSet::OnDamageTaken 을 받은 AERPlayerState 가 가해자의 이 함수를 부른다 (처치 경험치와 같은 경로).

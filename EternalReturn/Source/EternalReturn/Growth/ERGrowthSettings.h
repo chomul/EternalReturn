@@ -59,4 +59,12 @@ public:
 	/** 실험체 처치. [확인] 100 */
 	UPROPERTY(config, EditAnywhere, Category = "무기 숙련도", meta = (ClampMin = "0"))
 	float ProficiencyExpPerPlayerKill = 100.f;
+
+	/** 무기 제작 시 그 무기군 숙련도 — 등급 순서(일반 · 고급 · 희귀 · 영웅 · 전설 · 초월). [확인] 100/200/350/550/800 · 초월은 (미확인) → 800 `[자체]` */
+	UPROPERTY(config, EditAnywhere, Category = "무기 숙련도")
+	TArray<float> CraftProficiencyExpByGrade = { 100.f, 200.f, 350.f, 550.f, 800.f, 800.f };
+
+	/** 그 아이템을 처음 만들 때 배율 보너스. [확인] +25% */
+	UPROPERTY(config, EditAnywhere, Category = "무기 숙련도", meta = (ClampMin = "0"))
+	float FirstCraftBonus = 0.25f;
 };

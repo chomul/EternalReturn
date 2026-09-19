@@ -120,14 +120,42 @@ public:
 	AERItemDropActor* SpawnDeathDrop(const FVector& Location);
 
 	/**
-	 * [클라 -> 서버] 시체의 칸 하나를 줍는다. 서버 검증: 액터 유효 · 거리(UERItemSettings.PickupRange) · 칸에 아직 있음 · 가방 여유.
+	 * [클라 -> 서버] 시체 · 상자 · 채집물의 칸 하나를 줍는다. 서버 검증: 액터 유효 · 거리(UERItemSettings.PickupRange) · 칸에 아직 있음 · 가방 여유.
 	 * 들어간 만큼만 시체에서 뺀다. ⭐ 경쟁은 서버 RPC 순서 — 클라 선착순 판정 없음 (§7.4). 낙관적 표시 금지.
+	 * 채집물(F09-03)은 줄지 않고, 한 번에 한 명만 — 점유 뒤 GatherSeconds 후 FinishGather 가 준다.
 	 */
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerPickup(AERItemDropActor* Drop, int32 Index);
 
+	/** [서버] 채집 완료 — GatherSeconds 뒤 타이머가 부른다. 점유 해제 + 아이템 지급 (F09-03). */
+	void FinishGather(AERItemDropActor* Drop, int32 Index);
+	FTimerHandle GatherTimer;
+
 	/** 장착 중인 아이템 (서버 · 클라 모두 — 복제됨). 없으면 NAME_None. */
 	FName GetEquippedItem(EEREquipSlot Slot) const;
+
+	// ── 제작 (F09-02) ──────────────────────────────────────────
+
+	/** 가방 + 장착 합산 수량 (재료 검사 · UI 회색 처리). 서버 · 클라(복제된 만큼) 모두. */
+	int32 CountItem(FName ItemId) const;
+
+	/**
+	 * [서버] 제작 완료 알림 — 결과 ID · 이 플레이어가 그 아이템을 **처음** 만들었나. F10-04 가 받아 무기 숙련도(등급별 100~800 · 최초 +25%)를 준다.
+	 * 인벤토리는 성장을 모른다 (OnEquippedChanged 와 같은 결).
+	 */
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnItemCrafted, FName /*ResultId*/, bool /*bFirstTime*/);
+	FOnItemCrafted OnItemCrafted;
+
+	/**
+	 * [클라 -> 서버] "ResultId 를 만들겠다". 서버가 재료 · 자리를 전부 검사한 뒤에만 바꾼다 — 부분 실패 없음.
+	 * 재료는 가방 우선, 없으면 **장착 중인 것**도 쓴다. 장착 재료를 썼고 결과가 장비면 그 슬롯에 바로 장착 — 자체 결정값 (원작 (미확인)).
+	 * 한 번에 한 조합 — 연쇄는 UI 가 트리(ERCraft::ExpandLeaves)를 보고 반복 요청한다.
+	 */
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerCraft(FName ResultId);
+
+	/** [서버] ServerCraft 의 몸통. 성공하면 true. 실패는 아무것도 바꾸지 않는다. */
+	bool Craft(FName ResultId);
 
 	/** 서버 전용 — 핸들 확인용 (디버그). */
 	const FEREquippedSlot* FindEquippedSlot(EEREquipSlot Slot) const;
@@ -151,6 +179,9 @@ protected:
 	 */
 	UPROPERTY(ReplicatedUsing = OnRep_Bag)
 	TArray<FERItemInstance> Bag;
+
+	/** 서버 전용. 이 플레이어가 한 번이라도 만든 아이템 — 최초 제작 보너스(F10-04 +25%) 판정. 부활해도 남는다 (PlayerState). */
+	TSet<FName> CraftedOnce;
 
 	UFUNCTION()
 	void OnRep_Bag();

@@ -141,6 +141,19 @@ void ItemGiveCmd(const TArray<FString>& Args, UWorld* World)
 		return;
 	}
 	const int32 Count = Args.Num() >= 2 ? FCString::Atoi(*Args[1]) : 1;
+	// 3번째 인자 all — 전원에게 (클라 플레이어에게 재료를 주는 유일한 수단, F09-02 클라 RPC 검증용)
+	if (Args.Num() >= 3 && Args[2].Equals(TEXT("all"), ESearchCase::IgnoreCase))
+	{
+		if (const AGameStateBase* GS = World->GetGameState())
+		{
+			for (APlayerState* PS : GS->PlayerArray)
+			{
+				const AERPlayerState* ERPS = Cast<AERPlayerState>(PS);
+				if (ERPS && ERPS->GetInventory()) { ERPS->GetInventory()->AddItem(FName(*Args[0]), Count); }
+			}
+		}
+		return;
+	}
 	Inv->AddItem(FName(*Args[0]), Count);
 }
 
@@ -361,6 +374,28 @@ void ItemPickupCmd(const TArray<FString>& Args, UWorld* World)
 static FAutoConsoleCommandWithWorldAndArgs GERItemDieCmd(
 	TEXT("ER.Item.Die"), TEXT("[임시] 자기에게 고정 피해 99999 (서버 창). 시체 드롭 확인용"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ItemDieCmd));
+// ER.Loot.Spawn <row> — 서버 플레이어 앞 2m 에 상자 · 채집물 스폰 (맵 배치 없이 F09-03 검증)
+static void LootSpawnCmd(const TArray<FString>& Args, UWorld* World)
+{
+	const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+	if (Args.Num() < 1 || !Pawn || !Pawn->HasAuthority())
+	{
+		UE_LOG(LogEternalReturn, Error, TEXT("[아이템디버그] 사용법: ER.Loot.Spawn <row> (서버 창)"));
+		return;
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	const FVector Location = Pawn->GetActorLocation() + Pawn->GetActorForwardVector() * 200.f;
+	if (AERItemDropActor* Drop = World->SpawnActor<AERItemDropActor>(AERItemDropActor::StaticClass(), Location, FRotator::ZeroRotator, Params))
+	{
+		Drop->InitializeFromLoot(FName(*Args[0]));   // BeginPlay 는 LootRow 가 비어 있어 안 채웠다
+	}
+}
+
+static FAutoConsoleCommandWithWorldAndArgs GERLootSpawnCmd(
+	TEXT("ER.Loot.Spawn"), TEXT("[임시] 상자 · 채집물 스폰 (서버 창). ER.Loot.Spawn <row>"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&LootSpawnCmd));
 static FAutoConsoleCommandWithWorldAndArgs GERItemDropsCmd(
 	TEXT("ER.Item.Drops"), TEXT("[임시] 월드의 시체 목록"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ItemDropsCmd));
@@ -369,7 +404,7 @@ static FAutoConsoleCommandWithWorldAndArgs GERItemPickupCmd(
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ItemPickupCmd));
 
 static FAutoConsoleCommandWithWorldAndArgs GERItemGiveCmd(
-	TEXT("ER.Item.Give"), TEXT("[임시] 가방에 넣기 (서버 창). ER.Item.Give <ID> [n]"),
+	TEXT("ER.Item.Give"), TEXT("[임시] 가방에 넣기 (서버 창). ER.Item.Give <ID> [n] [all=전원]"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ItemGiveCmd));
 static FAutoConsoleCommandWithWorldAndArgs GERItemEquipCmd(
 	TEXT("ER.Item.Equip"), TEXT("[임시] 직접 장착 (서버 창, 가방 안 거침). ER.Item.Equip <ID>"),

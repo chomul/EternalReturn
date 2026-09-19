@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Item/ERInventoryComponent.h"
+#include "Item/ERCraftLibrary.h"
+#include "TimerManager.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -17,7 +19,6 @@
 
 namespace
 {
-	int32 GNextDropId = 1;   // 서버 프로세스 안에서만 의미 있는 번호. 로그 · 디버그용
 
 	/** 시체에 남는가 — 원작 확인: 재료 전부 · 영웅(보라) 장비. 전설 · 초월 장비는 안 남는다. 영웅 미만 장비 포함은 자체 결정값. */
 	bool DropsOnDeath(const FERItemRow& Item)
@@ -211,7 +212,7 @@ AERItemDropActor* UERInventoryComponent::SpawnDeathDrop(const FVector& Location)
 		UE_LOG(LogEternalReturn, Error, TEXT("[드롭] 시체 액터를 스폰하지 못했다."));
 		return nullptr;
 	}
-	Drop->Initialize(GNextDropId++, Copies);
+	Drop->Initialize(AERItemDropActor::NextDropId(), Copies);
 
 	FString List;
 	for (const FERItemInstance& C : Copies) { List += FString::Printf(TEXT(" %s×%d"), *C.ItemId.ToString(), C.Count); }
@@ -266,12 +267,62 @@ void UERInventoryComponent::ServerPickup_Implementation(AERItemDropActor* Drop, 
 		return;
 	}
 
+	// ④ 채집물(F09-03) — 한 번에 한 명. 점유하고 GatherSeconds 뒤에 준다. 다른 사람이 캐는 중이면 거절.
+	if (Drop->IsInfinite())
+	{
+		float Seconds = 0.f;
+		if (!Drop->TryBeginGather(Cast<APlayerState>(GetOwner()), Seconds))
+		{
+			UE_LOG(LogEternalReturn, Warning, TEXT("[습득] %s — #%d 는 %s 가 캐는 중이다."),
+				*GetNameSafe(GetOwner()), Drop->GetDropId(), *GetNameSafe(Drop->GetGatherer()));
+			return;
+		}
+		if (Seconds > 0.f)
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[습득] %s — #%d 채집 시작 (%.1f초)"), *GetNameSafe(GetOwner()), Drop->GetDropId(), Seconds);
+			TWeakObjectPtr<AERItemDropActor> WeakDrop = Drop;
+			GetWorld()->GetTimerManager().SetTimer(GatherTimer, FTimerDelegate::CreateWeakLambda(this, [this, WeakDrop, Index]()
+			{
+				if (AERItemDropActor* D = WeakDrop.Get())
+				{
+					FinishGather(D, Index);
+				}
+			}), Seconds, false);
+			return;
+		}
+		FinishGather(Drop, Index);
+		return;
+	}
+
 	const int32 DropId = Drop->GetDropId();
 	const int32 Taken = Drop->TakeFromSlot(Index, Fit);   // ⚠ 이 뒤 Drop 은 파괴됐을 수 있다
 	const int32 Left = AddItem(Wanted.ItemId, Taken);
 	UE_LOG(LogEternalReturn, Log, TEXT("[습득] %s <- 시체 #%d 칸 %d: %s ×%d%s"),
 		*GetNameSafe(GetOwner()), DropId, Index, *Wanted.ItemId.ToString(), Taken - Left,
 		Left > 0 ? TEXT(" (⚠ 일부 유실)") : TEXT(""));
+}
+
+void UERInventoryComponent::FinishGather(AERItemDropActor* Drop, int32 Index)
+{
+	Drop->EndGather();
+	if (!Drop->GetItems().IsValidIndex(Index))
+	{
+		return;
+	}
+	const FERItemInstance Wanted = Drop->GetItems()[Index];
+	int32 Fit = 0;
+	for (int32 N = Wanted.Count; N > 0; --N)
+	{
+		if (HasSpaceFor(Wanted.ItemId, N)) { Fit = N; break; }
+	}
+	if (Fit <= 0)
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[습득] %s — 가방이 가득 차 %s 를 못 줍는다 (채집)."), *GetNameSafe(GetOwner()), *Wanted.ItemId.ToString());
+		return;
+	}
+	const int32 Taken = Drop->TakeFromSlot(Index, Fit);   // 무한이라 줄지 않는다
+	AddItem(Wanted.ItemId, Taken);
+	UE_LOG(LogEternalReturn, Log, TEXT("[습득] %s <- 채집물 #%d: %s ×%d"), *GetNameSafe(GetOwner()), Drop->GetDropId(), *Wanted.ItemId.ToString(), Taken);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -465,6 +516,154 @@ bool UERInventoryComponent::ApplyEquip(const FName ItemId, const FERItemRow& Ite
 	UE_LOG(LogEternalReturn, Log, TEXT("[장비] %s <- %s 장착 (%s, 스탯 %d개)"),
 		*GetNameSafe(GetOwner()), *ItemId.ToString(), *UEnum::GetValueAsString(Item->Slot), Applied);
 	OnEquippedChanged.Broadcast(Item->Slot);
+	return true;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 제작 (F09-02)
+// ─────────────────────────────────────────────────────────────
+
+int32 UERInventoryComponent::CountItem(FName ItemId) const
+{
+	int32 Count = 0;
+	for (const FERItemInstance& Slot : Bag)
+	{
+		if (Slot.ItemId == ItemId) { Count += Slot.Count; }
+	}
+	for (const FEREquippedSlot& E : Equipped)
+	{
+		if (E.ItemId == ItemId) { Count += 1; }
+	}
+	return Count;
+}
+
+bool UERInventoryComponent::ServerCraft_Validate(FName ResultId)
+{
+	return !ResultId.IsNone();
+}
+
+void UERInventoryComponent::ServerCraft_Implementation(FName ResultId)
+{
+	Craft(ResultId);
+}
+
+bool UERInventoryComponent::Craft(FName ResultId)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		UE_LOG(LogEternalReturn, Error, TEXT("[제작] Craft 는 서버에서만 부른다."));
+		return false;
+	}
+
+	// ① 행 · 재료 2개
+	const FERItemRow* Result = ERItem::Find(ResultId);   // 없으면 Error 로그 (클라가 없는 ID 를 보냈다)
+	FName MatA, MatB;
+	if (!Result || !ERCraft::GetMaterials(ResultId, MatA, MatB))
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[제작] %s 거부 — %s 는 제작할 수 없다 (재료 없음)."), *GetNameSafe(GetOwner()), *ResultId.ToString());
+		return false;
+	}
+
+	// ② 재료 출처 계획 — 가방 우선, 없으면 장착 칸. 같은 재료 2개면 2개 필요.
+	//    ⭐ 여기까지는 읽기만. 모자라면 아무것도 안 바꾸고 나간다.
+	TArray<int32> BagTake;                 // 가방 칸 인덱스 (중복 가능 — 같은 칸에서 2개)
+	TArray<int32> EquipTake;               // Equipped 인덱스
+	for (const FName Material : { MatA, MatB })
+	{
+		// 이미 계획된 것을 제외한 가방 잔량
+		int32 BagIndex = INDEX_NONE;
+		for (int32 i = 0; i < Bag.Num(); ++i)
+		{
+			if (Bag[i].ItemId != Material) { continue; }
+			int32 Planned = 0;
+			for (const int32 T : BagTake) { if (T == i) { ++Planned; } }
+			if (Bag[i].Count - Planned > 0) { BagIndex = i; break; }
+		}
+		if (BagIndex != INDEX_NONE)
+		{
+			BagTake.Add(BagIndex);
+			continue;
+		}
+		const int32 EquipIndex = Equipped.IndexOfByPredicate([&](const FEREquippedSlot& E) { return E.ItemId == Material; });
+		if (EquipIndex != INDEX_NONE && !EquipTake.Contains(EquipIndex))
+		{
+			EquipTake.Add(EquipIndex);
+			continue;
+		}
+		UE_LOG(LogEternalReturn, Warning, TEXT("[제작] %s 거부 — 재료 %s 가 없다 (%s 를 만들려면 %s + %s)."),
+			*GetNameSafe(GetOwner()), *Material.ToString(), *ResultId.ToString(), *MatA.ToString(), *MatB.ToString());
+		return false;
+	}
+
+	// ③ 결과 자리 — 장착 재료를 썼고 결과가 그 슬롯의 장비면 바로 장착 `[자체]`, 아니면 가방.
+	const APlayerState* PS = Cast<APlayerState>(GetOwner());
+	const AERCharacterBase* Character = PS ? Cast<AERCharacterBase>(PS->GetPawn()) : nullptr;
+	const UERCharacterData* CharacterData = Character ? Character->GetCharacterData() : nullptr;
+	int32 EquipResultAt = INDEX_NONE;
+	if (Result->IsEquipment() && CharacterData && ERItem::CanEquip(*CharacterData, *Result))
+	{
+		for (const int32 E : EquipTake)
+		{
+			if (Equipped[E].Slot == Result->Slot) { EquipResultAt = E; break; }
+		}
+	}
+	if (EquipResultAt == INDEX_NONE)
+	{
+		// 가방에 들어가야 한다. 재료가 빠져 비는 칸 + 지금 빈 칸 + 같은 아이템 스택 여유.
+		int32 Freed = 0;
+		for (int32 i = 0; i < Bag.Num(); ++i)
+		{
+			int32 Planned = 0;
+			for (const int32 T : BagTake) { if (T == i) { ++Planned; } }
+			if (Planned > 0 && Bag[i].Count - Planned <= 0) { ++Freed; }
+		}
+		int32 Room = Freed * Result->MaxStack;
+		for (const FERItemInstance& Slot : Bag)
+		{
+			if (Slot.IsEmpty())                       { Room += Result->MaxStack; }
+			else if (Slot.ItemId == ResultId)         { Room += FMath::Max(Result->MaxStack - Slot.Count, 0); }
+		}
+		if (Room < 1)
+		{
+			UE_LOG(LogEternalReturn, Warning, TEXT("[제작] %s 거부 — %s 를 넣을 자리가 없다."), *GetNameSafe(GetOwner()), *ResultId.ToString());
+			return false;
+		}
+	}
+
+	// ④ 적용 — 여기부터는 실패하지 않는다 (위에서 전부 검사했다).
+	for (const int32 T : BagTake)
+	{
+		RemoveItem(T, 1);
+	}
+	// 장착 재료: GE 제거 + 슬롯 비움. 가방을 거치지 않는다 (Unequip 은 가방 자리를 요구한다).
+	EquipTake.Sort([](int32 A, int32 B) { return A > B; });   // 뒤에서부터 지워야 인덱스가 안 밀린다
+	EEREquipSlot ResultSlot = EEREquipSlot::None;
+	for (const int32 E : EquipTake)
+	{
+		const EEREquipSlot Slot = Equipped[E].Slot;
+		if (E == EquipResultAt) { ResultSlot = Slot; }
+		if (UAbilitySystemComponent* ASC = GetASC()) { ASC->RemoveActiveGameplayEffect(Equipped[E].EffectHandle); }
+		UE_LOG(LogEternalReturn, Log, TEXT("[제작] %s 장착 중이던 %s 를 재료로 소비"), *GetNameSafe(GetOwner()), *Equipped[E].ItemId.ToString());
+		Equipped.RemoveAt(E);
+		OnEquippedChanged.Broadcast(Slot);
+	}
+
+	if (ResultSlot != EEREquipSlot::None)
+	{
+		ApplyEquip(ResultId, *Result);   // CanEquip 은 ③ 에서 봤다. 슬롯은 방금 비웠다
+	}
+	else
+	{
+		const int32 Left = AddItem(ResultId, 1);
+		ensureMsgf(Left == 0, TEXT("[제작] 자리 검사(③)를 통과했는데 %s 가 안 들어갔다"), *ResultId.ToString());
+	}
+
+	const bool bFirstTime = !CraftedOnce.Contains(ResultId);
+	CraftedOnce.Add(ResultId);
+	UE_LOG(LogEternalReturn, Log, TEXT("[제작] %s: %s + %s -> %s (%s%s)"), *GetNameSafe(GetOwner()),
+		*MatA.ToString(), *MatB.ToString(), *ResultId.ToString(),
+		ResultSlot != EEREquipSlot::None ? TEXT("장착 슬롯에") : TEXT("가방에"), bFirstTime ? TEXT(" · 최초") : TEXT(""));
+	OnItemCrafted.Broadcast(ResultId, bFirstTime);
 	return true;
 }
 

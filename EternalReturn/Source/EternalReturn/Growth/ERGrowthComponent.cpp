@@ -254,6 +254,24 @@ void UERGrowthComponent::OnDamageDealt(AActor* Target, float Damage)
 	AddEquippedWeaponProficiencyExp(Damage * Per100 / 100.f, bWildlife ? TEXT("야생동물 피해") : TEXT("실험체 피해"));
 }
 
+void UERGrowthComponent::OnItemCrafted(FName ResultId, bool bFirstTime)
+{
+	const FERItemRow* Item = ERItem::Find(ResultId);
+	if (!Item || Item->Slot != EEREquipSlot::Weapon || Item->WeaponType == EERWeaponType::None)
+	{
+		return;   // 방어구 · 재료 제작은 무기 숙련도 대상이 아니다 (제작 숙련도는 초기 버전 삭제 — 역기획서 §9)
+	}
+	const UERGrowthSettings& S = UERGrowthSettings::Get();
+	const int32 GradeIndex = static_cast<int32>(Item->Grade);
+	if (!S.CraftProficiencyExpByGrade.IsValidIndex(GradeIndex))
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[숙련도] CraftProficiencyExpByGrade 에 등급 %d 항목이 없다 — 제작 경험치 0."), GradeIndex);
+		return;
+	}
+	const float Amount = S.CraftProficiencyExpByGrade[GradeIndex] * (bFirstTime ? 1.f + S.FirstCraftBonus : 1.f);
+	AddWeaponProficiencyExp(Item->WeaponType, Amount, bFirstTime ? TEXT("제작 · 최초") : TEXT("제작"));
+}
+
 void UERGrowthComponent::RefreshProficiencyBonus()
 {
 	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());

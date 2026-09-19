@@ -1,0 +1,7 @@
+﻿---,Entries,RollCount,bInfinite,GatherSeconds
+Box_Basic,"((ItemId=rubber,Weight=3,MinCount=1,MaxCount=2),(ItemId=nail,Weight=3,MinCount=1,MaxCount=2),(ItemId=iron_ball,Weight=2,MinCount=1,MaxCount=1),(ItemId=playing_cards,Weight=2,MinCount=1,MaxCount=1),(ItemId=glass_bottle,Weight=2,MinCount=1,MaxCount=1),(ItemId=stone,Weight=0,MinCount=1,MaxCount=1))",2,False,0
+Box_Uncommon,"((ItemId=battery,Weight=2,MinCount=1,MaxCount=1),(ItemId=hardcover,Weight=2,MinCount=1,MaxCount=1),(ItemId=diamond,Weight=1,MinCount=1,MaxCount=1),(ItemId=horse_tally,Weight=1,MinCount=1,MaxCount=1))",1,False,0
+Gather_Branch,"((ItemId=branch,Weight=1,MinCount=1,MaxCount=1))",1,True,2
+Gather_Stone,"((ItemId=stone,Weight=1,MinCount=1,MaxCount=1))",1,True,2
+Gather_Flower,"((ItemId=flower,Weight=1,MinCount=1,MaxCount=1))",1,True,2
+Bad_Row,"((ItemId=rubber,Weight=1,MinCount=1,MaxCount=1),(ItemId=no_such_item,Weight=1,MinCount=1,MaxCount=1))",1,False,0

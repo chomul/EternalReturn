@@ -28,6 +28,10 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "아이템", meta = (AllowedClasses = "/Script/Engine.DataTable"))
 	TSoftObjectPtr<UDataTable> ItemTable;
 
+	/** 루트 테이블 (`DT_Loot`, F09-03). 행 구조 FERLootRow — 상자 · 채집물 · (F12) 야생동물 드랍. */
+	UPROPERTY(config, EditAnywhere, Category = "아이템", meta = (AllowedClasses = "/Script/Engine.DataTable"))
+	TSoftObjectPtr<UDataTable> LootTable;
+
 	/** 가방 칸 수 (장비 칸 5 제외). ⭐ 원작 확인값 10 (사용자 확인 2026-09-17). */
 	UPROPERTY(config, EditAnywhere, Category = "인벤토리", meta = (ClampMin = "1"))
 	int32 InventorySlots = 10;

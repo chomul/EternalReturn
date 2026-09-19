@@ -19,7 +19,7 @@ namespace
 
 /** 서버 월드의 모든 플레이어 (ERSkillDebug 와 같은 이유 — 리슨 서버 창의 로컬 폰은 서버 플레이어뿐). */
 template <typename TFunc>
-void ForEachServerPlayer(UWorld* World, TFunc Func)
+void ForEachServerPlayerGrowth(UWorld* World, TFunc Func)
 {
 	if (!World || World->GetNetMode() == NM_Client)
 	{
@@ -49,7 +49,7 @@ void GrowthAddExpCmd(const TArray<FString>& Args, UWorld* World)
 		return;
 	}
 	const int32 Amount = FCString::Atoi(*Args[0]);
-	ForEachServerPlayer(World, [Amount](AERPlayerState* PS)
+	ForEachServerPlayerGrowth(World, [Amount](AERPlayerState* PS)
 	{
 		if (PS->GetGrowth())
 		{
@@ -98,7 +98,7 @@ void GrowthProfExpCmd(const TArray<FString>& Args, UWorld* World)
 		return;
 	}
 	const float Amount = FCString::Atof(*Args[0]);
-	ForEachServerPlayer(World, [Amount](AERPlayerState* PS)
+	ForEachServerPlayerGrowth(World, [Amount](AERPlayerState* PS)
 	{
 		if (PS->GetGrowth())
 		{

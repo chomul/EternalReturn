@@ -56,7 +56,7 @@ void AERPlayerState::BeginPlay()
 		//   Growth 가 스탯 GE 를 먼저 적용한 뒤 브로드캐스트한다 (F10-02). P 도 포인트로 찍는다 — 자동 강화 없음.
 		AddSkillPoints(UERGrowthSettings::Get().StartingSkillPoints);
 
-		// ⭐ 무기 교체 → 숙련도 증폭 GE 갱신 (F10-04). 장비 GE 와 별개 핸들.
+		// ⭐ 무기 교체 → 숙련도 증폭 GE 갱신 (F10-04). 장비 GE 와 별개 핸들. 제작(F09-02) → 무기 숙련도.
 		if (Inventory && Growth)
 		{
 			Inventory->OnEquippedChanged.AddWeakLambda(this, [this](EEREquipSlot Slot)
@@ -65,6 +65,10 @@ void AERPlayerState::BeginPlay()
 				{
 					Growth->RefreshProficiencyBonus();
 				}
+			});
+			Inventory->OnItemCrafted.AddWeakLambda(this, [this](FName ResultId, bool bFirstTime)
+			{
+				Growth->OnItemCrafted(ResultId, bFirstTime);
 			});
 		}
 		if (Growth)

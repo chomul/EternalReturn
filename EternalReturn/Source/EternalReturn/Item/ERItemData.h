@@ -21,7 +21,7 @@ class UERCharacterData;
  *
  * ⚠ 행 이름을 바꾸면 재료 참조(F09) · 저장된 인벤토리가 끊긴다. 처음부터 안정적으로 (`hammer_t1` 같은 영문 스네이크).
  * ⚠ 필드는 **끝에** 붙인다. 순서를 바꾸면 테이블에 저장된 값이 어긋난다 (CLAUDE.md §3).
- * ⚠ 제작 재료(A/B)는 F09 에서, 고유 효과(격동 · 처형)는 6순위 별도 시스템에서 붙는다. 여기 없는 것이 맞다.
+ * ⚠ 고유 효과(격동 · 처형)는 6순위 별도 시스템에서 붙는다. 여기 없는 것이 맞다.
  */
 USTRUCT(BlueprintType)
 struct FERItemRow : public FTableRowBase
@@ -62,7 +62,21 @@ struct FERItemRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1"))
 	int32 MaxStack = 1;
 
+	// ── 제작 (F09-01) ──────────────────────────────────────────
+	// ⭐ 제작은 **항상 아이템 2개 조합** `A + B → C` (장비 역기획서 §3.1 ①) — 조합 테이블 대신 결과 행에 재료 2개.
+	//   둘 다 비면 제작 불가(기본 재료 · 보급품). A/B 순서는 의미 없다 (ERCraft 가 정렬해 비교).
+	//   초월 = 일반 + 최고급 재료로 **건너뛴다** (§3.1 ④) — 깊이 · 등급 제약 없음.
+
+	/** 재료 A (행 이름). 재료가 테이블에 없으면 ERCraft 인덱스 생성 때 Error. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "제작")
+	FName CraftMaterialA;
+
+	/** 재료 B (행 이름). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "제작")
+	FName CraftMaterialB;
+
 	bool IsEquipment() const { return Slot != EEREquipSlot::None; }
+	bool IsCraftable() const { return !CraftMaterialA.IsNone() && !CraftMaterialB.IsNone(); }
 };
 
 namespace ERItem
