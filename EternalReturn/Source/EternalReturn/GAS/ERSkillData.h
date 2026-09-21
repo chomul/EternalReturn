@@ -324,7 +324,7 @@ public:
 
 	/**
 	 * [i] = 스킬 Lv.(i+1) 을 **포인트로 찍는 데** 필요한 실험체 레벨. 비어 있거나 짧으면 그 레벨은 제한 없음.
-	 * ⚠ 자체 결정값 — R 해금 시점 원작 (미확인) (스킬 역기획서 §2 표 · F07-03 조사 실패). 출발값 R = [6, 11, 16] (LoL 관례).
+	 * R = [6, 11, 16] — 원작 **[확인]** (사용자 2026-09-19 "현재 기준이 맞다").
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "레벨", meta = (EditCondition = "bUsesSkillPoints"))
 	TArray<int32> MinCharacterLevel;

@@ -39,6 +39,11 @@ public:
 	/** 채집물인가 (LootRow 의 bInfinite). 클라도 행을 읽을 수 있다. */
 	bool IsInfinite() const;
 
+	FName GetLootRow() const { return LootRow; }
+	/** [서버] 상자(LootRow 있고 유한)를 처음 여는 호출이면 true 를 한 번만 돌려준다 — 탐색 숙련도 1회 (F10-05). */
+	bool MarkOpenedByFirst();
+
+
 	/**
 	 * [서버] 채집 점유 시도 (F09-03). 비어 있거나 본인이면 true 로 잠그고, 다른 사람이 캐는 중이면 false.
 	 * 잠금은 GatherSeconds 뒤 자동 해제 — 그때 UERInventoryComponent 가 아이템을 준다. 이동 취소는 F17 상호작용 때.
@@ -56,6 +61,7 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, Category = "루트")
 	FName LootRow;
+	bool bOpenedOnce = false;
 
 	/**
 	 * [서버] 칸에서 Count 만큼 뺀다. 실제로 뺀 수량을 돌려준다 (칸이 비었으면 0).

@@ -82,15 +82,25 @@ void AERPlayerState::BeginPlay()
 			{
 				Growth->OnItemCrafted(ResultId, bFirstTime);
 			});
-			// ⭐ 숙련도 레벨업 → D 해금 · 강화 (F11-03). 장착 계열의 이벤트만 — 다른 계열은 교체할 때 맞춘다.
-			Growth->OnWeaponProficiencyLevelUp.AddWeakLambda(this, [this](EERWeaponType WeaponType, int32 /*NewLevel*/)
+			// ⭐ 숙련도 레벨업 → D 해금 · 강화 (F11-03). 무기 트랙 · 장착 계열의 이벤트만 — 다른 계열은 교체할 때 맞춘다.
+			//   나머지 5 트랙(방어 · 사냥 · 제작 · 탐색 · 이동)의 레벨 효과는 (미확인) — F10-05 는 적립 · 레벨업까지.
+			Growth->OnProficiencyLevelUp.AddWeakLambda(this, [this](const FERProficiencyKey& Key, int32 /*NewLevel*/)
 			{
+				if (Key.Track != EERProficiencyTrack::Weapon)
+				{
+					return;
+				}
 				const FName WeaponId = Inventory->GetEquippedItem(EEREquipSlot::Weapon);
 				const FERItemRow* Item = WeaponId.IsNone() ? nullptr : ERItem::Find(WeaponId);
-				if (Item && Item->WeaponType == WeaponType)
+				if (Item && Item->WeaponType == Key.WeaponType)
 				{
 					SyncWeaponSkillLevel();
 				}
+			});
+			// 상자 열기 → 탐색 숙련도 (F10-05)
+			Inventory->OnBoxOpened.AddWeakLambda(this, [this](FName LootRow)
+			{
+				Growth->OnBoxOpened(LootRow);
 			});
 		}
 		if (Growth)
@@ -117,12 +127,12 @@ void AERPlayerState::BeginPlay()
 					Inventory->SpawnDeathDrop(MyPawn->GetActorLocation());
 				}
 
-				// ⭐ 처치 경험치 (F10-01) + 처치 숙련도 (F10-04). Killer 는 GE 컨텍스트의 OriginalInstigator = 가해자의 ASC 소유자 = PlayerState.
+				// ⭐ 처치 → 처치자의 무기 숙련도 (적 레벨 함수) — 실험체 경험치는 숙련도가 올린다 (F10-05 · Argument 26 B).
+				//   Killer 는 GE 컨텍스트의 OriginalInstigator = 가해자의 ASC 소유자 = PlayerState.
 				//   자기 자신(자해) · 환경 피해(null) · 야생동물(PlayerState 아님) 은 제외. 어시스트 분배 없음 `[자체]`.
 				if (const AERPlayerState* KillerPS = Cast<AERPlayerState>(Killer); KillerPS && KillerPS != this && KillerPS->GetGrowth())
 				{
-					KillerPS->GetGrowth()->AddExp(UERGrowthSettings::Get().PlayerKillExp, EERExpSource::PlayerKill);
-					KillerPS->GetGrowth()->AddEquippedWeaponProficiencyExp(UERGrowthSettings::Get().ProficiencyExpPerPlayerKill, TEXT("실험체 처치"));
+					KillerPS->GetGrowth()->OnPlayerKilled(Growth ? Growth->GetLevel() : 1);
 				}
 			});
 
@@ -131,6 +141,10 @@ void AERPlayerState::BeginPlay()
 			AttributeSet->OnDamageTaken.AddWeakLambda(this, [this](AActor* Attacker, float Damage)
 			{
 				EnterCombat();
+				if (Growth)
+				{
+					Growth->OnDamageTaken(Damage);   // 방어 숙련도 (F10-05)
+				}
 				if (AERPlayerState* AttackerPS = Cast<AERPlayerState>(Attacker); AttackerPS && AttackerPS != this)
 				{
 					AttackerPS->EnterCombat();

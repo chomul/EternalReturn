@@ -152,6 +152,11 @@ public:
 	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnItemCrafted, FName /*ResultId*/, bool /*bFirstTime*/);
 	FOnItemCrafted OnItemCrafted;
 
+	/** [서버] 상자(LootRow 있는 1회성 드롭)를 **처음** 열었다 — 탐색 숙련도 (F10-05). 같은 상자에서 두 번째 칸을 집어도 다시 안 온다. */
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnBoxOpened, FName /*LootRow*/);
+	FOnBoxOpened OnBoxOpened;
+
+
 	/**
 	 * [클라 -> 서버] "ResultId 를 만들겠다". 서버가 재료 · 자리를 전부 검사한 뒤에만 바꾼다 — 부분 실패 없음.
 	 * 재료는 가방 우선, 없으면 **장착 중인 것**도 쓴다. 장착 재료를 썼고 결과가 장비면 그 슬롯에 바로 장착 — 자체 결정값 (원작 (미확인)).

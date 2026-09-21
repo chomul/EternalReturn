@@ -49,7 +49,7 @@ struct FERLootRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bInfinite = false;
 
-	/** 채집물만. 한 번 캐는 데 걸리는 초 — 이 동안 **다른 사람은 못 캔다** (원작 확인: 한 번에 한 명). 0 = 즉시. ⚠ 자체 결정값 (원작 (미확인)). */
+	/** 채집물만. 한 번 캐는 데 걸리는 초 — 이 동안 **다른 사람은 못 캔다** (원작 확인: 한 번에 한 명). 0 = 즉시. 원작 **2초 [확인]** (사용자 2026-09-19). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0", EditCondition = "bInfinite"))
 	float GatherSeconds = 0.f;
 };

@@ -12,6 +12,7 @@ UERProficiencyEffect::UERProficiencyEffect()
 	const TPair<FGameplayAttribute, FGameplayTag> Mods[] = {
 		{ UERAttributeSet::GetSkillAmpAttribute(),    ERTags::SetByCaller_SkillAmp },
 		{ UERAttributeSet::GetBasicAtkAmpAttribute(), ERTags::SetByCaller_BasicAtkAmp },
+		{ UERAttributeSet::GetAttackSpeedAttribute(), ERTags::SetByCaller_AttackSpeed },   // F10-05 · E18 A9 레벨당 공속
 	};
 	for (const auto& M : Mods)
 	{

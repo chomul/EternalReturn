@@ -354,7 +354,7 @@ void UERDamageExecution::Execute_Implementation(
 			if (Spec.CapturedTargetTags.GetAggregatedTags()
 				&& Spec.CapturedTargetTags.GetAggregatedTags()->HasTag(ERTags::Actor_Type_Wildlife))
 			{
-				HealCut = FMath::Max(HealCut, 0.6f);   // 야생동물: 60% 감소
+				HealCut = FMath::Max(HealCut, 0.4f);   // 야생동물: 40% 감소 — 나무위키 "야생 동물을 대상으로는 60%만 적용" (E18 A1, 초판은 60% 감소로 오독)
 			}
 
 			const float HealAmount = Damage * LifestealRate * (1.f - HealCut);

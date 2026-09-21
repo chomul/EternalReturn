@@ -147,3 +147,13 @@ int32 AERItemDropActor::TakeFromSlot(int32 Index, int32 Count)
 	}
 	return Taken;
 }
+
+bool AERItemDropActor::MarkOpenedByFirst()
+{
+	if (LootRow.IsNone() || IsInfinite() || bOpenedOnce)
+	{
+		return false;
+	}
+	bOpenedOnce = true;
+	return true;
+}

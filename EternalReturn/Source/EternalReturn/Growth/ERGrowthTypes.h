@@ -30,18 +30,63 @@ struct FERLevelExpRow : public FTableRowBase
 };
 
 /**
- * 무기군 하나의 숙련도 (F10-04). 무기군별로 따로 쌓인다 (재키 도끼 5 · 단검 2 동시 가능). 소유자만 본다 — 적의 D 해금을 숨긴다 (§7).
- * ⚠ TArray 원소다 — TMap 은 복제되지 않는다.
+ * 숙련도 트랙 6종 (F10-05 · E18 A10). ⭐ **실험체 레벨 = 이 6종에 쌓인 경험치의 합** (인게임 확인 2026-09-19, Argument 26 B).
+ * Weapon 만 무기군별로 따로 (FERProficiencyKey.WeaponType), 나머지는 트랙 하나씩.
  */
+UENUM()
+enum class EERProficiencyTrack : uint8
+{
+	/** 무기 — 피해 · 처치 · 무기 제작. 무기군별. D 해금 · 공속 · 증폭 (F11-03 · F10-04) */
+	Weapon,
+	/** 방어 — 받은 피해. 레벨 효과 (미확인) */
+	Defense,
+	/** 사냥 — 야생동물 처치 (F12 가 부른다). 레벨 효과 (미확인) */
+	Hunt,
+	/** 제작 — 모든 제작. 레벨 효과 (미확인) */
+	Craft,
+	/** 탐색 — 상자 열기. 레벨 효과 (미확인) */
+	Search,
+	/** 이동 — 이동 거리. 레벨 효과 (미확인) */
+	Move,
+};
+
+/** 트랙 + (무기면) 무기군. 숙련도 항목의 열쇠. */
 USTRUCT()
-struct FERWeaponProficiency
+struct FERProficiencyKey
 {
 	GENERATED_BODY()
 
 	UPROPERTY()
+	EERProficiencyTrack Track = EERProficiencyTrack::Weapon;
+
+	/** Track == Weapon 일 때만 의미. */
+	UPROPERTY()
 	EERWeaponType WeaponType = EERWeaponType::None;
 
-	/** 현재 레벨에서 쌓인 경험치. 피해 100당 63 처럼 소수가 나와 float. */
+	static FERProficiencyKey Weapon(EERWeaponType Type) { FERProficiencyKey K; K.Track = EERProficiencyTrack::Weapon; K.WeaponType = Type; return K; }
+	static FERProficiencyKey Of(EERProficiencyTrack InTrack) { FERProficiencyKey K; K.Track = InTrack; return K; }
+
+	bool operator==(const FERProficiencyKey& O) const
+	{
+		return Track == O.Track && (Track != EERProficiencyTrack::Weapon || WeaponType == O.WeaponType);
+	}
+	bool IsValid() const { return Track != EERProficiencyTrack::Weapon || WeaponType != EERWeaponType::None; }
+	FString ToString() const;
+};
+
+/**
+ * 숙련도 항목 하나 (트랙 또는 무기군). 소유자만 본다 — 적의 D 해금을 숨긴다 (§7).
+ * ⚠ TArray 원소다 — TMap 은 복제되지 않는다.
+ */
+USTRUCT()
+struct FERProficiency
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FERProficiencyKey Key;
+
+	/** 현재 레벨에서 쌓인 경험치. 피해 100당 50 처럼 소수가 나와 float. */
 	UPROPERTY()
 	float Exp = 0.f;
 
@@ -49,14 +94,33 @@ struct FERWeaponProficiency
 	int32 Level = 1;
 };
 
-/** 경험치 출처. 지금은 로그 구분용 — 출처별 계수는 (미확인). */
-UENUM()
-enum class EERExpSource : uint8
+/**
+ * 숙련도 필요 경험치 한 행 (`DT_ProficiencyExp`). RowName = "Lv1" … (Lv N → N+1). **행 수 + 1 = 숙련도 최대 레벨** (19행 → 20).
+ * 6열 전부 **인게임 확인** (2026-09-19 · 역기획서 성장 §3.0). 무기 500·600·700·900·1650… · 방어 230+270n · 사냥 180+200n · 제작 370+125n · 이동 300+20n · 탐색 비선형.
+ */
+USTRUCT(BlueprintType)
+struct FERProficiencyExpRow : public FTableRowBase
 {
-	/** 디버그 명령 */
-	Debug,
-	/** 야생동물 처치 (값은 F12) */
-	Wildlife,
-	/** 실험체 처치 */
-	PlayerKill,
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1")) int32 Weapon = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1")) int32 Defense = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1")) int32 Hunt = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1")) int32 Craft = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1")) int32 Search = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1")) int32 Move = 1;
+
+	int32 Get(EERProficiencyTrack Track) const
+	{
+		switch (Track)
+		{
+		case EERProficiencyTrack::Weapon:  return Weapon;
+		case EERProficiencyTrack::Defense: return Defense;
+		case EERProficiencyTrack::Hunt:    return Hunt;
+		case EERProficiencyTrack::Craft:   return Craft;
+		case EERProficiencyTrack::Search:  return Search;
+		case EERProficiencyTrack::Move:    return Move;
+		}
+		return 1;
+	}
 };

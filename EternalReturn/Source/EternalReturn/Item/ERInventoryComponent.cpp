@@ -295,6 +295,12 @@ void UERInventoryComponent::ServerPickup_Implementation(AERItemDropActor* Drop, 
 		return;
 	}
 
+	// 상자를 처음 여는 사람 → 탐색 숙련도 (F10-05). 시체(LootRow 없음) · 채집물(무한)은 아니다.
+	if (Drop->MarkOpenedByFirst())
+	{
+		OnBoxOpened.Broadcast(Drop->GetLootRow());
+	}
+
 	const int32 DropId = Drop->GetDropId();
 	const int32 Taken = Drop->TakeFromSlot(Index, Fit);   // ⚠ 이 뒤 Drop 은 파괴됐을 수 있다
 	const int32 Left = AddItem(Wanted.ItemId, Taken);

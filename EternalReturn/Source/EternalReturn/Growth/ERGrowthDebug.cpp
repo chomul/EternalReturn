@@ -40,23 +40,6 @@ void ForEachServerPlayerGrowth(UWorld* World, TFunc Func)
 	}
 }
 
-// ER.Growth.AddExp <n> — 전원 경험치 지급 (서버 창)
-void GrowthAddExpCmd(const TArray<FString>& Args, UWorld* World)
-{
-	if (Args.Num() < 1)
-	{
-		UE_LOG(LogEternalReturn, Error, TEXT("[성장디버그] 사용법: ER.Growth.AddExp <n>"));
-		return;
-	}
-	const int32 Amount = FCString::Atoi(*Args[0]);
-	ForEachServerPlayerGrowth(World, [Amount](AERPlayerState* PS)
-	{
-		if (PS->GetGrowth())
-		{
-			PS->GetGrowth()->AddExp(Amount, EERExpSource::Debug);
-		}
-	});
-}
 
 // ER.Growth.Show — 이 창에서 보이는 모든 플레이어의 레벨 · 경험치 · 성장 어트리뷰트(ER.Item.Stats 에 없는 HP · 재생 · 이동).
 //   클라 창에서 남의 Exp 는 0 으로 보여야 한다 (OwnerOnly).
@@ -84,26 +67,46 @@ void GrowthShowCmd(const TArray<FString>& Args, UWorld* World)
 				ASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()), ASC->GetNumericAttribute(UERAttributeSet::GetMaxHPAttribute()),
 				ASC->GetNumericAttribute(UERAttributeSet::GetHPRegenAttribute()), ASC->GetNumericAttribute(UERAttributeSet::GetMoveSpeedAttribute()));
 		}
-		UE_LOG(LogEternalReturn, Warning, TEXT("[성장디버그][%s] %s Lv.%d  경험치 %d / %d  (최대 Lv.%d)%s"),
+		UE_LOG(LogEternalReturn, Warning, TEXT("[성장디버그][%s] %s Lv.%d  경험치 %.1f / %d  (최대 Lv.%d)%s"),
 			Side, *ERPS->GetName(), Growth->GetLevel(), Growth->GetExp(), Row ? Row->RequiredExp : 0, UERGrowthComponent::GetMaxLevel(), *Stats);
 	}
 }
 
-// ER.Growth.ProfExp <n> — 전원의 **장착 무기군**에 숙련도 경험치 (서버 창). F12 없이 레벨 5 를 만들기 위해.
+// ER.Growth.ProfExp <n> [Track|WeaponType] — 전원에게 숙련도 경험치 (서버 창). 두 번째 인자 없으면 **장착 무기군**.
+//   예: ER.Growth.ProfExp 500 · ER.Growth.ProfExp 300 Defense · ER.Growth.ProfExp 500 Hammer
 void GrowthProfExpCmd(const TArray<FString>& Args, UWorld* World)
 {
 	if (Args.Num() < 1)
 	{
-		UE_LOG(LogEternalReturn, Error, TEXT("[성장디버그] 사용법: ER.Growth.ProfExp <n>"));
+		UE_LOG(LogEternalReturn, Error, TEXT("[성장디버그] 사용법: ER.Growth.ProfExp <n> [Weapon|Defense|Hunt|Craft|Search|Move|<무기군>]"));
 		return;
 	}
 	const float Amount = FCString::Atof(*Args[0]);
-	ForEachServerPlayerGrowth(World, [Amount](AERPlayerState* PS)
+	FERProficiencyKey Key;
+	bool bEquipped = true;
+	if (Args.Num() >= 2)
 	{
-		if (PS->GetGrowth())
+		const int64 TrackValue = StaticEnum<EERProficiencyTrack>()->GetValueByNameString(Args[1]);
+		const int64 WeaponValue = StaticEnum<EERWeaponType>()->GetValueByNameString(Args[1]);
+		if (TrackValue != INDEX_NONE && static_cast<EERProficiencyTrack>(TrackValue) != EERProficiencyTrack::Weapon)
 		{
-			PS->GetGrowth()->AddEquippedWeaponProficiencyExp(Amount, TEXT("Debug"));
+			Key = FERProficiencyKey::Of(static_cast<EERProficiencyTrack>(TrackValue)); bEquipped = false;
 		}
+		else if (WeaponValue != INDEX_NONE && static_cast<EERWeaponType>(WeaponValue) != EERWeaponType::None)
+		{
+			Key = FERProficiencyKey::Weapon(static_cast<EERWeaponType>(WeaponValue)); bEquipped = false;
+		}
+		else if (!Args[1].Equals(TEXT("Weapon"), ESearchCase::IgnoreCase))
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[성장디버그] 모르는 트랙/무기군: %s"), *Args[1]);
+			return;
+		}
+	}
+	ForEachServerPlayerGrowth(World, [Amount, Key, bEquipped](AERPlayerState* PS)
+	{
+		if (!PS->GetGrowth()) { return; }
+		if (bEquipped) { PS->GetGrowth()->AddEquippedWeaponProficiencyExp(Amount, TEXT("Debug")); }
+		else           { PS->GetGrowth()->AddProficiencyExp(Key, Amount, TEXT("Debug")); }
 	});
 }
 
@@ -125,10 +128,10 @@ void GrowthProfCmd(const TArray<FString>& Args, UWorld* World)
 			continue;
 		}
 		FString Line;
-		for (const FERWeaponProficiency& P : Growth->GetWeaponProficiencies())
+		for (const FERProficiency& P : Growth->GetProficiencies())
 		{
-			Line += FString::Printf(TEXT("  %s Lv.%d (%.1f / %.0f)"), *UEnum::GetDisplayValueAsText(P.WeaponType).ToString(),
-				P.Level, P.Exp, UERGrowthComponent::ProficiencyRequiredExp(P.Level));
+			Line += FString::Printf(TEXT("  %s Lv.%d (%.1f / %.0f)"), *P.Key.ToString(),
+				P.Level, P.Exp, UERGrowthComponent::ProficiencyRequiredExp(P.Key.Track, P.Level));
 		}
 		if (const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ERPS))
 		{
@@ -142,14 +145,11 @@ void GrowthProfCmd(const TArray<FString>& Args, UWorld* World)
 } // namespace
 
 static FAutoConsoleCommandWithWorldAndArgs GERGrowthProfExpCmd(
-	TEXT("ER.Growth.ProfExp"), TEXT("[임시] 전원 장착 무기군 숙련도 경험치 (서버 창). ER.Growth.ProfExp <n>"),
+	TEXT("ER.Growth.ProfExp"), TEXT("[임시] 전원 숙련도 경험치 (서버 창). ER.Growth.ProfExp <n> [Track|무기군] — 없으면 장착 무기군"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&GrowthProfExpCmd));
 static FAutoConsoleCommandWithWorldAndArgs GERGrowthProfCmd(
-	TEXT("ER.Growth.Prof"), TEXT("[임시] 모든 플레이어의 무기군별 숙련도"),
+	TEXT("ER.Growth.Prof"), TEXT("[임시] 모든 플레이어의 숙련도 6종 (무기군별 + 트랙 5)"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&GrowthProfCmd));
-static FAutoConsoleCommandWithWorldAndArgs GERGrowthAddExpCmd(
-	TEXT("ER.Growth.AddExp"), TEXT("[임시] 전원 경험치 지급 (서버 창). ER.Growth.AddExp <n>"),
-	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&GrowthAddExpCmd));
 static FAutoConsoleCommandWithWorldAndArgs GERGrowthShowCmd(
 	TEXT("ER.Growth.Show"), TEXT("[임시] 모든 플레이어의 레벨 · 경험치"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&GrowthShowCmd));

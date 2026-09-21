@@ -210,4 +210,8 @@ struct FERWeaponAmp
 	/** 숙련도 레벨당 증폭 (%). 2.4 = 레벨당 +2.4%. 적용값 = AmpPerLevel × 레벨 (Lv.1 부터 1단 — 자체 결정값, 원작 (미확인)). */
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
 	float AmpPerLevel = 0.f;
+
+	/** 숙련도 레벨당 공격 속도 (%). [확인] 계열마다 "공속 + 증폭" 두 스탯 (카메라 예: 공속 2 · 스킬증폭 4.4 — E18 A9). 적용값 = 레벨 × 이 값 → AttackSpeed Additive. */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	float AttackSpeedPerLevel = 0.f;
 };

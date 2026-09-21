@@ -18,6 +18,14 @@
 #include "GAS/ERGameplayTags.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
+
+FString FERProficiencyKey::ToString() const
+{
+	return Track == EERProficiencyTrack::Weapon
+		? UEnum::GetDisplayValueAsText(WeaponType).ToString()
+		: UEnum::GetDisplayValueAsText(Track).ToString();
+}
 
 UERGrowthComponent::UERGrowthComponent()
 {
@@ -29,45 +37,81 @@ void UERGrowthComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UERGrowthComponent, Level);
 	DOREPLIFETIME_CONDITION(UERGrowthComponent, Exp, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UERGrowthComponent, WeaponProficiencies, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UERGrowthComponent, Proficiencies, COND_OwnerOnly);
+}
+
+void UERGrowthComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	// 이동 트랙 — 서버가 1초마다 폰 위치 차이를 잰다 (Tick 아님 · CLAUDE.md §2). 클라 이동은 ServerMove 로 서버 폰에 반영된다.
+	if (GetOwner() && GetOwner()->HasAuthority() && GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimer(MoveSampleTimer, this, &UERGrowthComponent::SampleMovement, 1.f, true);
+	}
+}
+
+void UERGrowthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(MoveSampleTimer);
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 // ─────────────────────────────────────────────────────────────
 // 테이블
 // ─────────────────────────────────────────────────────────────
 
-const UDataTable* UERGrowthComponent::GetTable()
+namespace
 {
-	const UERGrowthSettings& Settings = UERGrowthSettings::Get();
-	if (Settings.LevelExpTable.IsNull())
+	const UDataTable* LoadTable(const TSoftObjectPtr<UDataTable>& Ptr, const UScriptStruct* RowStruct, const TCHAR* SettingName)
 	{
-		UE_LOG(LogEternalReturn, Error, TEXT("[성장] Project Settings > Game > ER Growth 에 LevelExpTable 이 비어 있다."));
-		return nullptr;
+		if (Ptr.IsNull())
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[성장] Project Settings > Game > ER Growth 에 %s 가 비어 있다."), SettingName);
+			return nullptr;
+		}
+		const UDataTable* Table = Ptr.LoadSynchronous();
+		if (!Table)
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[성장] %s 를 로드하지 못했다: %s"), SettingName, *Ptr.ToString());
+			return nullptr;
+		}
+		if (Table->GetRowStruct() != RowStruct)
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[성장] %s 의 행 구조가 %s 가 아니다 (%s)."), *Table->GetName(), *RowStruct->GetName(), *GetNameSafe(Table->GetRowStruct()));
+			return nullptr;
+		}
+		return Table;
 	}
-	const UDataTable* Table = Settings.LevelExpTable.LoadSynchronous();
-	if (!Table)
-	{
-		UE_LOG(LogEternalReturn, Error, TEXT("[성장] LevelExpTable 을 로드하지 못했다: %s"), *Settings.LevelExpTable.ToString());
-		return nullptr;
-	}
-	if (Table->GetRowStruct() != FERLevelExpRow::StaticStruct())
-	{
-		UE_LOG(LogEternalReturn, Error, TEXT("[성장] %s 의 행 구조가 FERLevelExpRow 가 아니다 (%s)."),
-			*Table->GetName(), *GetNameSafe(Table->GetRowStruct()));
-		return nullptr;
-	}
-	return Table;
+}
+
+const UDataTable* UERGrowthComponent::GetLevelTable()
+{
+	return LoadTable(UERGrowthSettings::Get().LevelExpTable, FERLevelExpRow::StaticStruct(), TEXT("LevelExpTable"));
+}
+
+const UDataTable* UERGrowthComponent::GetProficiencyTable()
+{
+	return LoadTable(UERGrowthSettings::Get().ProficiencyExpTable, FERProficiencyExpRow::StaticStruct(), TEXT("ProficiencyExpTable"));
 }
 
 int32 UERGrowthComponent::GetMaxLevel()
 {
-	const UDataTable* Table = GetTable();
+	const UDataTable* Table = GetLevelTable();
+	return Table ? Table->GetRowMap().Num() + 1 : 1;
+}
+
+int32 UERGrowthComponent::GetProficiencyMaxLevel()
+{
+	const UDataTable* Table = GetProficiencyTable();
 	return Table ? Table->GetRowMap().Num() + 1 : 1;
 }
 
 const FERLevelExpRow* UERGrowthComponent::FindLevelRow(int32 InLevel)
 {
-	const UDataTable* Table = GetTable();
+	const UDataTable* Table = GetLevelTable();
 	if (!Table)
 	{
 		return nullptr;
@@ -82,27 +126,103 @@ const FERLevelExpRow* UERGrowthComponent::FindLevelRow(int32 InLevel)
 	return Row;
 }
 
+float UERGrowthComponent::ProficiencyRequiredExp(EERProficiencyTrack Track, int32 InLevel)
+{
+	const UDataTable* Table = GetProficiencyTable();
+	if (!Table)
+	{
+		return 0.f;
+	}
+	const FName RowName(*FString::Printf(TEXT("Lv%d"), InLevel));
+	const FERProficiencyExpRow* Row = Table->FindRow<FERProficiencyExpRow>(RowName, TEXT("ERGrowth"), /*bWarnIfRowMissing=*/false);
+	if (!Row)
+	{
+		UE_LOG(LogEternalReturn, Error, TEXT("[숙련도] ProficiencyExpTable 에 %s 행이 없다."), *RowName.ToString());
+		return 0.f;
+	}
+	return static_cast<float>(Row->Get(Track));
+}
+
 // ─────────────────────────────────────────────────────────────
-// 경험치 · 레벨
+// ⭐ 유일한 입구 — 숙련도 적립 → 실험체 경험치
 // ─────────────────────────────────────────────────────────────
 
-void UERGrowthComponent::AddExp(int32 Amount, EERExpSource Source)
+int32 UERGrowthComponent::GetProficiencyLevel(const FERProficiencyKey& Key) const
 {
-	if (!GetOwner() || !GetOwner()->HasAuthority() || Amount <= 0)
+	const FERProficiency* Found = Proficiencies.FindByPredicate([&Key](const FERProficiency& P) { return P.Key == Key; });
+	return Found ? Found->Level : 1;
+}
+
+void UERGrowthComponent::AddProficiencyExp(const FERProficiencyKey& Key, float Amount, const TCHAR* Reason)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !Key.IsValid() || Amount <= 0.f)
 	{
 		return;
 	}
 
+	FERProficiency* P = Proficiencies.FindByPredicate([&Key](const FERProficiency& E) { return E.Key == Key; });
+	if (!P)
+	{
+		P = &Proficiencies.AddDefaulted_GetRef();
+		P->Key = Key;
+	}
+
+	const int32 MaxLevel = GetProficiencyMaxLevel();
+	const FString KeyName = Key.ToString();
+	if (P->Level < MaxLevel)
+	{
+		P->Exp += Amount;
+		UE_LOG(LogEternalReturn, Log, TEXT("[숙련도] %s %s +%.1f (%s) -> %.1f / %.0f (Lv.%d)"),
+			*GetOwner()->GetName(), *KeyName, Amount, Reason, P->Exp, ProficiencyRequiredExp(Key.Track, P->Level), P->Level);
+
+		bool bLeveled = false;
+		while (P->Level < MaxLevel)
+		{
+			const float Need = ProficiencyRequiredExp(Key.Track, P->Level);
+			if (Need <= 0.f || P->Exp < Need)
+			{
+				break;
+			}
+			P->Exp -= Need;
+			++P->Level;
+			bLeveled = true;
+			UE_LOG(LogEternalReturn, Log, TEXT("[숙련도] %s %s 레벨업 -> Lv.%d (남은 %.1f)"), *GetOwner()->GetName(), *KeyName, P->Level, P->Exp);
+			OnProficiencyLevelUp.Broadcast(Key, P->Level);
+		}
+		if (P->Level >= MaxLevel)
+		{
+			P->Exp = 0.f;
+		}
+		// 지금 든 무기군이 올랐을 때만 공속 · 증폭이 바뀐다.
+		if (bLeveled && Key.Track == EERProficiencyTrack::Weapon && Key.WeaponType == GetEquippedWeaponType())
+		{
+			RefreshProficiencyBonus();
+		}
+	}
+	else
+	{
+		UE_LOG(LogEternalReturn, Verbose, TEXT("[숙련도] %s %s 최대 레벨 — +%.1f (%s) 는 실험체 경험치로만"), *GetOwner()->GetName(), *KeyName, Amount, Reason);
+	}
+
+	// ⭐ 실험체 경험치 = 숙련도 경험치의 합 (트랙이 최대 레벨이어도 실험체 경험치는 들어간다 `[자체]`).
+	AddCharacterExp(Amount * UERGrowthSettings::Get().LevelExpPerProficiencyExp, Reason);
+}
+
+void UERGrowthComponent::AddCharacterExp(float Amount, const TCHAR* Reason)
+{
+	if (Amount <= 0.f)
+	{
+		return;
+	}
 	const int32 MaxLevel = GetMaxLevel();
 	if (Level >= MaxLevel)
 	{
-		UE_LOG(LogEternalReturn, Log, TEXT("[성장] %s 최대 레벨(%d) — 경험치 +%d 무시"), *GetOwner()->GetName(), MaxLevel, Amount);
+		UE_LOG(LogEternalReturn, Verbose, TEXT("[성장] %s 최대 레벨(%d) — 경험치 +%.1f 무시"), *GetOwner()->GetName(), MaxLevel, Amount);
 		return;
 	}
 
 	Exp += Amount;
-	UE_LOG(LogEternalReturn, Log, TEXT("[성장] %s 경험치 +%d (%s) -> %d (Lv.%d)"),
-		*GetOwner()->GetName(), Amount, *UEnum::GetDisplayValueAsText(Source).ToString(), Exp, Level);
+	UE_LOG(LogEternalReturn, Log, TEXT("[성장] %s 경험치 +%.1f (%s) -> %.1f (Lv.%d)"), *GetOwner()->GetName(), Amount, Reason, Exp, Level);
 
 	// ⭐ 한 번에 여러 레벨. 레벨마다 훅을 순서대로 — 02 · 03 이 레벨별 처리를 한다.
 	while (Level < MaxLevel)
@@ -114,7 +234,7 @@ void UERGrowthComponent::AddExp(int32 Amount, EERExpSource Source)
 		}
 		Exp -= Row->RequiredExp;
 		++Level;
-		UE_LOG(LogEternalReturn, Log, TEXT("[성장] %s 레벨업 -> Lv.%d (남은 경험치 %d)"), *GetOwner()->GetName(), Level, Exp);
+		UE_LOG(LogEternalReturn, Log, TEXT("[성장] %s 레벨업 -> Lv.%d (남은 경험치 %.1f)"), *GetOwner()->GetName(), Level, Exp);
 		ApplyLevelGrowth(Level);
 		OnLevelUp.Broadcast(Level);
 	}
@@ -122,7 +242,7 @@ void UERGrowthComponent::AddExp(int32 Amount, EERExpSource Source)
 	// 최대 레벨 도달 — 남은 경험치는 버린다 `[자체]`. 게이지가 "가득" 이 아니라 0 으로 보이게.
 	if (Level >= MaxLevel)
 	{
-		Exp = 0;
+		Exp = 0.f;
 	}
 }
 
@@ -160,7 +280,7 @@ void UERGrowthComponent::ApplyLevelGrowth(int32 NewLevel)
 }
 
 // ─────────────────────────────────────────────────────────────
-// 무기 숙련도 (F10-04)
+// 적립 훅
 // ─────────────────────────────────────────────────────────────
 
 EERWeaponType UERGrowthComponent::GetEquippedWeaponType() const
@@ -176,68 +296,15 @@ EERWeaponType UERGrowthComponent::GetEquippedWeaponType() const
 	return Item ? Item->WeaponType : EERWeaponType::None;
 }
 
-int32 UERGrowthComponent::GetWeaponProficiencyLevel(EERWeaponType WeaponType) const
-{
-	const FERWeaponProficiency* Found = WeaponProficiencies.FindByPredicate([WeaponType](const FERWeaponProficiency& P) { return P.WeaponType == WeaponType; });
-	return Found ? Found->Level : 1;
-}
-
-float UERGrowthComponent::ProficiencyRequiredExp(int32 InLevel)
-{
-	const UERGrowthSettings& S = UERGrowthSettings::Get();
-	return static_cast<float>(S.ProficiencyExpLv2 + S.ProficiencyExpStep * (InLevel - 1));
-}
-
-void UERGrowthComponent::AddWeaponProficiencyExp(EERWeaponType WeaponType, float Amount, const TCHAR* Reason)
-{
-	if (!GetOwner() || !GetOwner()->HasAuthority() || WeaponType == EERWeaponType::None || Amount <= 0.f)
-	{
-		return;
-	}
-
-	FERWeaponProficiency* P = WeaponProficiencies.FindByPredicate([WeaponType](const FERWeaponProficiency& E) { return E.WeaponType == WeaponType; });
-	if (!P)
-	{
-		P = &WeaponProficiencies.AddDefaulted_GetRef();
-		P->WeaponType = WeaponType;
-	}
-
-	const int32 MaxLevel = UERGrowthSettings::Get().ProficiencyMaxLevel;
-	if (P->Level >= MaxLevel)
-	{
-		return;
-	}
-
-	P->Exp += Amount;
-	UE_LOG(LogEternalReturn, Log, TEXT("[숙련도] %s %s +%.1f (%s) -> %.1f / %.0f (Lv.%d)"),
-		*GetOwner()->GetName(), *UEnum::GetDisplayValueAsText(WeaponType).ToString(), Amount, Reason,
-		P->Exp, ProficiencyRequiredExp(P->Level), P->Level);
-
-	bool bLeveled = false;
-	while (P->Level < MaxLevel && P->Exp >= ProficiencyRequiredExp(P->Level))
-	{
-		P->Exp -= ProficiencyRequiredExp(P->Level);
-		++P->Level;
-		bLeveled = true;
-		UE_LOG(LogEternalReturn, Log, TEXT("[숙련도] %s %s 레벨업 -> Lv.%d (남은 %.1f)"),
-			*GetOwner()->GetName(), *UEnum::GetDisplayValueAsText(WeaponType).ToString(), P->Level, P->Exp);
-		OnWeaponProficiencyLevelUp.Broadcast(WeaponType, P->Level);
-	}
-	if (P->Level >= MaxLevel)
-	{
-		P->Exp = 0.f;
-	}
-
-	// 지금 든 무기군이 올랐을 때만 증폭이 바뀐다.
-	if (bLeveled && WeaponType == GetEquippedWeaponType())
-	{
-		RefreshProficiencyBonus();
-	}
-}
-
 void UERGrowthComponent::AddEquippedWeaponProficiencyExp(float Amount, const TCHAR* Reason)
 {
-	AddWeaponProficiencyExp(GetEquippedWeaponType(), Amount, Reason);
+	const EERWeaponType Type = GetEquippedWeaponType();
+	if (Type == EERWeaponType::None)
+	{
+		UE_LOG(LogEternalReturn, Verbose, TEXT("[숙련도] %s 무기가 없어 무기 숙련도 +%.1f (%s) 는 버린다"), *GetOwner()->GetName(), Amount, Reason);
+		return;
+	}
+	AddProficiencyExp(FERProficiencyKey::Weapon(Type), Amount, Reason);
 }
 
 void UERGrowthComponent::OnDamageDealt(AActor* Target, float Damage)
@@ -250,27 +317,106 @@ void UERGrowthComponent::OnDamageDealt(AActor* Target, float Damage)
 	const UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
 	const bool bWildlife = TargetASC && TargetASC->HasMatchingGameplayTag(ERTags::Actor_Type_Wildlife);
 	const UERGrowthSettings& S = UERGrowthSettings::Get();
-	const float Per100 = bWildlife ? S.ProficiencyExpPerWildlifeDamage100 : S.ProficiencyExpPerPlayerDamage100;
+	const float Per100 = bWildlife ? S.WeaponExpPerWildlifeDamage100 : S.WeaponExpPerPlayerDamage100;
 	AddEquippedWeaponProficiencyExp(Damage * Per100 / 100.f, bWildlife ? TEXT("야생동물 피해") : TEXT("실험체 피해"));
+}
+
+void UERGrowthComponent::OnDamageTaken(float Damage)
+{
+	if (Damage <= 0.f)
+	{
+		return;
+	}
+	AddProficiencyExp(FERProficiencyKey::Of(EERProficiencyTrack::Defense), Damage * UERGrowthSettings::Get().DefenseExpPerDamageTaken100 / 100.f, TEXT("받은 피해"));
+}
+
+void UERGrowthComponent::OnPlayerKilled(int32 VictimLevel)
+{
+	const UERGrowthSettings& S = UERGrowthSettings::Get();
+	AddEquippedWeaponProficiencyExp(S.WeaponExpPerPlayerKillBase + S.WeaponExpPerPlayerKillPerLevel * VictimLevel,
+		*FString::Printf(TEXT("실험체 처치 Lv.%d"), VictimLevel));
+}
+
+void UERGrowthComponent::OnWildlifeKilled(int32 WildlifeLevel)
+{
+	const UERGrowthSettings& S = UERGrowthSettings::Get();
+	AddProficiencyExp(FERProficiencyKey::Of(EERProficiencyTrack::Hunt), S.HuntExpPerKillBase + S.HuntExpPerKillPerLevel * WildlifeLevel,
+		*FString::Printf(TEXT("야생동물 처치 Lv.%d"), WildlifeLevel));
 }
 
 void UERGrowthComponent::OnItemCrafted(FName ResultId, bool bFirstTime)
 {
 	const FERItemRow* Item = ERItem::Find(ResultId);
-	if (!Item || Item->Slot != EEREquipSlot::Weapon || Item->WeaponType == EERWeaponType::None)
+	if (!Item)
 	{
-		return;   // 방어구 · 재료 제작은 무기 숙련도 대상이 아니다 (제작 숙련도는 초기 버전 삭제 — 역기획서 §9)
+		return;
 	}
 	const UERGrowthSettings& S = UERGrowthSettings::Get();
 	const int32 GradeIndex = static_cast<int32>(Item->Grade);
-	if (!S.CraftProficiencyExpByGrade.IsValidIndex(GradeIndex))
+	const float Bonus = bFirstTime ? 1.f + S.FirstCraftBonus : 1.f;
+	const TCHAR* Reason = bFirstTime ? TEXT("제작 · 최초") : TEXT("제작");
+
+	// 제작 트랙 — 모든 제작.
+	if (S.CraftExpByGrade.IsValidIndex(GradeIndex))
 	{
-		UE_LOG(LogEternalReturn, Warning, TEXT("[숙련도] CraftProficiencyExpByGrade 에 등급 %d 항목이 없다 — 제작 경험치 0."), GradeIndex);
+		AddProficiencyExp(FERProficiencyKey::Of(EERProficiencyTrack::Craft), S.CraftExpByGrade[GradeIndex] * Bonus, Reason);
+	}
+	else
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[숙련도] CraftExpByGrade 에 등급 %d 항목이 없다 — 제작 경험치 0."), GradeIndex);
+	}
+
+	// 무기 트랙 — 무기를 만들면 그 무기군에도 (원작: 무기 제작 100~600).
+	if (Item->Slot == EEREquipSlot::Weapon && Item->WeaponType != EERWeaponType::None)
+	{
+		if (S.WeaponCraftExpByGrade.IsValidIndex(GradeIndex))
+		{
+			AddProficiencyExp(FERProficiencyKey::Weapon(Item->WeaponType), S.WeaponCraftExpByGrade[GradeIndex] * Bonus, Reason);
+		}
+		else
+		{
+			UE_LOG(LogEternalReturn, Warning, TEXT("[숙련도] WeaponCraftExpByGrade 에 등급 %d 항목이 없다 — 무기 제작 경험치 0."), GradeIndex);
+		}
+	}
+}
+
+void UERGrowthComponent::OnBoxOpened(FName LootRow)
+{
+	AddProficiencyExp(FERProficiencyKey::Of(EERProficiencyTrack::Search), UERGrowthSettings::Get().SearchExpPerBox, *FString::Printf(TEXT("상자 %s"), *LootRow.ToString()));
+}
+
+void UERGrowthComponent::SampleMovement()
+{
+	const APlayerState* PS = Cast<APlayerState>(GetOwner());
+	const APawn* Pawn = PS ? PS->GetPawn() : nullptr;
+	if (!Pawn)
+	{
+		bHasLastSample = false;   // 사망 ~ 부활 사이 — 다음 표본부터 다시
 		return;
 	}
-	const float Amount = S.CraftProficiencyExpByGrade[GradeIndex] * (bFirstTime ? 1.f + S.FirstCraftBonus : 1.f);
-	AddWeaponProficiencyExp(Item->WeaponType, Amount, bFirstTime ? TEXT("제작 · 최초") : TEXT("제작"));
+	const FVector Now = Pawn->GetActorLocation();
+	if (bHasLastSample)
+	{
+		const UERGrowthSettings& S = UERGrowthSettings::Get();
+		const float Meters = FVector::Dist2D(LastSampledLocation, Now) / 100.f;
+		if (Meters > 0.05f && Meters <= S.MoveSampleMaxMeters)   // 순간이동 · 부활 · 넉백 폭주는 무시
+		{
+			MoveAccumMeters += Meters;
+			if (MoveAccumMeters >= 100.f)   // 100m 단위로 적립 — 로그가 초마다 찍히지 않게
+			{
+				const float Chunks = FMath::FloorToFloat(MoveAccumMeters / 100.f);
+				MoveAccumMeters -= Chunks * 100.f;
+				AddProficiencyExp(FERProficiencyKey::Of(EERProficiencyTrack::Move), Chunks * S.MoveExpPer100m, TEXT("이동 100m"));
+			}
+		}
+	}
+	LastSampledLocation = Now;
+	bHasLastSample = true;
 }
+
+// ─────────────────────────────────────────────────────────────
+// 무기 숙련도 효과 — 공속 + 증폭 (F10-04 · E18 A9)
+// ─────────────────────────────────────────────────────────────
 
 void UERGrowthComponent::RefreshProficiencyBonus()
 {
@@ -307,20 +453,22 @@ void UERGrowthComponent::RefreshProficiencyBonus()
 	}
 
 	const int32 ProfLevel = GetWeaponProficiencyLevel(WeaponType);
-	const float Magnitude = Amp->AmpPerLevel * ProfLevel / 100.f;   // % → 비율 (ERDamageExecution 이 1 + Amp 로 쓴다). Lv.1 부터 1단 `[자체]`
+	const float AmpMag = Amp->AmpPerLevel * ProfLevel / 100.f;            // % → 비율 (ERDamageExecution 이 1 + Amp 로 쓴다). Lv.1 부터 1단 `[자체]`
+	const float SpeedMag = Amp->AttackSpeedPerLevel * ProfLevel / 100.f;  // 공속 어트리뷰트에 Additive (기본 1.0 → +0.02 × Lv)
 
 	FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(UERProficiencyEffect::StaticClass(), 1.f, ASC->MakeEffectContext());
 	if (!Spec.IsValid())
 	{
 		return;
 	}
-	Spec.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_SkillAmp,    Amp->AmpType == EERAmpType::Skill       ? Magnitude : 0.f);
-	Spec.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_BasicAtkAmp, Amp->AmpType == EERAmpType::BasicAttack ? Magnitude : 0.f);
+	Spec.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_SkillAmp,    Amp->AmpType == EERAmpType::Skill       ? AmpMag : 0.f);
+	Spec.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_BasicAtkAmp, Amp->AmpType == EERAmpType::BasicAttack ? AmpMag : 0.f);
+	Spec.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_AttackSpeed, SpeedMag);
 	ProficiencyEffectHandle = ASC->ApplyGameplayEffectSpecToSelf(*Spec.Data);
 
-	UE_LOG(LogEternalReturn, Log, TEXT("[숙련도] %s %s Lv.%d -> %s +%.1f%% 적용"),
+	UE_LOG(LogEternalReturn, Log, TEXT("[숙련도] %s %s Lv.%d -> %s +%.1f%% · 공격 속도 +%.1f%% 적용"),
 		*GetOwner()->GetName(), *UEnum::GetDisplayValueAsText(WeaponType).ToString(), ProfLevel,
-		Amp->AmpType == EERAmpType::Skill ? TEXT("스킬 증폭") : TEXT("기본 공격 증폭"), Magnitude * 100.f);
+		Amp->AmpType == EERAmpType::Skill ? TEXT("스킬 증폭") : TEXT("기본 공격 증폭"), AmpMag * 100.f, SpeedMag * 100.f);
 }
 
 void UERGrowthComponent::OnRep_Level()
