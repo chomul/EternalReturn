@@ -12,6 +12,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GAS/ERGameplayTags.h"
+#include "GAS/ERGameplayAbility.h"
 #include "NavigationSystem.h"
 
 AERPlayerController::AERPlayerController()
@@ -109,6 +110,27 @@ void AERPlayerController::SetupInputComponent()
 	}
 }
 
+namespace
+{
+	/**
+	 * F11-05 D: 모드(저격) 중 같은 슬롯 재입력은 **사격** — 원작 확인 (사용자 2026-09-21): 모드에서 D 또는 좌클릭 = 발사, 우클릭(이동) = 해제.
+	 * 모드 스킬 인스턴스가 활성이면 입력을 Attack 슬롯으로 돌린다 (모드가 평타 슬롯을 저지사격으로 바꿔 뒀다). 클라 · 서버 양쪽에서 같은 규칙.
+	 */
+	FGameplayTag ResolveModeSlot(const UAbilitySystemComponent& ASC, FGameplayTag SlotTag)
+	{
+		for (const FGameplayAbilitySpec& Spec : ASC.GetActivatableAbilities())
+		{
+			const UERGameplayAbility* ER = Cast<UERGameplayAbility>(Spec.GetPrimaryInstance());
+			if (ER && Spec.DynamicAbilityTags.HasTagExact(SlotTag) && ER->IsModeActive())
+			{
+				UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] %s -> 모드 중 재입력 = %s"), *SlotTag.ToString(), *ERTags::Ability_Slot_Attack.GetTag().ToString());
+				return ERTags::Ability_Slot_Attack;
+			}
+		}
+		return SlotTag;
+	}
+}
+
 void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
 {
 	UAbilitySystemComponent* ASC =
@@ -137,6 +159,8 @@ void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
 	// ⭐ F07-05: TryActivateAbility 대신 **조준을 실어** 서버로 보낸다 (Docs/4_Argument/18).
 	//   TryActivateAbility 가 하던 클라 선판정(CanActivateAbility)은 여기서 **인스턴스**로 직접 한다 —
 	//   엔진의 클라 선판정은 CDO 에서 돌아 쿨다운 태그를 못 본다 (E12). 인스턴스로 하면 쿨다운 중 헛 RPC 도 안 보낸다.
+	SlotTag = ResolveModeSlot(*ASC, SlotTag);   // F11-05 D 모드 중 재입력 = 사격
+
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
 		if (!Spec.Ability || !Spec.DynamicAbilityTags.HasTagExact(SlotTag))
@@ -146,9 +170,21 @@ void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
 
 		const UGameplayAbility* Instance = Spec.GetPrimaryInstance();
 		const UGameplayAbility* Checker = Instance ? Instance : Spec.Ability.Get();
-		if (!Checker->CanActivateAbility(Spec.Handle, ASC->AbilityActorInfo.Get()))
+		FGameplayTagContainer Relevant;   // 엔진이 실패 원인 태그(쿨다운 · 차단)를 채운다
+		if (!Checker->CanActivateAbility(Spec.Handle, ASC->AbilityActorInfo.Get(), nullptr, nullptr, &Relevant))
 		{
-			UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] %s -> 클라 선판정 실패 (쿨다운 · CC · 레벨 0 · 코스트)"), *SlotTag.ToString());
+			// Log 레벨 — 안 나가는 이유를 Verbose 없이도 보게 (2026-09-21 저격 모드에서 사격이 안 나간 원인을 못 찾았다).
+			//   엔진은 OptionalRelevantTags 를 거의 안 채운다 (5.4 CheckCooldown 은 전역 실패 태그가 없으면 빈 채로) — 세 검사를 따로 돌려 어느 것인지 찍는다.
+			const FGameplayAbilityActorInfo* Info = ASC->AbilityActorInfo.Get();
+			const bool bCooldown = Checker->CheckCooldown(Spec.Handle, Info);
+			const bool bCost     = Checker->CheckCost(Spec.Handle, Info);
+			const bool bTags     = Checker->DoesAbilitySatisfyTagRequirements(*ASC);
+			const FGameplayTagContainer* CD = Checker->GetCooldownTags();
+			FGameplayTagContainer Owned; ASC->GetOwnedGameplayTags(Owned);
+			UE_LOG(LogEternalReturn, Log, TEXT("[입력] %s -> 클라 선판정 실패 — %s Lv.%d%s%s · 쿨다운 %s (%s) · 코스트 %s · 태그 %s · 보유 태그 [%s]"), *SlotTag.ToString(),
+				*GetNameSafe(Spec.SourceObject.Get()), Spec.Level, Spec.IsActive() ? TEXT(" 활성 중") : TEXT(""), Instance ? TEXT("") : TEXT(" CDO"),
+				bCooldown ? TEXT("OK") : TEXT("✘"), CD ? *CD->ToStringSimple() : TEXT("-"), bCost ? TEXT("OK") : TEXT("✘"), bTags ? TEXT("OK") : TEXT("✘"),
+				*Owned.ToStringSimple());
 			return;
 		}
 
@@ -189,6 +225,8 @@ void AERPlayerController::ServerActivateSkill_Implementation(FGameplayTag SlotTa
 		return;
 	}
 
+	SlotTag = ResolveModeSlot(*ASC, SlotTag);   // 클라가 모드를 아직 모를 수도 있다 — 서버가 다시 판단
+
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
 		if (!Spec.Ability || !Spec.DynamicAbilityTags.HasTagExact(SlotTag))
@@ -207,8 +245,15 @@ void AERPlayerController::ServerActivateSkill_Implementation(FGameplayTag SlotTa
 		const bool bActivated = ASC->TriggerAbilityFromGameplayEvent(
 			Spec.Handle, ASC->AbilityActorInfo.Get(), ERTags::Event_Skill_Aim, &Payload, *ASC);
 
-		UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] 서버 %s -> %s"),
-			*SlotTag.ToString(), bActivated ? TEXT("발동") : TEXT("거부 (쿨다운 · CC · 레벨 0 · 코스트)"));
+		if (bActivated)
+		{
+			UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] 서버 %s -> 발동"), *SlotTag.ToString());
+		}
+		else
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[입력] 서버 %s -> 거부 — %s Lv.%d%s (쿨다운 · CC · 레벨 0 · 코스트 · 이미 활성)"),
+				*SlotTag.ToString(), *GetNameSafe(Spec.SourceObject.Get()), Spec.Level, Spec.IsActive() ? TEXT(" 활성 중") : TEXT(""));
+		}
 		return;
 	}
 }
@@ -231,7 +276,27 @@ void AERPlayerController::PlayerTick(float DeltaTime)
 		UpdateEdgeScroll(DeltaTime);
 	}
 
+	// 스킬 줌 보간 — 목표와 다를 때만 (평소엔 비용 0). 거리는 캐릭터 리그에, 오프셋은 아래 ApplyCameraOffset 이 합친다.
+	if (CurrentZoomScale != TargetZoomScale || CurrentZoomOffset != TargetZoomOffset)
+	{
+		CurrentZoomScale  = FMath::FInterpTo(CurrentZoomScale, TargetZoomScale, DeltaTime, CameraZoomInterpSpeed);
+		CurrentZoomOffset = FMath::VInterpTo(CurrentZoomOffset, TargetZoomOffset, DeltaTime, CameraZoomInterpSpeed);
+		if (FMath::IsNearlyEqual(CurrentZoomScale, TargetZoomScale, 0.001f)) { CurrentZoomScale = TargetZoomScale; }
+		if (CurrentZoomOffset.Equals(TargetZoomOffset, 0.5f)) { CurrentZoomOffset = TargetZoomOffset; }
+		if (AERCharacterBase* ERCharacter = Cast<AERCharacterBase>(GetPawn()))
+		{
+			ERCharacter->SetCameraZoomScale(CurrentZoomScale);
+		}
+	}
+
 	ApplyCameraOffset();
+}
+
+void AERPlayerController::SetCameraZoom(float Scale, const FVector& WorldOffset)
+{
+	TargetZoomScale = FMath::Max(Scale, 0.1f);
+	TargetZoomOffset = FVector(WorldOffset.X, WorldOffset.Y, 0.f);
+	UE_LOG(LogEternalReturn, Verbose, TEXT("[카메라] 줌 목표 ×%.2f · 오프셋 %s"), TargetZoomScale, *TargetZoomOffset.ToCompactString());
 }
 
 void AERPlayerController::OnToggleCameraLock()
@@ -308,7 +373,7 @@ void AERPlayerController::ApplyCameraOffset()
 {
 	if (AERCharacterBase* ERCharacter = Cast<AERCharacterBase>(GetPawn()))
 	{
-		ERCharacter->SetCameraTargetOffset(FreeCameraOffset);
+		ERCharacter->SetCameraTargetOffset(FreeCameraOffset + CurrentZoomOffset);   // 잠금 해제 스크롤 + 스킬 줌 오프셋
 	}
 	// ⚠ 폰이 없는 동안(사망 ~ 부활)에는 반영할 곳이 없다.
 	//   관전 카메라는 F14 에서 별도로 다룬다 (Argument 8 파트 2).

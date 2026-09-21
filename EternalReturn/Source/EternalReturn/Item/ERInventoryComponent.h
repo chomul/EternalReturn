@@ -99,6 +99,12 @@ public:
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerDiscard(int32 BagIndex);
 
+	/**
+	 * [서버] 지금 무기를 바꿀 수 있나 (F11-04 · 역기획서 §8.3). 거부: **전투 중**(State.InCombat — 원작 확인) · D 시전 중(Slot.D 스펙 활성).
+	 * 장착 · 해제 · 교체 · 제작 소비 전부 이걸 먼저 본다. 무기 슬롯이 아니면 항상 true.
+	 */
+	bool CanChangeWeapon(EEREquipSlot Slot, FString* OutReason = nullptr) const;
+
 	/** [서버] 가방 칸 → 장착. 성공하면 true. */
 	bool EquipFromBag(int32 BagIndex);
 

@@ -60,6 +60,7 @@ void UERDamageExecution::Execute_Implementation(
 	const float MaxHPRatio  = Spec.GetSetByCallerMagnitude(ERTags::Data_Damage_MaxHPRatio,  false, 0.f);
 	const float CurHPRatio  = Spec.GetSetByCallerMagnitude(ERTags::Data_Damage_CurHPRatio,  false, 0.f);
 	const float LostHPRatio = Spec.GetSetByCallerMagnitude(ERTags::Data_Damage_LostHPRatio, false, 0.f);
+	const float TargetLostHPScaleMax = Spec.GetSetByCallerMagnitude(ERTags::Data_Damage_TargetLostHPScaleMax, false, 0.f);   // F11-05 D 데드아이
 
 	// ── 캡처값 ──────────────────────────────────────────────
 	float AttackPower = 0.f;
@@ -211,9 +212,9 @@ void UERDamageExecution::Execute_Implementation(
 		//   고정 피해는 Ctx.BaseDamage 만 쓰고 공격력 계수를 타지 않는다.
 		//   문서대로 구현했지만 이게 의도인지는 **(미확인)** 이다 -
 		//   "공격력에 비례하는 고정 피해 스킬" 을 만들 수 없는 형태다.
-		//   ⚠ 3-b(체력 비례)도 마찬가지로 안 탄다. 2 단계가 3·3-b 보다 앞이다.
-		//   실험체를 붙일 때 다시 본다.
-		Damage = Base * ModeMul;
+		// ⭐ 3-b(체력 비례)는 탄다 — 2026-09-20 단검 D "현재 체력 8% 고정 피해" 가 0 으로 나왔다 (E20).
+		//   원작의 고정 피해 대부분이 체력 비례라 여기 없으면 그 스킬을 만들 수 없다. 보스 감쇠는 Proportional 에 이미 곱해져 있다.
+		Damage = (Base + Proportional) * ModeMul;
 	}
 	else
 	{
@@ -267,6 +268,13 @@ void UERDamageExecution::Execute_Implementation(
 		Damage *= bBasicAttack
 			? (1.f + BasicAtkAmp - BasicAtkDamageDown)
 			: (1.f - SkillDamageDown);
+
+		// 8-b. 대상이 잃은 체력 비례 증가 (저격총 데드아이 "최대 200%"). 비율 0~1 × 최대 계수. 자체 배치 — 원문에 단계 없음.
+		if (TargetLostHPScaleMax > 0.f && TargetMaxHP > 0.f)
+		{
+			const float TargetLostRatio = FMath::Clamp((TargetMaxHP - TargetHP) / TargetMaxHP, 0.f, 1.f);
+			Damage *= 1.f + TargetLostRatio * TargetLostHPScaleMax;
+		}
 
 		// 9. 최종 피해 추가 - **보류**. 원본 표기가 `x 최종 피해 추가(%)` 라
 		//    (1+x) 인지 x 배인지 해석이 안 됐다 (§8). 추측해서 넣으면 피해가 배 단위로 틀린다.

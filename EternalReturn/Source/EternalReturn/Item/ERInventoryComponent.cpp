@@ -3,6 +3,7 @@
 #include "Item/ERInventoryComponent.h"
 #include "Item/ERCraftLibrary.h"
 #include "TimerManager.h"
+#include "GAS/ERGameplayTags.h"
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -367,6 +368,33 @@ void UERInventoryComponent::ServerUnequip_Implementation(EEREquipSlot Slot)
 // 장착 · 해제 (서버)
 // ─────────────────────────────────────────────────────────────
 
+bool UERInventoryComponent::CanChangeWeapon(EEREquipSlot Slot, FString* OutReason) const
+{
+	if (Slot != EEREquipSlot::Weapon)
+	{
+		return true;
+	}
+	const UAbilitySystemComponent* ASC = GetASC();
+	if (!ASC)
+	{
+		return true;
+	}
+	if (ASC->HasMatchingGameplayTag(ERTags::State_InCombat))
+	{
+		if (OutReason) { *OutReason = TEXT("전투 중에는 무기를 바꿀 수 없다"); }
+		return false;
+	}
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.IsActive() && Spec.DynamicAbilityTags.HasTagExact(ERTags::Ability_Slot_D))
+		{
+			if (OutReason) { *OutReason = TEXT("D 시전 중에는 무기를 바꿀 수 없다"); }
+			return false;
+		}
+	}
+	return true;
+}
+
 bool UERInventoryComponent::EquipDirect(FName ItemId)
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority())
@@ -379,12 +407,25 @@ bool UERInventoryComponent::EquipDirect(FName ItemId)
 	{
 		return false;
 	}
-	// 있던 장비는 버려진다 — 디버그 · 초기 장비 전용
+	// ⚠ 거부될 장비면 **지우기 전에** 끝낸다 — 먼저 지우고 ApplyEquip 이 실패하면 있던 장비가 증발한다 (E17).
+	{
+		const APlayerState* PS = Cast<APlayerState>(GetOwner());
+		const AERCharacterBase* Character = PS ? Cast<AERCharacterBase>(PS->GetPawn()) : nullptr;
+		const UERCharacterData* CharacterData = Character ? Character->GetCharacterData() : nullptr;
+		FString Reason;
+		if (!CharacterData || !ERItem::CanEquip(*CharacterData, *Item, &Reason) || !CanChangeWeapon(Item->Slot, &Reason))
+		{
+			UE_LOG(LogEternalReturn, Warning, TEXT("[장비] %s 장착 거부 — %s (%s)"), *ItemId.ToString(), *Reason, *GetNameSafe(GetOwner()));
+			return false;
+		}
+	}
+	// 있던 장비는 버려진다 — 디버그 · 초기 장비 전용. 지웠으면 알린다 (무기 스킬 · 숙련도 증폭이 듣는다).
 	const int32 Index = Equipped.IndexOfByPredicate([Item](const FEREquippedSlot& E) { return E.Slot == Item->Slot; });
 	if (Index != INDEX_NONE)
 	{
 		if (UAbilitySystemComponent* ASC = GetASC()) { ASC->RemoveActiveGameplayEffect(Equipped[Index].EffectHandle); }
 		Equipped.RemoveAt(Index);
+		OnEquippedChanged.Broadcast(Item->Slot);
 	}
 	return ApplyEquip(ItemId, *Item);
 }
@@ -406,6 +447,12 @@ bool UERInventoryComponent::EquipFromBag(int32 BagIndex)
 	if (!Item || !Item->IsEquipment())
 	{
 		UE_LOG(LogEternalReturn, Warning, TEXT("[장비] %s 는 장비가 아니다."), *ItemId.ToString());
+		return false;
+	}
+	FString ChangeReason;
+	if (!CanChangeWeapon(Item->Slot, &ChangeReason))   // F11-04: 전투 중 · D 시전 중 거부
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[장비] %s 장착 거부 — %s (%s)"), *ItemId.ToString(), *ChangeReason, *GetNameSafe(GetOwner()));
 		return false;
 	}
 
@@ -595,6 +642,17 @@ bool UERInventoryComponent::Craft(FName ResultId)
 		return false;
 	}
 
+	// ②' 장착 무기를 재료로 쓰면 무기 교체다 — 전투 중 · D 시전 중 거부 (F11-04)
+	for (const int32 E : EquipTake)
+	{
+		FString ChangeReason;
+		if (!CanChangeWeapon(Equipped[E].Slot, &ChangeReason))
+		{
+			UE_LOG(LogEternalReturn, Warning, TEXT("[제작] %s 거부 — %s"), *GetNameSafe(GetOwner()), *ChangeReason);
+			return false;
+		}
+	}
+
 	// ③ 결과 자리 — 장착 재료를 썼고 결과가 그 슬롯의 장비면 바로 장착 `[자체]`, 아니면 가방.
 	const APlayerState* PS = Cast<APlayerState>(GetOwner());
 	const AERCharacterBase* Character = PS ? Cast<AERCharacterBase>(PS->GetPawn()) : nullptr;
@@ -678,6 +736,14 @@ bool UERInventoryComponent::Unequip(EEREquipSlot Slot)
 	const int32 Index = Equipped.IndexOfByPredicate([Slot](const FEREquippedSlot& E) { return E.Slot == Slot; });
 	if (Index == INDEX_NONE)
 	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[장비] %s 의 %s 칸이 비어 있다 — 벗을 게 없다."), *GetNameSafe(GetOwner()), *UEnum::GetValueAsString(Slot));
+		return false;
+	}
+
+	FString ChangeReason;
+	if (!CanChangeWeapon(Slot, &ChangeReason))   // F11-04
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[장비] %s 해제 거부 — %s (%s)"), *UEnum::GetValueAsString(Slot), *ChangeReason, *GetNameSafe(GetOwner()));
 		return false;
 	}
 

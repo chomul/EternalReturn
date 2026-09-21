@@ -90,6 +90,11 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Casting);           // 선딜(캐스팅) 중 — CC(State.Block.Skill) 로 끊긴다
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Recovering);        // 후딜 중 — 스킬 발동 차단, 이동 입력이 끝낸다
 
+	// ── 무기 (F11-02) ──────────────────────────────────────────
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Unarmed);           // 무기 없음 — 평타 · 스킬 전부 차단 (원작 확인: 무기 없으면 아무 스킬도 못 쓴다). UERUnarmedEffect 가 준다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_InCombat);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ConsumeOnAttack);   // 이 태그가 있는 자기 버프 GE 는 기본 공격 적중마다 Charges 가 1 줄고 0 이면 사라진다 (F11-05 B)          // 전투 중 — 피해를 주거나 받은 뒤 CombatStateSeconds. 무기 교체 불가 (원작 확인). 비전투 재생 · 귀환도 이걸 본다
+
 	// 다음 기본 공격 강화 대기 (F07-07). UERNextAttackBuffEffect 가 부여, 평타가 적중 시 소비.
 	//   카티야 P · 재키 W · 시셀라 Q · 권총 D 가 같은 GE 를 쓴다 (역기획서 §8 "4곳이 같은 구조").
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_NextAttackBuff);
@@ -125,6 +130,17 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_R);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_D);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Attack);   // 평타 간격 = 1 / AttackSpeed
+
+	// ── 무기별 D 쿨다운 (F11-04 · Docs/4_Argument/25 방안 B) ─────
+	// D 는 슬롯 태그 대신 이 태그로 쿨다운을 건다 (UERSkillData.CooldownTagOverride) — 무기를 바꿔도 각자 보존. 초기 8계열.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Hammer);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Bat);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Axe);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Dagger);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Shuriken);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_SniperRifle);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Pistol);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Weapon_Throw);
 
 	// ── 리캐스트 윈도우 (F07-07) ───────────────────────────────
 	// UERRecastWindowEffect 가 동적 부여. 있으면 그 슬롯은 쿨다운 중에도 발동된다 (재키 Q "적중 시 3초 내 재사용").
@@ -184,6 +200,8 @@ namespace ERTags
 	//
 	// 근거: Docs/4_Argument/12_둔화_중첩방식.md (방안 B + 구현 ③)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_SlowPercent);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_OnHitMagnitude); // 적중 효과 · 자기 버프 GE 의 범용 크기 (F11-05). 의미는 GE 가 정한다 — 망치 D: 방어력 배율 0.9
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Charges);        // 기본 공격 N회로 소비되는 자기 버프의 남은 횟수 (F11-05 B 권총 D)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_SlowMultiplier);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_MaxHP);
@@ -244,6 +262,7 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_MaxHPRatio);      // 대상 **최대** 체력 비례
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_CurHPRatio);      // 대상 **현재** 체력 비례
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_LostHPRatio);     // **자신이 잃은** 체력 비례
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_TargetLostHPScaleMax);   // **대상이 잃은** 체력 비율 × 이 값 만큼 최종 피해 증가 (저격총 데드아이 "잃은 체력 비례 최대 200%" = 1.0)
 
 	// ── 판정 형상 · 액터 유형 ──────────────────────────────
 	//

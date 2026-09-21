@@ -6,12 +6,15 @@
 #include "GameFramework/PlayerState.h"
 #include "AbilitySystemInterface.h"
 #include "GameplayTagContainer.h"
+#include "GameplayEffectTypes.h"
+#include "GAS/ERSkillData.h"
 #include "ERPlayerState.generated.h"
 
 class UAbilitySystemComponent;
 class UERAttributeSet;
 class UERInventoryComponent;
 class UERGrowthComponent;
+struct FGameplayAbilitySpecHandle;
 
 /**
  * 플레이어의 ASC 소유자.
@@ -121,4 +124,53 @@ public:
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Growth")
 	TObjectPtr<UERGrowthComponent> Growth;
+
+	// ── 무기 스킬 (F11-02) ─────────────────────────────────────
+	// ⭐ 무기가 D · 평타를 소유한다. 실험체 스킬(폰의 GrantedSkills)과 **별도 핸들** — 부활로 폰이 바뀌어도 ASC 는 여기라 그대로.
+	//   클라에는 아무것도 따로 안 보낸다: Equipped(F08) + ASC 스펙 복제 + AttackRange 어트리뷰트 (역기획서 §8.1).
+
+	/**
+	 * [서버] 장착 무기에 맞춰 D · 평타를 갈아끼운다: 회수 → (계열 행) 부여 → 사거리 Base 교체 (Argument 24 B).
+	 * 무기가 없으면 아무것도 부여하지 않고 State.Unarmed 를 건다 — 평타 · 스킬 전부 차단 (원작 확인 2026-09-19). 사거리는 실험체 맨몸 값으로.
+	 * 장착 변경(Inventory->OnEquippedChanged Weapon) 과 BeginPlay 에서 부른다.
+	 */
+	void RefreshWeaponSkills();
+
+	/**
+	 * [서버] 전투 상태 진입 · 갱신 (F11-04). 피해를 주거나 받을 때마다 State.InCombat 을 CombatStateSeconds 로 다시 건다 (UERSkillPhaseEffect 재사용).
+	 * 원작 확인 (사용자 2026-09-19): 전투 중에는 무기를 못 바꾼다 (알렉스 예외 — 실험체 플래그 자리, 지금 없음).
+	 */
+	void EnterCombat();
+
+	/** [서버] AttackRange 의 BaseValue 를 교체한다 (UERWeaponRangeEffect · Instant Override). 폰이 없으면 Warning. */
+	void ApplyWeaponRange(float RangeMeters);
+
+	/**
+	 * [서버] 장착 계열의 숙련도 레벨로 D 스펙 레벨을 맞춘다 (F11-03): 숙련도 < UnlockLevel → 0 · 아니면 1 + (UpgradeLevels 중 도달한 수).
+	 * 5/10/15 는 계열 행 값. 부여 직후(RefreshWeaponSkills) 와 Growth->OnWeaponProficiencyLevelUp 이벤트에서 — 매 프레임 비교 없음.
+	 */
+	void SyncWeaponSkillLevel();
+
+public:
+	/**
+	 * [서버] 기본 공격 슬롯 교체 (F11-05 D 저격 모드 · Argument 27 ②A). UERGameplayAbility::EnterMode/CleanupMode 가 부른다. Data 가 있으면 지금 Attack 슬롯 스펙을 빼고 Data 를 그 레벨로 부여,
+	 * nullptr 이면 계열 행의 AttackData 로 복구. 핸들은 WeaponSkills 에 같이 두어 무기 교체(TakeSkills)가 함께 회수한다.
+	 */
+	void SetModeAttack(UERSkillData* Data, int32 Level);
+	FGameplayAbilitySpecHandle GetModeAttackHandle() const { return ModeAttackHandle; }
+
+	/** [서버] 모드 평타 조준 제한 — 진입 시 방향 ± 반각. HalfAngleDeg 0 = 없음. SetModeAttack(nullptr) 이 같이 지운다. UERGameplayAbility::ResolveAim 이 읽는다. */
+	void SetModeAimLimit(const FVector& CenterDir, float HalfAngleDeg) { ModeAimCenter = CenterDir.GetSafeNormal2D(); ModeAimHalfAngleDeg = HalfAngleDeg; }
+	const FVector& GetModeAimCenter() const { return ModeAimCenter; }
+	float GetModeAimHalfAngleDeg() const { return ModeAimHalfAngleDeg; }
+
+protected:
+	FERGrantedSkillHandles WeaponSkills;
+	FGameplayAbilitySpecHandle ModeAttackHandle;
+	FVector ModeAimCenter = FVector::ForwardVector;
+	float ModeAimHalfAngleDeg = 0.f;
+	FActiveGameplayEffectHandle UnarmedHandle;
+	FActiveGameplayEffectHandle CombatHandle;
+	/** 무기 사거리로 Base 를 바꿔 둔 상태인가 — 해제 때 맨몸 값으로 되돌릴지 판단 (부여 스킬 수와 무관, E17 후속). */
+	bool bWeaponRangeApplied = false;
 };

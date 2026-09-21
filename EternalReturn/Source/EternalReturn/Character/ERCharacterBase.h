@@ -117,6 +117,12 @@ public:
 	 */
 	void SetCameraTargetOffset(const FVector& Offset);
 
+	/**
+	 * 카메라 거리 배율 (F11-05 D 저격 모드 — "사거리가 다 보이게 줌아웃", 사용자 확인 2026-09-21). 1 = 기본(2050). 로컬 전용.
+	 * ⚠ 즉시 바뀐다 — 부드러운 줌은 연출(F17)에서.
+	 */
+	void SetCameraZoomScale(float Scale);
+
 	/** 카메라가 보는 방향(월드 Yaw). 가장자리 스크롤이 이걸로 화면->월드 축을 계산한다. */
 	float GetCameraYaw() const { return CameraYaw; }
 

@@ -166,6 +166,23 @@ private:
 	/** 현재 오프셋을 캐릭터의 SpringArm 에 반영한다. */
 	void ApplyCameraOffset();
 
+public:
+	/**
+	 * 스킬 카메라 줌 (F11-05 D 저격 모드 — 사용자 확인 2026-09-21): 거리 배율 + 조준 방향으로 화면 중심 이동 (월드 cm).
+	 * 목표만 받고 PlayerTick 이 부드럽게 따라간다 (CameraZoomInterpSpeed). (1, Zero) 로 되돌린다. 로컬 전용.
+	 */
+	void SetCameraZoom(float Scale, const FVector& WorldOffset);
+
+private:
+	float TargetZoomScale = 1.f;
+	float CurrentZoomScale = 1.f;
+	FVector TargetZoomOffset = FVector::ZeroVector;
+	FVector CurrentZoomOffset = FVector::ZeroVector;
+
+	/** 줌 보간 속도 (FInterpTo). 클수록 빨리 도달. */
+	UPROPERTY(EditDefaultsOnly, Category = "카메라", meta = (ClampMin = "0.1"))
+	float CameraZoomInterpSpeed = 5.f;
+
 	/** 가장자리로 판정할 화면 가장자리 두께 (픽셀). */
 	UPROPERTY(EditDefaultsOnly, Category = "카메라", meta = (ClampMin = "1.0"))
 	float EdgeScrollMargin = 24.f;

@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "GAS/ERSkillData.h"
+#include "GAS/Fragment/ERSkillFragment.h"
 
 #include "AbilitySystemComponent.h"
 #include "EternalReturn.h"
@@ -43,7 +44,7 @@ namespace ERSkill
 {
 
 void GrantSkills(UAbilitySystemComponent* ASC, const TArray<TObjectPtr<UERSkillData>>& Skills,
-	FERGrantedSkillHandles& OutHandles)
+	FERGrantedSkillHandles& OutHandles, int32 LevelOverride)
 {
 	if (!ASC)
 	{
@@ -104,8 +105,23 @@ void GrantSkills(UAbilitySystemComponent* ASC, const TArray<TObjectPtr<UERSkillD
 				*GetNameSafe(Skill), Skill->Shape.RangeMin, Skill->Shape.RangeMax);
 		}
 
+#if WITH_EDITOR
+		// F11.5 — 조각별 데이터 검사 (빈 참조 · 순서). 에디터 PIE 에서만.
+		for (int32 FI = 0; FI < Skill->Fragments.Num(); ++FI)
+		{
+			if (!Skill->Fragments[FI])
+			{
+				UE_LOG(LogEternalReturn, Warning, TEXT("[스킬] %s Fragments[%d] 가 비어 있다."), *GetNameSafe(Skill), FI);
+				continue;
+			}
+			Skill->Fragments[FI]->Validate(*Skill, FI);
+		}
+#endif
+
 		// ⭐ 레벨은 애셋이 정한다. 0 = 미습득(CanActivateAbility 가 막는다). 포인트로 올린다.
-		FGameplayAbilitySpec Spec(Skill->AbilityClass, FMath::Min(Skill->InitialLevel, Skill->MaxLevel));
+		//   ⚠ 레벨은 **스펙을 만들 때** 정한다 — GiveAbility 뒤에 FindAbilitySpecFromHandle 로 고치면 어빌리티 활성 중(스코프 락)에는
+		//     스펙이 AbilityPendingAdds 에 있어 못 찾고 조용히 0 으로 남는다 (E21 · AbilitySystemComponent_Abilities.cpp:287).
+		FGameplayAbilitySpec Spec(Skill->AbilityClass, FMath::Min(LevelOverride >= 0 ? LevelOverride : Skill->InitialLevel, Skill->MaxLevel));
 
 		// ⭐ 어빌리티가 자기 데이터를 꺼내는 자리. GAS 에 이미 있다 (FGameplayAbilitySpec::SourceObject).
 		//   const 를 벗기는 이유: SourceObject 가 TWeakObjectPtr<UObject> 라 non-const 를 받는다.
@@ -230,6 +246,43 @@ bool LevelUpSkill(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int
 
 	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s %s -> Lv.%d/%d"),
 		*GetNameSafe(ASC->GetOwnerActor()), *GetNameSafe(Skill), Found->Level, Skill->MaxLevel);
+	return true;
+}
+
+bool SetSkillLevel(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int32 NewLevel, const TCHAR* Reason)
+{
+	if (!ASC || !ASC->IsOwnerActorAuthoritative())
+	{
+		return false;
+	}
+	FGameplayAbilitySpec* Found = nullptr;
+	for (FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.Ability && Spec.DynamicAbilityTags.HasTagExact(SlotTag))
+		{
+			Found = &Spec;
+			break;
+		}
+	}
+	if (!Found)
+	{
+		return false;   // 슬롯이 없다 (무기 행에 D 가 없다) — 정상. 로그 없음
+	}
+	const UERSkillData* Skill = Cast<UERSkillData>(Found->SourceObject.Get());
+	if (!Skill || Skill->bUsesSkillPoints)
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[스킬] %s 는 포인트 스킬이다 — SetSkillLevel 대상이 아니다."), *GetNameSafe(Skill));
+		return false;
+	}
+	const int32 Clamped = FMath::Clamp(NewLevel, 0, Skill->MaxLevel);
+	if (Found->Level == Clamped)
+	{
+		return false;
+	}
+	Found->Level = Clamped;
+	ASC->MarkAbilitySpecDirty(*Found);
+	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s %s -> Lv.%d/%d (%s)"),
+		*GetNameSafe(ASC->GetOwnerActor()), *GetNameSafe(Skill), Found->Level, Skill->MaxLevel, Reason);
 	return true;
 }
 

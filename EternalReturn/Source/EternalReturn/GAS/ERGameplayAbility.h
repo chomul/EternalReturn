@@ -5,7 +5,11 @@
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbility.h"
 #include "GameplayEffectTypes.h"
+#include "GAS/Fragment/ERSkillContext.h"
 #include "ERGameplayAbility.generated.h"
+
+class UERSkillFragment;
+class UERSkillFragmentState;
 
 class UERSkillData;
 struct FGameplayEventData;
@@ -44,8 +48,9 @@ struct FTargetResult;
  *                       취소: State.Block.Skill 부여(CC) · (bMoveCancelsCast 면) Event.Input.Move
  *                       -> 쿨다운만 커밋하고 CancelAbility. 코스트는 안 든다 (§5.1, 자체 결정값)
  *   [3] 조준 확정     : 발동 요청에 실려 온 조준점(FGameplayAbilityTargetData)을 **서버가 사거리로 클램프** (ResolveAim)
- *   [4] 발동          : CommitAbility(코스트 + 쿨다운) -> ApplySelfMove() [서버, F07-06] -> ExecuteSkill() [서버] + K2_OnSkillExecuted() [양쪽, 연출]
- *                       기본 ExecuteSkill = Shape 로 ERTargeting::Query -> OnTargetsResolved -> ApplySkillDamage
+ *   [4] 발동          : CommitAbility(코스트 + 쿨다운) -> 조각.OnExecute [서버] -> ExecuteSkill() [서버] -> 조각.OnTargetsResolved -> K2_OnSkillExecuted() [양쪽, 연출] -> 조각.OnLocalExecute
+ *                       기본 ExecuteSkill = Shape 로 ERTargeting::Query -> 조각 훅 -> OnTargetsResolved(파생 후처리)
+ *                       ⭐ 기능(피해 · 적중 효과 · 이동 · 버프 · 넉백 · 2차 · 리캐스트 · 장판 · 모드)은 전부 **조각** — GAS/Fragment/ (F11.5 · Argument 28)
  *   [5] 후딜          : RecoveryTime > 0 이면 UERSkillPhaseEffect{State.Recovering} + WaitDelay
  *                       Event.Input.Move 가 오면 즉시 끝낸다 (애니메이션 캔슬)
  *   -> EndAbility
@@ -72,6 +77,37 @@ public:
 	 */
 	const UERSkillData* GetSkillData() const;
 
+	// ── F11.5 조각이 부르는 것 (FERSkillContext 경유) ──────────────
+	/** 다른 데이터로 파이프라인 재진입 — 2차 판정(판정+적중만) · 리캐스트/벽 충돌. 서버. */
+	void ExecuteOther(const UERSkillData* Other, float Scale, bool bWithExecuteHooks);
+	/** bKeepActive 로 살려 둔 어빌리티를 조각이 끝낸다 (모드 해제). */
+	void EndFromFragment(bool bCancelled);
+	/** 조각별 상태 객체 — 없으면 만든다 (Outer = this). */
+	UERSkillFragmentState* GetOrCreateFragmentState(const UERSkillFragment* Owner, TSubclassOf<UERSkillFragmentState> Class);
+	/**
+	 * 판정 없이 정해진 대상에게 Data 의 적중 조각(피해 · 적중 효과 …)만 실행 — 장판 펄스 · 벽 충돌 · 평타 강화.
+	 * LevelOverride < 0 이면 이 어빌리티 레벨. ShapeOwner 는 광역 태그 기준 (null = Data). 서버.
+	 */
+	void ApplyOnTargets(const UERSkillData* Data, const TArray<AActor*>& Targets, float Scale = 1.f, int32 LevelOverride = -1,
+		const UERSkillData* ShapeOwner = nullptr, bool bEnhancement = false);
+	/** 이번 실행의 문맥 (조각 훅 · 상태 객체가 만든다). */
+	FERSkillContext MakeContext(const UERSkillData* Skill, float Scale) const;
+	FGameplayTag GetRecastTag() const { return RecastTag; }
+	/** 조각용 — 쿨다운 태그(모드 반환) · 사거리(블링크 전제). 엔진 오버라이드는 protected 라 공개 접근자를 둔다. */
+	const FGameplayTagContainer& GetCooldownTagsForFragment() const { return CooldownTags; }
+	float GetRangeMaxFor(const UERSkillData& Skill) const { return GetRangeMax(Skill); }
+	/** 조각용 공개 래퍼 — 엔진의 ApplyGameplayEffectSpecTo* 는 protected 다. */
+	void ApplySpecToTargets(const FGameplayEffectSpecHandle& Spec, const FGameplayAbilityTargetDataHandle& TargetData)
+	{
+		ApplyGameplayEffectSpecToTarget(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, Spec, TargetData);
+	}
+	void ApplySpecToSelf(const FGameplayEffectSpecHandle& Spec)
+	{
+		ApplyGameplayEffectSpecToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, Spec);
+	}
+	/** ER.Skill.DebugDraw 1 — 머리 위 글자 1.5초 (모드 조각 등). */
+	static void DebugDrawText(const AActor* Avatar, const FString& Text, FColor Color = FColor::Cyan);
+
 	/**
 	 * 핸들로 찾는 버전. ⭐ **CDO 에서도 동작한다.**
 	 *   클라가 ServerInitiated 어빌리티를 TryActivate 하면 사전 검사(CanActivateAbility)가
@@ -95,33 +131,16 @@ protected:
 	virtual void ExecuteSkill();
 
 	/**
-	 * 판정 결과를 받는다. 기본 구현: HitActors + InnerHitActors 전부에 ApplySkillDamage.
-	 * ⭐ 레니 W 처럼 중앙/외곽이 다른 효과이거나, 다니엘 W 처럼 표식을 거는 스킬은 이걸 오버라이드한다.
-	 *   판정 **계산**(F04)은 건드리지 않는다 — 결과의 **해석**만 바꾼다.
+	 * 판정 결과의 어빌리티 고유 후처리. 기본은 아무것도 안 한다 — 대상 효과는 조각(ExecuteSkill 이 먼저 돌린다).
+	 * 평타가 "강화 소비 · N회 버프 소비" 를 여기에 둔다. 판정 **계산**(F04)은 건드리지 않는다.
 	 */
 	virtual void OnTargetsResolved(const FTargetResult& Result);
 
-	/**
-	 * 대상들에게 이 스킬의 피해 + 적중 효과(OnHitEffect)를 준다. 계수는 SetByCaller, 채널·형상은 동적 애셋 태그 (F03 규약).
-	 * FGameplayAbilityTargetData_ActorArray 로 감싸 ApplyGameplayEffectSpecToTarget — 자체 RPC 구조체 없음.
-	 * DamageType 이 None 이면 피해는 건너뛰고 적중 효과만.
-	 *
-	 * @param SkillOverride  다른 스킬의 데이터로 준다 — 평타가 **다음 평타 강화**(재키 W)를 얹을 때. nullptr = 자기 데이터.
-	 * @param LevelOverride  SkillOverride 의 레벨. 0 이면 자기 레벨.
-	 */
-	void ApplySkillDamage(const TArray<AActor*>& Targets, const UERSkillData* SkillOverride = nullptr, int32 LevelOverride = 0);
-
-	/** [4] 적중 후 후처리 — 리캐스트 윈도우 · 다음 평타 강화 부여. OnTargetsResolved 기본 구현이 부른다. 파생이 OnTargetsResolved 를 바꾸면 직접 부른다. */
-	void GrantOnHitStates(bool bHitAnything);
+	/** 이번 실행에 쓰는 데이터. 보통 자기 데이터. 리캐스트 조각이 지정한 데이터 · ExecuteOther 중엔 그것. */
+	const UERSkillData* GetExecSkill() const;
 
 	/** 리캐스트 윈도우가 열려 있는가 (자기 슬롯의 Recast.Slot.* 태그). */
 	bool IsRecastWindowOpen() const;
-
-	/**
-	 * [4] 자기 이동 (F07-06). SkillData.SelfMove 에 따라 ERForcedMove::ApplySelfMove — F06-04 와 같은 경로, 면역 검사만 없음.
-	 * 서버에서만. None 이면 아무것도 안 한다. 시작했으면 true.
-	 */
-	bool ApplySelfMove();
 
 	/** 사거리 상한(m). 기본 = Shape.RangeMax. 평타는 AttackRange 어트리뷰트로 덮는다 (F07-07). ResolveAim 클램프 · 판정 쿼리가 쓴다. */
 	virtual float GetRangeMax(const UERSkillData& Skill) const;
@@ -131,6 +150,11 @@ protected:
 	FVector GetAimDirection() const { return AimDirection; }
 	AActor* GetAimActor() const { return AimActor.Get(); }
 
+public:
+	/** 모드(저격) 중인가 — 조각이 어빌리티를 활성으로 붙들고 있다. PC 가 "모드 중 재입력 = 사격" 판단에 쓴다. */
+	bool IsModeActive() const { return bFragmentKeepActive; }
+
+protected:
 	/** [4] 연출 훅. 서버·클라 양쪽에서 불린다 (ServerInitiated). 로직 금지 — 몽타주·이펙트·Print 만 (CLAUDE.md §7). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "ER|Skill", DisplayName = "OnSkillExecuted")
 	void K2_OnSkillExecuted();
@@ -197,4 +221,22 @@ private:
 
 	/** 이번 발동이 리캐스트(윈도우 소비)였는가 — 쿨다운을 새로 걸지 않는다. ActivateAbility 가 정한다. */
 	bool bActivatedByRecast = false;
+
+	/** ExecuteAndRecover · ExecuteOther 가 세팅 · 해제. 리캐스트 · 2차 판정 · 벽 충돌 데이터. */
+	const UERSkillData* ExecOverride = nullptr;
+
+	// ── 조각 (F11.5) ──
+	/** 이번 실행의 문맥. ExecuteAndRecover/ExecuteOther 가 만들고 ExecuteSkill 이 읽는다 (bSkipTargeting · Targets). */
+	FERSkillContext ExecCtx;
+	/** 조각이 활성 유지를 요청한 상태 (서버: ExecCtx.bKeepActive · 클라: KeepsAbilityActive 조각 존재). EndAbility 가 내린다. */
+	bool bFragmentKeepActive = false;
+	/** 조각 훅 일괄 호출. Skill 이 null 이거나 조각이 없으면 아무 일도 없다 — 옛 필드 경로와 공존 (01 단계). */
+	void RunFragmentsExecute(FERSkillContext& Ctx);
+	void RunFragmentsTargets(FERSkillContext& Ctx, const TArray<AActor*>& Targets);
+	void RunFragmentsLocal(FERSkillContext& Ctx);
+	void RunFragmentsEnd(FERSkillContext& Ctx, bool bCancelled);
+	const UERSkillFragment* FindFragmentBlocking(const FERSkillContext& Ctx, FString& OutReason) const;
+
+	UPROPERTY()
+	TMap<TObjectPtr<const UERSkillFragment>, TObjectPtr<UERSkillFragmentState>> FragmentStates;
 };

@@ -1,0 +1,9 @@
+﻿---,WeaponType,DSkill,AttackData,AttackRange,UnlockLevel,UpgradeLevels
+Hammer,Hammer,None,None,2.0,5,"(10,15)"
+Bat,Bat,None,None,2.0,5,"(10,15)"
+Axe,Axe,None,None,2.0,5,"(10,15)"
+Dagger,Dagger,None,None,1.8,5,"(10,15)"
+Shuriken,Shuriken,None,None,6.0,5,"(10,15)"
+SniperRifle,SniperRifle,None,None,6.5,5,"(10,15)"
+Pistol,Pistol,None,None,4.5,5,"(10,15)"
+Throw,Throw,None,None,6.0,5,"(10,15)"

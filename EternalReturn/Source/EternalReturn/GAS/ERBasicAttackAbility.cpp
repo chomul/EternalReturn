@@ -63,8 +63,7 @@ void UERBasicAttackAbility::OnTargetsResolved(const FTargetResult& Result)
 		return;   // 빗나감 — 강화는 소비되지 않는다 (자체 결정값)
 	}
 
-	// ① 평타 자체
-	ApplySkillDamage(Targets);
+	// ① 평타 자체 피해는 조각(피해)이 ExecuteSkill 에서 이미 줬다.
 
 	// ② ⭐ 다음 평타 강화 — 걸려 있으면 그 스킬의 피해 · 적중 효과를 얹고 소비 (Argument 19 ②A)
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo_Ensured();
@@ -84,7 +83,8 @@ void UERBasicAttackAbility::OnTargetsResolved(const FTargetResult& Result)
 			continue;
 		}
 		const int32 BuffLevel = FMath::Max(1, static_cast<int32>(Buff->Spec.GetLevel()));
-		ApplySkillDamage(Targets, BuffSkill, BuffLevel);
+		// 강화 스킬의 적중 조각(피해 · 적중 효과)을 평타 판정에 얹는다. 형상(광역) 은 평타 것 (Argument 19 ②A).
+		ApplyOnTargets(BuffSkill, Targets, 1.f, BuffLevel, GetExecSkill(), /*bEnhancement=*/true);
 		UE_LOG(LogEternalReturn, Log, TEXT("[평타] %s 강화 소비: %s Lv.%d"),
 			*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(BuffSkill), BuffLevel);
 	}
@@ -92,5 +92,26 @@ void UERBasicAttackAbility::OnTargetsResolved(const FTargetResult& Result)
 	if (Buffs.Num() > 0)
 	{
 		ASC->RemoveActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAllOwningTags(Q));
+	}
+
+	// ③ "다음 N회" 자기 버프 소비 (F11-05 B 권총 D) — Charges 를 1 줄여 재적용, 0 이면 제거. 재적용은 지속시간을 새로 센다 `[자체]`.
+	FGameplayTagContainer C; C.AddTag(ERTags::State_ConsumeOnAttack);
+	for (const FActiveGameplayEffectHandle& Handle : ASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAllOwningTags(C)))
+	{
+		const FActiveGameplayEffect* Active = ASC->GetActiveGameplayEffect(Handle);
+		if (!Active)
+		{
+			continue;
+		}
+		const int32 Left = FMath::RoundToInt(Active->Spec.GetSetByCallerMagnitude(ERTags::SetByCaller_Charges, false, 1.f)) - 1;
+		FGameplayEffectSpec Copy = Active->Spec;
+		const FString EffectName = GetNameSafe(Active->Spec.Def);
+		ASC->RemoveActiveGameplayEffect(Handle);
+		if (Left > 0)
+		{
+			Copy.SetSetByCallerMagnitude(ERTags::SetByCaller_Charges, static_cast<float>(Left));
+			ASC->ApplyGameplayEffectSpecToSelf(Copy);
+		}
+		UE_LOG(LogEternalReturn, Log, TEXT("[평타] %s 버프 %s 소비 -> 남은 %d회%s"), *GetNameSafe(GetOwningActorFromActorInfo()), *EffectName, FMath::Max(Left, 0), Left > 0 ? TEXT("") : TEXT(" (제거)"));
 	}
 }

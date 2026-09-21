@@ -248,6 +248,16 @@ void AERCharacterBase::SetCameraTargetOffset(const FVector& Offset)
 	}
 }
 
+void AERCharacterBase::SetCameraZoomScale(float Scale)
+{
+	if (CameraBoom)
+	{
+		// 기본 거리는 생성자 값 — CDO 에서 읽어 배율만 곱한다 (Argument 8 B: 거리 2050 은 조정 대상이라 상수를 복제하지 않는다).
+		const float Base = GetDefault<AERCharacterBase>(GetClass())->CameraBoom->TargetArmLength;
+		CameraBoom->TargetArmLength = Base * FMath::Max(Scale, 0.1f);
+	}
+}
+
 void AERCharacterBase::BindMoveSpeed()
 {
 	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();

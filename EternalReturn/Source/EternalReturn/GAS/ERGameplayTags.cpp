@@ -43,6 +43,16 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_D, "Cooldown.Slot.D");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Attack, "Cooldown.Slot.Attack");
 
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Hammer,      "Cooldown.Weapon.Hammer");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Bat,         "Cooldown.Weapon.Bat");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Axe,         "Cooldown.Weapon.Axe");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Dagger,      "Cooldown.Weapon.Dagger");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Shuriken,    "Cooldown.Weapon.Shuriken");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_SniperRifle, "Cooldown.Weapon.SniperRifle");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Pistol,      "Cooldown.Weapon.Pistol");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Throw,       "Cooldown.Weapon.Throw");
+
+
 	UE_DEFINE_GAMEPLAY_TAG(Recast_Slot_P, "Recast.Slot.P");
 	UE_DEFINE_GAMEPLAY_TAG(Recast_Slot_Q, "Recast.Slot.Q");
 	UE_DEFINE_GAMEPLAY_TAG(Recast_Slot_W, "Recast.Slot.W");
@@ -62,10 +72,15 @@ namespace ERTags
 
 	UE_DEFINE_GAMEPLAY_TAG(State_Casting,    "State.Casting");
 	UE_DEFINE_GAMEPLAY_TAG(State_Recovering, "State.Recovering");
+	UE_DEFINE_GAMEPLAY_TAG(State_Unarmed,    "State.Unarmed");
+	UE_DEFINE_GAMEPLAY_TAG(State_InCombat,   "State.InCombat");
+	UE_DEFINE_GAMEPLAY_TAG(State_ConsumeOnAttack, "State.ConsumeOnAttack");
 	UE_DEFINE_GAMEPLAY_TAG(State_NextAttackBuff, "State.NextAttackBuff");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Input_Move, "Event.Input.Move");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Skill_Aim,  "Event.Skill.Aim");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowPercent,          "SetByCaller.SlowPercent");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_OnHitMagnitude,       "SetByCaller.OnHitMagnitude");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Charges,              "SetByCaller.Charges");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowMultiplier,       "SetByCaller.SlowMultiplier");
 
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_MaxHP,                "SetByCaller.MaxHP");
@@ -111,6 +126,7 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_MaxHPRatio,       "Data.Damage.MaxHPRatio");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_CurHPRatio,       "Data.Damage.CurHPRatio");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_LostHPRatio,      "Data.Damage.LostHPRatio");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_TargetLostHPScaleMax, "Data.Damage.TargetLostHPScaleMax");
 
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Shape_AoE,    "Damage.Shape.AoE");
 	UE_DEFINE_GAMEPLAY_TAG(Actor_Type_Wildlife, "Actor.Type.Wildlife");

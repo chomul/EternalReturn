@@ -9,6 +9,8 @@
 #include "Combat/ERTargetingTypes.h"
 #include "ERSkillData.generated.h"
 
+class UERSkillFragment;
+
 class UAbilitySystemComponent;
 class UERGameplayAbility;
 class UGameplayEffect;
@@ -29,6 +31,8 @@ class UGameplayEffect;
  *
  * 근거: Docs/4_Argument/15_스킬데이터_위치.md (방안 B)
  */
+class UERSkillData;
+
 /** 스킬이 무엇을 지불하는가. 역기획서 §3 — 마나는 없다. 기력(VP) 아니면 체력(시셀라). */
 UENUM()
 enum class ESkillCostType : uint8
@@ -52,6 +56,85 @@ enum class ESkillDamageType : uint8
 	Fixed,
 };
 
+/**
+ * 시전 시 **자기에게** 거는 버프 하나 (F11-05 B 권총 D). 적중과 무관하게 발동 시 적용. GE 애셋은 HasDuration.
+ * Duration → SetByCaller.CCDuration · Magnitude → SetByCaller.OnHitMagnitude (의미는 GE 가 정한다 — 이속 배율 1.4) ·
+ * Charges > 0 이면 State.ConsumeOnAttack 태그를 달아 기본 공격 적중마다 1씩 줄고 0 이면 사라진다 ("다음 2회").
+ */
+USTRUCT(BlueprintType)
+struct FERSelfEffect
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly)
+	TSubclassOf<UGameplayEffect> Effect;
+
+	/** 레벨별 지속 초. 0 = 애셋의 지속시간 그대로. */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> Duration;
+
+	/** 레벨별 크기 (SetByCaller.OnHitMagnitude). 0 = 안 넣는다. */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> Magnitude;
+
+	/** 기본 공격 적중 N회로 소비. 0 = 시간으로만. 권총 D 공속 버프 = 2. */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	int32 Charges = 0;
+
+	/** 레벨별 시작 지연 초. 0 = 즉시. 권총 D 공속 버프 = 1 ("이동이 끝난 후"). 그 사이 시전자가 죽으면 안 건다. */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> StartDelay;
+};
+
+/**
+ * 모드 (F11-05 D 저격총). Duration > 0 이면 발동 뒤 어빌리티가 끝나지 않고 Duration 초 동안 **활성**으로 남아
+ * 기본 공격 슬롯을 AttackData 로 갈아끼운다 (AERPlayerState::SetModeAttack). 발수가 Shots−1 이면 FinalAttackData 로 한 번 더 교체,
+ * Shots 를 다 쏘면 · 시간이 다 되면 · (bCancelOnMove) 이동이 수락되면 · CC(State.Block.Skill) 가 오면 해제 → 평타 복구.
+ * 한 발도 안 쐈으면 해제 시 남은 쿨다운의 UnusedCooldownRefund 만큼 돌려준다 (원문 "미사용 해제 시 쿨 50% 반환").
+ * 근거: Docs/4_Argument/27_저격모드_표현과_발수전환.md (①A + ②A)
+ */
+USTRUCT()
+struct FERSkillMode
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	float Duration = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "1", EditCondition = "Duration > 0"))
+	int32 Shots = 3;
+
+	/** 모드 중 기본 공격 슬롯에 들어갈 데이터 (Ability.Slot.Attack · 포인트 ✘). 레벨은 모드 스킬(D)의 레벨을 따른다. */
+	UPROPERTY(EditDefaultsOnly, meta = (EditCondition = "Duration > 0"))
+	TObjectPtr<UERSkillData> AttackData;
+
+	/** 마지막 발 (없으면 AttackData 그대로). */
+	UPROPERTY(EditDefaultsOnly, meta = (EditCondition = "Duration > 0"))
+	TObjectPtr<UERSkillData> FinalAttackData;
+
+	UPROPERTY(EditDefaultsOnly, meta = (EditCondition = "Duration > 0"))
+	bool bCancelOnMove = true;
+
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", ClampMax = "1", EditCondition = "Duration > 0"))
+	float UnusedCooldownRefund = 0.f;
+
+	/** 모드 동안 카메라 거리 배율 — 저격 사거리가 다 보이게 줌아웃 (원작 확인 2026-09-21 · 배율은 자체값). 1 = 그대로. 로컬 플레이어만. 부드럽게 보간 (PC). */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0.5", ClampMax = "3", EditCondition = "Duration > 0"))
+	float CameraZoomScale = 1.f;
+
+	/** 모드 동안 화면 중심을 **진입 시 조준 방향**으로 이만큼(m) 민다 — 오른쪽 위를 보고 켰으면 캐릭터는 왼쪽 아래 (사용자 확인 2026-09-21). 0 = 중앙 유지. */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "Duration > 0"))
+	float CameraAimOffset = 0.f;
+
+	/** 모드 평타의 조준을 **진입 시 바라본 방향** ± 이 각도(°) 안으로 제한 (저격: 30 — 사용자 확인 2026-09-21). 0 = 제한 없음. 서버가 ResolveAim 에서 자른다. */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", ClampMax = "180", EditCondition = "Duration > 0"))
+	float AimHalfAngleDeg = 0.f;
+
+	/** 진입 때 진행 중인 이동을 멈춘다 (저격: 켬 — 사용자 확인 2026-09-21 "이동 중에 쓰면 안 멈추고 쏜다"). 로컬 PC 의 경로 추적을 끊는다 — 이동은 클라가 구동한다 (E07). */
+	UPROPERTY(EditDefaultsOnly, meta = (EditCondition = "Duration > 0"))
+	bool bStopMovementOnEnter = true;
+};
+
 /** 시전자 자기 이동 (F07-06). ERForcedMove::ApplySelfMove 로 실행 — 넉백과 같은 RootMotionSource 경로. */
 UENUM()
 enum class ESkillSelfMove : uint8
@@ -63,6 +146,8 @@ enum class ESkillSelfMove : uint8
 	AwayFromAim,
 	/** 클램프된 조준점까지 (거리 = 조준점까지, SelfMoveDistance 무시) — 재키 E (위치 지정 도약) */
 	ToAimPoint,
+	/** 지정 대상(AimActor) 의 **건너편** SelfMoveDistance 로 **순간이동** (지형 통과 ○ — RootMotion 아님, 텔레포트) — 단검 D (F11-05 C). 대상 없으면 실패 */
+	BlinkBehindTarget,
 };
 
 /**
@@ -178,80 +263,24 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "판정")
 	FERSkillShape Shape;
 
-	UPROPERTY(EditDefaultsOnly, Category = "피해")
-	ESkillDamageType DamageType = ESkillDamageType::None;
-
-	/** 레벨별 고정 피해. 카티야 Q [40/80/120/160/200] */
-	UPROPERTY(EditDefaultsOnly, Category = "피해", meta = (EditCondition = "DamageType != ESkillDamageType::None"))
-	TArray<float> BaseDamage;
-
-	/** 레벨별 공격력 계수 (1.0 = 100%) */
-	UPROPERTY(EditDefaultsOnly, Category = "피해", meta = (EditCondition = "DamageType != ESkillDamageType::None"))
-	TArray<float> APRatio;
-
-	/** 레벨별 **추가** 공격력 계수 — 재키 W 20~60% */
-	UPROPERTY(EditDefaultsOnly, Category = "피해", meta = (EditCondition = "DamageType != ESkillDamageType::None"))
-	TArray<float> BonusAPRatio;
-
-	/** 레벨별 스킬 증폭 계수 */
-	UPROPERTY(EditDefaultsOnly, Category = "피해", meta = (EditCondition = "DamageType != ESkillDamageType::None"))
-	TArray<float> SkillAmpRatio;
-
 	/** 레벨별 배열에서 값 하나. 비면 0, 레벨이 배열보다 크면 마지막 값. 레벨은 1부터. Cooldowns · Costs 도 이걸 쓴다. */
 	static float LevelValue(const TArray<float>& Values, int32 Level);
 
 	// ── 적중 시 CC (F07-07) ────────────────────────────────────
 	// ApplySkillDamage 가 피해 직후 ERCC::ApplyCC 로 건다 (F06 그대로 — 저항 · 면역 · 둔화 재계산 전부 거기서).
 
-	/** 적중한 대상에게 거는 CC GE 애셋 (GE_CC_Slow · GE_CC_Stun …). 비면 없음. */
-	UPROPERTY(EditDefaultsOnly, Category = "적중 효과")
-	TSubclassOf<UGameplayEffect> OnHitEffect;
-
-	/** 레벨별 지속(초). 재키 W 0.85 · 매그너스 E 0.7~1.3 */
-	UPROPERTY(EditDefaultsOnly, Category = "적중 효과", meta = (EditCondition = "OnHitEffect != nullptr"))
-	TArray<float> OnHitDuration;
-
-	/** 레벨별 둔화 감소율 (0.6 = 60%). 둔화 GE 일 때만 의미 있다. 재키 W 0.6~0.8 · 카티야 E 0.5~0.7 */
-	UPROPERTY(EditDefaultsOnly, Category = "적중 효과", meta = (EditCondition = "OnHitEffect != nullptr"))
-	TArray<float> OnHitSlowPercent;
-
 	// ── 다음 기본 공격 강화 (F07-07) ──────────────────────────
 	// 켜면 발동 시 자기에게 State.NextAttackBuff 를 건다. 다음 평타가 적중하면 **이 스킬의 피해·적중 효과**를 얹고 소비한다.
 	// 카티야 P · 재키 W · 시셀라 Q · 권총 D — 4곳 공용 (역기획서 §8).
-
-	UPROPERTY(EditDefaultsOnly, Category = "다음 평타 강화")
-	bool bGrantsNextAttackBuff = false;
-
-	/** 대기 만료(초). 0 = 만료 없음. 카티야 P 5 · 재키 W (미확인 → 0) */
-	UPROPERTY(EditDefaultsOnly, Category = "다음 평타 강화", meta = (ClampMin = "0", EditCondition = "bGrantsNextAttackBuff"))
-	float NextAttackBuffDuration = 0.f;
 
 	// ── 리캐스트 윈도우 (F07-07) ──────────────────────────────
 	// 적중 시 Recast.Slot.* 를 RecastWindow 초 동안 건다. 그동안 이 슬롯은 쿨다운을 무시하고 한 번 더 발동된다.
 	// ⚠ 자체 결정값: 재발동은 쿨다운을 새로 걸지 않는다(첫 시전의 쿨이 그대로) · 코스트는 든다. 원작 (미확인).
 
-	UPROPERTY(EditDefaultsOnly, Category = "리캐스트")
-	bool bRecastOnHit = false;
-
-	/** 윈도우(초). 재키 Q 3 */
-	UPROPERTY(EditDefaultsOnly, Category = "리캐스트", meta = (ClampMin = "0.01", EditCondition = "bRecastOnHit"))
-	float RecastWindow = 3.f;
-
 	// ── 자기 이동 (F07-06) ─────────────────────────────────────
 	// [4] 발동 시 판정(ExecuteSkill)보다 **먼저** 시작한다. 돌진 끝에 맞히는 스킬은 파생이 시점을 정한다.
 	// ⚠ 자체 결정값: 이동 중 이동 입력은 RootMotion 이 덮고(엔진), 스킬 입력은 RecoveryTime 으로 막는다 →
 	//   돌진 스킬은 RecoveryTime ≥ SelfMoveDuration 으로 **데이터에서** 맞춘다. 이동 중 CC 는 끊지 않는다 (§5.1 [4] 원자적).
-
-	UPROPERTY(EditDefaultsOnly, Category = "자기 이동")
-	ESkillSelfMove SelfMove = ESkillSelfMove::None;
-
-	/** 이동 거리 (m). ToAimPoint 는 무시. 카티야 E 4 · 다니엘 E 3 · 재키 Q 1.5 */
-	UPROPERTY(EditDefaultsOnly, Category = "자기 이동", meta = (ClampMin = "0", EditCondition = "SelfMove != ESkillSelfMove::None && SelfMove != ESkillSelfMove::ToAimPoint"))
-	float SelfMoveDistance = 0.f;
-
-	/** 이동 시간 (초). 카티야 E 0.3 */
-	UPROPERTY(EditDefaultsOnly, Category = "자기 이동", meta = (ClampMin = "0.01", EditCondition = "SelfMove != ESkillSelfMove::None"))
-	float SelfMoveDuration = 0.3f;
 
 	// ── 시전 시간 (F07-04) ─────────────────────────────────────
 	// ⚠ 스칼라다 — 6인 전 스킬에서 레벨별로 변하는 시전 시간이 없다 (역기획서 §2.2 "레벨업해도 안 변하는 것").
@@ -300,6 +329,38 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "레벨", meta = (EditCondition = "bUsesSkillPoints"))
 	TArray<int32> MinCharacterLevel;
 
+	// ── 쿨다운 태그 (F11-04) ──────────────────────────────────
+	/**
+	 * 비어 있으면 슬롯 태그(Cooldown.Slot.X). D 는 **무기 계열 태그**(Cooldown.Weapon.Hammer)를 넣는다 — 무기를 바꿔도 각 무기의 쿨다운이 따로 보존된다
+	 * (Docs/4_Argument/25 방안 B · 사용자 확인 2026-09-19). ⚠ D 는 bIgnoreCooldownReduction 도 켠다 — 원작 확인: 무기 스킬은 쿨다운 감소를 안 받는다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "쿨다운", meta = (Categories = "Cooldown"))
+	FGameplayTag CooldownTagOverride;
+
+	// ── F11-05 A (망치 · 도끼) — 필드 순서 유지, 끝에 ──────────────
+
+	// ── F11-05 B (권총 · 방망이) ──────────────────────────────
+
+	// ── F11-05 C (암기 · 투척 · 단검) ─────────────────────────
+
+	// ─────────────────────────────────────────────────────────
+	// ⭐ 기능 조각 (F11.5 · Docs/4_Argument/28 B) — 피해 · 적중 효과 · 이동 · 버프 · 넉백 · 2차 · 리캐스트 · 강화 · 장판 · 모드는 전부 여기.
+	//   새 기능 = GAS/Fragment/ 에 조각 클래스 하나. 이 클래스와 UERGameplayAbility 는 안 건드린다.
+	//   순서 = 배열 순서 (같은 훅 안에서). 권장: 자기이동 → 자기버프 → 장판/모드 · 피해 → 적중효과 → 넉백 → 2차 → 리캐스트/강화.
+	// ─────────────────────────────────────────────────────────
+	UPROPERTY(EditDefaultsOnly, Instanced, Category = "조각")
+	TArray<TObjectPtr<UERSkillFragment>> Fragments;
+
+	/** 첫 번째 T 조각. 없으면 nullptr. (평타 강화가 강화 스킬의 피해 조각을 찾을 때 · 어빌리티가 리캐스트/모드 조각을 볼 때) */
+	template <class T>
+	const T* FindFragment() const
+	{
+		for (const TObjectPtr<UERSkillFragment>& F : Fragments)
+		{
+			if (const T* Typed = Cast<T>(F.Get())) { return Typed; }
+		}
+		return nullptr;
+	}
 };
 
 /**
@@ -335,7 +396,7 @@ namespace ERSkill
 	 * ⚠ 잘못된 항목(빈 클래스 · 빈 슬롯)은 **로그를 남기고 건너뛴다.** 전체를 실패시키지 않는다.
 	 */
 	void GrantSkills(UAbilitySystemComponent* ASC, const TArray<TObjectPtr<UERSkillData>>& Skills,
-		FERGrantedSkillHandles& OutHandles);
+		FERGrantedSkillHandles& OutHandles, int32 LevelOverride = -1);   // LevelOverride >= 0 이면 InitialLevel 대신 (모드 평타 — E21)
 
 	/** [서버] GrantSkills 로 부여한 것을 전부 회수한다. */
 	void TakeSkills(UAbilitySystemComponent* ASC, FERGrantedSkillHandles& Handles);
@@ -357,4 +418,10 @@ namespace ERSkill
 	 * ⚠ 실패 사유는 로그로 남긴다. 클라 피드백(Client RPC)은 UI 작업 때.
 	 */
 	bool LevelUpSkill(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int32 CharacterLevel);
+
+	/**
+	 * [서버] 포인트가 아닌 스킬(bUsesSkillPoints=false — D)의 스펙 레벨을 **직접** 맞춘다 (F11-03). 0 = 잠김.
+	 * MaxLevel 로 클램프 · 같으면 아무것도 안 한다. 포인트 스킬에 부르면 Warning + false.
+	 */
+	bool SetSkillLevel(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int32 NewLevel, const TCHAR* Reason);
 }

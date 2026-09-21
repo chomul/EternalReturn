@@ -17,7 +17,8 @@ bool ApplyCC(
 	UAbilitySystemComponent* TargetASC,
 	TSubclassOf<UGameplayEffect> CCEffect,
 	float DurationSeconds,
-	float SlowPercent)
+	float SlowPercent,
+	float Magnitude)
 {
 	// ── ① 대상 ────────────────────────────────────────────────
 	if (!TargetASC)
@@ -98,12 +99,13 @@ bool ApplyCC(
 	// ⚠ 어떤 축 태그가 붙어야 하는지는 검사하지 않는다 — CC 마다 다르다.
 	//   실명·시야 차단은 이동·평타·스킬을 막지 않는 것이 **정상**이다(역기획서 §3.3).
 	//   그래서 "축 태그가 있는가"가 아니라 "태그가 하나라도 있는가"를 본다.
-	if (EffectDef->GetGrantedTags().IsEmpty())
+	// ⚠ F11-05: 스탯 디버프(망치 D 방어력 감소 · GE_ArmorBreak)도 이 경로로 온다 — 태그 없이 **모디파이어만** 있는 GE 는 정상이다.
+	//   "태그도 모디파이어도 없다" 만 실수로 본다.
+	if (EffectDef->GetGrantedTags().IsEmpty() && EffectDef->Modifiers.IsEmpty())
 	{
 		UE_LOG(LogEternalReturn, Error,
-			TEXT("[CC] %s 가 태그를 하나도 부여하지 않는다. ")
-			TEXT("애셋의 Components 에 'Grant Tags to Target Actor' 를 추가하고 ")
-			TEXT("Add Tags 에 State.CC.* 와 State.Block.* 를 넣는다."),
+			TEXT("[CC] %s 가 태그도 모디파이어도 없다. CC 면 Components 에 'Grant Tags to Target Actor' 로 State.CC.* / State.Block.* 를, ")
+			TEXT("스탯 디버프면 Modifiers 를 넣는다."),
 			*CCEffect->GetName());
 		return false;
 	}
@@ -129,6 +131,11 @@ bool ApplyCC(
 	if (SlowPercent > 0.f)
 	{
 		SpecHandle.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_SlowPercent, SlowPercent);
+	}
+	// 범용 크기 (F11-05). GE 가 SetByCaller.OnHitMagnitude 를 모디파이어 크기로 읽는다.
+	if (Magnitude != 0.f)
+	{
+		SpecHandle.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_OnHitMagnitude, Magnitude);
 	}
 
 	const FActiveGameplayEffectHandle Applied =

@@ -9,14 +9,79 @@
 #include "GAS/ERCooldownEffect.h"
 #include "GAS/ERCostEffect.h"
 #include "GAS/ERSkillPhaseEffect.h"
-#include "GAS/ERSkillDamageEffect.h"
-#include "GAS/ERSkillStateEffects.h"
-#include "GAS/ERCCLibrary.h"
 #include "Combat/ERTargeting.h"
-#include "Combat/ERForcedMove.h"
-#include "GameFramework/Character.h"
+#include "Core/ERTeamStatics.h"
+#include "Core/ERPlayerState.h"
+#include "TimerManager.h"
 #include "Abilities/GameplayAbilityTargetTypes.h"
-#include "AbilitySystemBlueprintLibrary.h"
+#include "DrawDebugHelpers.h"
+#include "GAS/Fragment/ERSkillFragment.h"
+
+/** 눈으로 보는 디버그 — 판정 형상 · 적중 · 모드 상태를 서버 월드에 그린다 (리슨 서버 창). 0 = 끔. */
+static TAutoConsoleVariable<int32> CVarSkillDebugDraw(TEXT("ER.Skill.DebugDraw"), 0,
+	TEXT("스킬 판정 형상(초록) · 적중(빨강) · 모드 상태 글자를 1.5초 동안 그린다. 1 = 켬"));
+
+namespace
+{
+	constexpr float DebugDrawSeconds = 1.5f;
+
+	void DrawSkillQuery(const UWorld* World, const FTargetQuery& Q, const FTargetResult& Result, const FString& Label)
+	{
+		if (!World || CVarSkillDebugDraw.GetValueOnGameThread() == 0)
+		{
+			return;
+		}
+		const FVector Up(0.f, 0.f, 20.f);
+		const FVector O = Q.Origin + Up;
+		const float RangeUU = Q.RangeMax * 100.f;
+		switch (Q.Shape)
+		{
+		case ESkillTargeting::SingleTarget:
+			if (Q.DesignatedTarget) { DrawDebugLine(World, O, Q.DesignatedTarget->GetActorLocation(), FColor::Green, false, DebugDrawSeconds, 0, 2.f); }
+			DrawDebugCircle(World, O, RangeUU, 32, FColor(0, 255, 0, 80), false, DebugDrawSeconds, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
+			break;
+		case ESkillTargeting::SelfRadius:
+		case ESkillTargeting::GroundCircle:
+		case ESkillTargeting::DualRadius:
+			DrawDebugCircle(World, O, (Q.Shape == ESkillTargeting::GroundCircle ? Q.RadiusOuter : Q.RangeMax) * 100.f, 32, FColor::Green, false, DebugDrawSeconds, 0, 2.f, FVector::RightVector, FVector::ForwardVector, false);
+			if (Q.RadiusInner > 0.f) { DrawDebugCircle(World, O, Q.RadiusInner * 100.f, 32, FColor::Yellow, false, DebugDrawSeconds, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false); }
+			break;
+		case ESkillTargeting::Projectile:
+		{
+			const FVector End = O + Q.Direction.GetSafeNormal2D() * RangeUU;
+			DrawDebugLine(World, O, End, FColor::Green, false, DebugDrawSeconds, 0, 3.f);
+			DrawDebugCircle(World, End, Q.ProjectileRadius * 100.f, 16, FColor::Green, false, DebugDrawSeconds, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
+			break;
+		}
+		case ESkillTargeting::Cone:
+		{
+			const FVector F = Q.Direction.GetSafeNormal2D();
+			const FVector L = F.RotateAngleAxis(-Q.AngleDeg * 0.5f, FVector::UpVector);
+			const FVector R = F.RotateAngleAxis(+Q.AngleDeg * 0.5f, FVector::UpVector);
+			DrawDebugLine(World, O, O + L * RangeUU, FColor::Green, false, DebugDrawSeconds, 0, 2.f);
+			DrawDebugLine(World, O, O + R * RangeUU, FColor::Green, false, DebugDrawSeconds, 0, 2.f);
+			DrawDebugCircle(World, O, RangeUU, 32, FColor(0, 255, 0, 80), false, DebugDrawSeconds, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
+			break;
+		}
+		default:
+			break;
+		}
+		for (const AActor* Hit : Result.HitActors)
+		{
+			if (Hit) { DrawDebugSphere(World, Hit->GetActorLocation(), 45.f, 12, FColor::Red, false, DebugDrawSeconds, 0, 2.f); }
+		}
+		DrawDebugString(World, O + FVector(0, 0, 120.f), FString::Printf(TEXT("%s: 적중 %d"), *Label, Result.HitActors.Num()), nullptr, Result.HitActors.IsEmpty() ? FColor::Yellow : FColor::Red, DebugDrawSeconds, true);
+	}
+
+	void DrawModeText(const AActor* Avatar, const FString& Text, FColor Color = FColor::Cyan)
+	{
+		if (!Avatar || CVarSkillDebugDraw.GetValueOnGameThread() == 0)
+		{
+			return;
+		}
+		DrawDebugString(Avatar->GetWorld(), Avatar->GetActorLocation() + FVector(0, 0, 160.f), Text, nullptr, Color, DebugDrawSeconds, true);
+	}
+}
 #include "Abilities/Tasks/AbilityTask_WaitDelay.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayEvent.h"
 #include "Abilities/Tasks/AbilityTask_WaitGameplayTag.h"
@@ -52,6 +117,7 @@ UERGameplayAbility::UERGameplayAbility()
 	//   애셋이 더 붙이는 건 자유다 (BP Class Defaults 는 여기에 **추가**된다).
 	ActivationBlockedTags.AddTag(ERTags::State_Block_Skill);
 	ActivationBlockedTags.AddTag(ERTags::State_Recovering);
+	ActivationBlockedTags.AddTag(ERTags::State_Unarmed);   // 무기 없음 — 평타 포함 전부 (F11-02, 원작 확인)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -80,6 +146,27 @@ void UERGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	//   ⚠ 여기서 지우면 안 된다 — CommitAbility → CheckCooldown 이 태그를 못 봐 "쿨다운 중" 으로 실패한다
 	//     (2026-09-14 로그 "리캐스트 (윈도우 소비)" 직후 "커밋 실패"). 커밋이 성공한 뒤 ExecuteAndRecover 에서 지운다.
 	bActivatedByRecast = IsRecastWindowOpen();
+
+	// 조각 CanExecute — 커밋 전. 실행될 데이터(리캐스트면 리캐스트 조각의 데이터)의 조각이 거부하면 **없던 일** —
+	//   쿨다운 · 리캐스트 창 소비 없음 (단검 블링크 "대상 없음 · 사거리 밖", 사용자 확인 2026-09-20).
+	{
+		const UERSkillData* WillExec = Skill;
+		if (bActivatedByRecast)
+		{
+			for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
+			{
+				if (F && F->GetRecastExecData()) { WillExec = F->GetRecastExecData(); break; }
+			}
+		}
+		FString Reason;
+		if (const UERSkillFragment* Blocking = FindFragmentBlocking(MakeContext(WillExec, 1.f), Reason))
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 보류 — [%s] %s (쿨다운 · 창 소비 없음)"),
+				*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(WillExec), *Blocking->GetDebugName(), *Reason);
+			EndAbility(Handle, ActorInfo, ActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/true);
+			return;
+		}
+	}
 
 	if (Skill->CastTime > 0.f)
 	{
@@ -198,14 +285,52 @@ void UERGameplayAbility::ExecuteAndRecover()
 				*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(GetSkillData(CurrentSpecHandle, CurrentActorInfo)));
 		}
 
-		ApplySelfMove();   // 돌진·도약이 있으면 판정보다 먼저 출발한다
+		// 리캐스트 발동에 리캐스트 조각이 다른 데이터를 지정했으면 이번 실행은 그 데이터 (단검 망토 → 단검, F11-05 C).
+		const UERSkillData* Own = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
+		ExecOverride = nullptr;
+		if (bActivatedByRecast && Own)
+		{
+			for (const TObjectPtr<UERSkillFragment>& F : Own->Fragments)
+			{
+				if (F && F->GetRecastExecData()) { ExecOverride = F->GetRecastExecData(); break; }
+			}
+		}
+
+		// [4] 조각 파이프라인 — OnExecute(자기 이동 · 자기 버프 · 장판 · 모드) → 판정 → OnTargetsResolved(피해 · 적중 효과 · 넉백 · 2차 · 리캐스트 · 강화)
+		ExecCtx = MakeContext(GetExecSkill(), 1.f);
+		RunFragmentsExecute(ExecCtx);
 		ExecuteSkill();
+		ExecOverride = nullptr;
 	}
 
 	// 연출 훅은 양쪽.
 	K2_OnSkillExecuted();
 
 	const UERSkillData* Skill = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
+
+	// 로컬 조각 (모드 카메라 · 이동 정지). 소유 클라 · 리슨 호스트.
+	if (IsLocallyControlled())
+	{
+		FERSkillContext LocalCtx = MakeContext(Skill, 1.f);
+		RunFragmentsLocal(LocalCtx);
+	}
+	// 조각이 활성 유지를 요청했으면(모드) 여기서 멈춘다. 서버는 그 조각이 EndFromFragment 로, 클라는 서버의 EndAbility 복제로 끝난다.
+	if (HasAuthority(&CurrentActivationInfo))
+	{
+		bFragmentKeepActive = ExecCtx.bKeepActive;
+	}
+	else if (Skill)
+	{
+		for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
+		{
+			if (F && F->KeepsAbilityActive()) { bFragmentKeepActive = true; break; }
+		}
+	}
+	if (bFragmentKeepActive)
+	{
+		return;
+	}
+
 	if (Skill && Skill->RecoveryTime > 0.f)
 	{
 		BeginRecovery(*Skill);   // [5] -> OnRecoveryFinished -> EndAbility
@@ -285,6 +410,22 @@ void UERGameplayAbility::ResolveAim(const FGameplayEventData* TriggerEventData, 
 	{
 		AimDirection = ToAim / Dist;
 	}
+
+	// F11-05 D: 모드 평타(저지사격 · 데드아이)는 진입 시 방향 ± AimHalfAngleDeg 안으로만 조준된다 (사용자 확인 2026-09-21 "좌우 30°").
+	//   서버가 자른다 — 클라 커서는 자유지만 실제 발사 방향은 원뿔 경계로 붙는다. 조준점도 그 방향으로 다시 놓는다.
+	if (const AERPlayerState* PS = Cast<AERPlayerState>(GetOwningActorFromActorInfo());
+		PS && PS->GetModeAimHalfAngleDeg() > 0.f && PS->GetModeAttackHandle() == CurrentSpecHandle)
+	{
+		const FVector Center = PS->GetModeAimCenter();
+		const float Half = PS->GetModeAimHalfAngleDeg();
+		const float SignedDeg = FMath::RadiansToDegrees(FMath::Atan2(FVector::CrossProduct(Center, AimDirection).Z, FVector::DotProduct(Center, AimDirection)));
+		if (FMath::Abs(SignedDeg) > Half)
+		{
+			const FVector Clamped = Center.RotateAngleAxis(FMath::Sign(SignedDeg) * Half, FVector::UpVector);
+			UE_LOG(LogEternalReturn, Verbose, TEXT("[스킬] %s 조준 각 %.0f° -> ±%.0f° 로 자름"), *GetNameSafe(&Skill), SignedDeg, Half);
+			AimDirection = Clamped;
+		}
+	}
 	const float ClampedDist = FMath::Clamp(Dist, MinUU, MaxUU);
 	if (!FMath::IsNearlyEqual(ClampedDist, Dist))
 	{
@@ -293,53 +434,39 @@ void UERGameplayAbility::ResolveAim(const FGameplayEventData* TriggerEventData, 
 	}
 	AimPoint = Origin + AimDirection * ClampedDist;
 	AimPoint.Z = Origin.Z;
+
+	// ⭐ 몸을 조준 방향으로 돌린다 (사용자 요청 2026-09-20). 서버 · 소유 클라 양쪽에서 돌고, 다른 클라는 이동 복제로 받는다.
+	//   Yaw 만 — 탑다운이라 Pitch/Roll 은 건드리지 않는다. 이동 중이면 CharacterMovement 가 다시 돌릴 수 있지만
+	//   시전 페이즈에선 이동이 막히거나(Block.Movement) 취소되므로 문제 없다.
+	if (AActor* MutableAvatar = GetAvatarActorFromActorInfo())
+	{
+		FVector Flat = AimDirection; Flat.Z = 0.f;
+		if (Flat.SizeSquared() > KINDA_SMALL_NUMBER)
+		{
+			MutableAvatar->SetActorRotation(FRotator(0.f, Flat.Rotation().Yaw, 0.f));
+		}
+	}
 }
 
-bool UERGameplayAbility::ApplySelfMove()
+
+
+const UERSkillData* UERGameplayAbility::GetExecSkill() const
 {
-	const UERSkillData* Skill = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
-	ACharacter* Avatar = Cast<ACharacter>(GetAvatarActorFromActorInfo());
-	if (!Skill || !Avatar || Skill->SelfMove == ESkillSelfMove::None)
-	{
-		return false;
-	}
-
-	FVector Direction = AimDirection;
-	float DistanceUU = Skill->SelfMoveDistance * 100.f;
-
-	switch (Skill->SelfMove)
-	{
-	case ESkillSelfMove::TowardAim:
-		break;
-
-	case ESkillSelfMove::AwayFromAim:
-		// ⚠ 카티야 E — 조준의 **반대**. 여기 한 줄이 이 스킬의 전부다.
-		Direction = -AimDirection;
-		break;
-
-	case ESkillSelfMove::ToAimPoint:
-		// 조준점은 ResolveAim 이 이미 사거리로 클램프했다 → 거리 = 발밑에서 조준점까지.
-		DistanceUU = FVector::Dist2D(ERTargeting::GetTargetingLocation(Avatar), AimPoint);
-		break;
-
-	default:
-		return false;
-	}
-
-	const bool bStarted = ERForcedMove::ApplySelfMove(Avatar, Direction, DistanceUU, Skill->SelfMoveDuration);
-
-	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 자기 이동 %s %.0fcm / %.2f초 -> %s"),
-		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(Skill),
-		*UEnum::GetValueAsString(Skill->SelfMove), DistanceUU, Skill->SelfMoveDuration,
-		bStarted ? TEXT("시작") : TEXT("실패"));
-	return bStarted;
+	return ExecOverride ? ExecOverride : GetSkillData(CurrentSpecHandle, CurrentActorInfo);
 }
+
 
 void UERGameplayAbility::ExecuteSkill()
 {
-	const UERSkillData* Skill = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
+	const UERSkillData* Skill = GetExecSkill();
 	AActor* Avatar = GetAvatarActorFromActorInfo();
 	if (!Skill || !Avatar)
+	{
+		return;
+	}
+
+	// 조각이 판정을 대신했다 (장판).
+	if (ExecCtx.bSkipTargeting)
 	{
 		return;
 	}
@@ -387,150 +514,172 @@ void UERGameplayAbility::ExecuteSkill()
 	}
 
 	const FTargetResult Result = ERTargeting::Query(Avatar->GetWorld(), Q);
+	DrawSkillQuery(Avatar->GetWorld(), Q, Result, GetNameSafe(Skill));   // ER.Skill.DebugDraw 1
 
 	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 판정 %s: 적중 %d (중앙 %d)"),
 		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(Skill),
 		*UEnum::GetValueAsString(Q.Shape), Result.HitActors.Num(), Result.InnerHitActors.Num());
 
+	// SingleTarget 빗나감 — 왜인지 한 줄 (대상 · 거리 · 사거리 · 적대). 2026-09-20 단검 블링크 뒤 적중 0 진단용.
+	if (Q.Shape == ESkillTargeting::SingleTarget && Result.HitActors.IsEmpty())
+	{
+		const AActor* T = Q.DesignatedTarget;
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬]   SingleTarget 빗나감 — 대상 %s · 거리 %.0fcm · 사거리 %.0f~%.0fcm · 적대 %s"),
+			*GetNameSafe(T), T ? FVector::Dist2D(Q.Origin, ERTargeting::GetTargetingLocation(T)) : -1.f,
+			Q.RangeMin * 100.f, Q.RangeMax * 100.f, T && ERTeamStatics::IsHostile(Avatar, T) ? TEXT("O") : TEXT("X"));
+	}
+
+	// 적중 조각 (피해 · 적중 효과 · 넉백 · 2차 · 리캐스트 · 강화) — 가상 OnTargetsResolved **앞**: 평타는 "자기 피해 → 강화 소비" 순서.
+	{
+		TArray<AActor*> Targets;
+		for (AActor* A : Result.HitActors)      { if (A) { Targets.Add(A); } }
+		for (AActor* A : Result.InnerHitActors) { if (A) { Targets.Add(A); } }
+		ExecCtx.Targets = Targets;
+		ExecCtx.bHitAnything = !Targets.IsEmpty();
+		RunFragmentsTargets(ExecCtx, Targets);
+	}
+
 	OnTargetsResolved(Result);
+}
+
+void UERGameplayAbility::ApplyOnTargets(const UERSkillData* Data, const TArray<AActor*>& Targets, float Scale, int32 LevelOverride, const UERSkillData* ShapeOwner, bool bEnhancement)
+{
+	if (!Data || Targets.IsEmpty() || !HasAuthority(&CurrentActivationInfo))
+	{
+		return;
+	}
+	FERSkillContext Ctx = MakeContext(Data, Scale);
+	if (LevelOverride > 0) { Ctx.Level = LevelOverride; }
+	Ctx.ShapeOwner = ShapeOwner;
+	Ctx.bEnhancement = bEnhancement;
+	Ctx.Targets = Targets;
+	Ctx.bHitAnything = true;
+	// ⚠ 대상 효과 조각(피해 · 적중 효과)만 — 리캐스트 · 강화 · 2차 판정은 "시전 결과" 라 여기서 돌면 안 된다 (평타 강화 무한 루프).
+	for (const TObjectPtr<UERSkillFragment>& F : Data->Fragments)
+	{
+		if (F && F->IsHitEffect()) { F->OnTargetsResolved(Ctx, Targets); }
+	}
+}
+
+void UERGameplayAbility::DebugDrawText(const AActor* Avatar, const FString& Text, FColor Color)
+{
+	DrawModeText(Avatar, Text, Color);
+}
+
+// ─────────────────────────────────────────────────────────────
+// F11.5 조각 — 문맥 · 훅 호출 · 조각이 부르는 것
+// ─────────────────────────────────────────────────────────────
+
+FERSkillContext UERGameplayAbility::MakeContext(const UERSkillData* Skill, float Scale) const
+{
+	FERSkillContext Ctx;
+	Ctx.Ability = const_cast<UERGameplayAbility*>(this);
+	Ctx.ASC = CurrentActorInfo ? CurrentActorInfo->AbilitySystemComponent.Get() : nullptr;
+	Ctx.Avatar = GetAvatarActorFromActorInfo();
+	Ctx.PlayerState = Cast<AERPlayerState>(GetOwningActorFromActorInfo());
+	Ctx.Skill = Skill;
+	Ctx.Level = GetAbilityLevel();
+	Ctx.AimPoint = AimPoint;
+	Ctx.AimDirection = AimDirection;
+	Ctx.AimActor = AimActor.Get();
+	Ctx.bActivatedByRecast = bActivatedByRecast;
+	Ctx.bAuthority = HasAuthority(&CurrentActivationInfo);
+	Ctx.DamageScale = Scale;
+	return Ctx;
+}
+
+const UERSkillFragment* UERGameplayAbility::FindFragmentBlocking(const FERSkillContext& Ctx, FString& OutReason) const
+{
+	if (!Ctx.Skill) { return nullptr; }
+	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments)
+	{
+		if (F && !F->CanExecute(Ctx, OutReason)) { return F.Get(); }
+	}
+	return nullptr;
+}
+
+void UERGameplayAbility::RunFragmentsExecute(FERSkillContext& Ctx)
+{
+	if (!Ctx.Skill) { return; }
+	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F) { F->OnExecute(Ctx); } }
+}
+
+void UERGameplayAbility::RunFragmentsTargets(FERSkillContext& Ctx, const TArray<AActor*>& Targets)
+{
+	if (!Ctx.Skill) { return; }
+	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F) { F->OnTargetsResolved(Ctx, Targets); } }
+}
+
+void UERGameplayAbility::RunFragmentsLocal(FERSkillContext& Ctx)
+{
+	if (!Ctx.Skill) { return; }
+	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F) { F->OnLocalExecute(Ctx); } }
+}
+
+void UERGameplayAbility::RunFragmentsEnd(FERSkillContext& Ctx, bool bCancelled)
+{
+	if (!Ctx.Skill) { return; }
+	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F) { F->OnEnd(Ctx, bCancelled); } }
+}
+
+void UERGameplayAbility::ExecuteOther(const UERSkillData* Other, float Scale, bool bWithExecuteHooks)
+{
+	if (!Other || !HasAuthority(&CurrentActivationInfo))
+	{
+		return;
+	}
+	// 바깥 실행의 문맥 · 오버라이드를 보존하고 잠시 바꾼다 (2차 판정이 끝나면 원래대로).
+	const UERSkillData* SavedOverride = ExecOverride;
+	const FERSkillContext SavedCtx = ExecCtx;
+
+	ExecOverride = Other;
+	ExecCtx = MakeContext(Other, Scale);
+	if (bWithExecuteHooks) { RunFragmentsExecute(ExecCtx); }
+	ExecuteSkill();
+
+	ExecOverride = SavedOverride;
+	ExecCtx = SavedCtx;
+}
+
+void UERGameplayAbility::EndFromFragment(bool bCancelled)
+{
+	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, bCancelled);
+}
+
+UERSkillFragmentState* UERGameplayAbility::GetOrCreateFragmentState(const UERSkillFragment* Owner, TSubclassOf<UERSkillFragmentState> Class)
+{
+	if (!Owner || !Class)
+	{
+		return nullptr;
+	}
+	if (TObjectPtr<UERSkillFragmentState>* Found = FragmentStates.Find(Owner))
+	{
+		if (*Found && (*Found)->IsA(Class)) { return Found->Get(); }
+	}
+	UERSkillFragmentState* State = NewObject<UERSkillFragmentState>(this, Class);
+	FragmentStates.Add(Owner, State);
+	return State;
+}
+
+void FERSkillContext::ExecuteOther(const UERSkillData* Other, float Scale, bool bWithExecuteHooks) const
+{
+	if (Ability) { Ability->ExecuteOther(Other, Scale, bWithExecuteHooks); }
+}
+
+UERSkillFragmentState* FERSkillContext::GetStateInternal(const UERSkillFragment* Owner, TSubclassOf<UERSkillFragmentState> Class) const
+{
+	return Ability ? Ability->GetOrCreateFragmentState(Owner, Class) : nullptr;
 }
 
 void UERGameplayAbility::OnTargetsResolved(const FTargetResult& Result)
 {
-	TArray<AActor*> Targets;
-	Targets.Reserve(Result.HitActors.Num() + Result.InnerHitActors.Num());
-	for (AActor* A : Result.HitActors)      { if (A) { Targets.Add(A); } }
-	for (AActor* A : Result.InnerHitActors) { if (A) { Targets.Add(A); } }
-
-	ApplySkillDamage(Targets);
-	GrantOnHitStates(!Targets.IsEmpty());
+	// 기본은 아무것도 안 한다 — 대상 효과는 전부 조각 (ExecuteSkill 이 조각 훅을 먼저 돌린 뒤 여기로 온다).
+	//   파생(평타)이 "강화 소비" 같은 어빌리티 고유 후처리를 여기에 둔다.
 }
 
-void UERGameplayAbility::GrantOnHitStates(bool bHitAnything)
-{
-	const UERSkillData* Skill = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
-	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo_Ensured();
-	if (!Skill || !ASC || !HasAuthority(&CurrentActivationInfo))
-	{
-		return;
-	}
 
-	// ── 리캐스트 윈도우 (재키 Q "적중 시 3초 내 재사용") ─────
-	//   ⚠ 이번 발동이 리캐스트였으면 다시 열지 않는다 — 무한 재사용이 된다.
-	if (Skill->bRecastOnHit && bHitAnything && !bActivatedByRecast && RecastTag.IsValid())
-	{
-		const FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(
-			CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, UERRecastWindowEffect::StaticClass(), GetAbilityLevel());
-		if (FGameplayEffectSpec* Spec = SpecHandle.Data.Get())
-		{
-			Spec->DynamicGrantedTags.AddTag(RecastTag);
-			Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_StateDuration, Skill->RecastWindow);
-			ApplyGameplayEffectSpecToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, SpecHandle);
-			UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 리캐스트 윈도우 %.1f초 (%s)"),
-				*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(Skill), Skill->RecastWindow, *RecastTag.ToString());
-		}
-	}
 
-	// ── 다음 기본 공격 강화 (재키 W · 카티야 P …) ─────────────
-	//   적중 여부와 무관 — "사용 후" 다음 평타다. 이미 있으면 새로 건다(같은 스킬이면 갱신, 다른 스킬이면 나중 것).
-	if (Skill->bGrantsNextAttackBuff)
-	{
-		FGameplayTagContainer Q; Q.AddTag(ERTags::State_NextAttackBuff);
-		ASC->RemoveActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAllOwningTags(Q));
 
-		const bool bInfinite = Skill->NextAttackBuffDuration <= 0.f;
-		const FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(
-			CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo,
-			bInfinite ? UERNextAttackBuffInfiniteEffect::StaticClass() : UERNextAttackBuffEffect::StaticClass(), GetAbilityLevel());
-		if (FGameplayEffectSpec* Spec = SpecHandle.Data.Get())
-		{
-			Spec->DynamicGrantedTags.AddTag(ERTags::State_NextAttackBuff);
-			if (!bInfinite)
-			{
-				Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_StateDuration, Skill->NextAttackBuffDuration);
-			}
-			// ⭐ 평타가 이걸 읽어 "무슨 스킬의 피해·효과를 얹을지" 를 안다 (Argument 19 ②A). 레벨은 Spec Level 로 간다.
-			Spec->GetContext().AddSourceObject(Skill);
-			ApplyGameplayEffectSpecToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, SpecHandle);
-			UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 다음 평타 강화 대기 (%s)"),
-				*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(Skill),
-				bInfinite ? TEXT("만료 없음") : *FString::Printf(TEXT("%.1f초"), Skill->NextAttackBuffDuration));
-		}
-	}
-}
-
-void UERGameplayAbility::ApplySkillDamage(const TArray<AActor*>& Targets, const UERSkillData* SkillOverride, int32 LevelOverride)
-{
-	const UERSkillData* Skill = SkillOverride ? SkillOverride : GetSkillData(CurrentSpecHandle, CurrentActorInfo);
-	if (!Skill || Targets.IsEmpty())
-	{
-		return;
-	}
-	const int32 Level = LevelOverride > 0 ? LevelOverride : GetAbilityLevel();
-
-	// ── 적중 효과 (CC) — 피해와 독립. 피해 0 인 유틸리티(카티야 E 둔화)도 여기로 ─────
-	if (Skill->OnHitEffect)
-	{
-		UAbilitySystemComponent* SourceASC = GetAbilitySystemComponentFromActorInfo_Ensured();
-		const float Duration = UERSkillData::LevelValue(Skill->OnHitDuration, Level);
-		const float Slow = UERSkillData::LevelValue(Skill->OnHitSlowPercent, Level);
-		for (AActor* Target : Targets)
-		{
-			UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Target);
-			if (TargetASC)
-			{
-				ERCC::ApplyCC(SourceASC, TargetASC, Skill->OnHitEffect, Duration, Slow);
-			}
-		}
-	}
-
-	if (Skill->DamageType == ESkillDamageType::None)
-	{
-		return;
-	}
-
-	const FGameplayEffectSpecHandle SpecHandle = MakeOutgoingGameplayEffectSpec(
-		CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, UERSkillDamageEffect::StaticClass(), Level);
-	FGameplayEffectSpec* Spec = SpecHandle.Data.Get();
-	if (!Spec)
-	{
-		return;
-	}
-
-	// ⭐ 계수만 넘긴다. 곱하는 건 ERDamageExecution 이다 (Docs/4_Argument/5).
-	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_Base,          UERSkillData::LevelValue(Skill->BaseDamage, Level));
-	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_APRatio,       UERSkillData::LevelValue(Skill->APRatio, Level));
-	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_BonusAPRatio,  UERSkillData::LevelValue(Skill->BonusAPRatio, Level));
-	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_SkillAmpRatio, UERSkillData::LevelValue(Skill->SkillAmpRatio, Level));
-
-	// 채널 태그 — 애셋 태그와 같은 통로 (GameplayEffect.h:1119-1120). 없으면 Execution 이 경고한다.
-	switch (Skill->DamageType)
-	{
-	case ESkillDamageType::BasicAttack: Spec->AddDynamicAssetTag(ERTags::Damage_Type_BasicAttack); break;
-	case ESkillDamageType::Fixed:       Spec->AddDynamicAssetTag(ERTags::Damage_Type_True);        break;
-	default:                            Spec->AddDynamicAssetTag(ERTags::Damage_Type_Skill);       break;
-	}
-
-	// ⭐ 형상 태그는 **어빌리티가** 붙인다 — Execution 이 형상을 추측하지 않는다 (F03-05 흡혈 치유 감소).
-	//   강화(SkillOverride)는 **이 어빌리티**(평타)의 판정에 실리는 것이라 형상도 이 어빌리티 것을 따른다.
-	const UERSkillData* ShapeOwner = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
-	if (ShapeOwner && ShapeOwner->Shape.IsAoE())
-	{
-		Spec->AddDynamicAssetTag(ERTags::Damage_Shape_AoE);
-	}
-
-	// ⭐ 판정 결과를 GAS 그릇에 담아 넘긴다. 스펙은 우리 ASC 가 만들었으므로 Source = 시전자, Target = 대상 (F03-01).
-	const FGameplayAbilityTargetDataHandle TargetData =
-		UAbilitySystemBlueprintLibrary::AbilityTargetDataFromActorArray(Targets, /*OneTargetPerHandle=*/false);
-	ApplyGameplayEffectSpecToTarget(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, SpecHandle, TargetData);
-
-	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 피해 %d명 (기본 %.0f · %s%s%s)"),
-		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(Skill), Targets.Num(),
-		UERSkillData::LevelValue(Skill->BaseDamage, Level),
-		Skill->DamageType == ESkillDamageType::Fixed ? TEXT("고정") : Skill->DamageType == ESkillDamageType::BasicAttack ? TEXT("평타") : TEXT("스킬"),
-		(ShapeOwner && ShapeOwner->Shape.IsAoE()) ? TEXT(" · 광역") : TEXT(""),
-		SkillOverride ? TEXT(" · 강화") : TEXT(""));
-}
 
 void UERGameplayAbility::ApplyPhaseEffect(float Duration, const FGameplayTagContainer& PhaseTags)
 {
@@ -567,10 +716,21 @@ void UERGameplayAbility::RemovePhaseEffect()
 	PhaseEffectHandle.Invalidate();
 }
 
+
+
+
+
+
 void UERGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
 	// 어떤 경로로 끝나든(정상 · 취소 · 외부 CancelAbility) 페이즈 GE 를 남기지 않는다.
 	RemovePhaseEffect();
+	// 조각 OnEnd (모드 정리 · 쿨 반환 · 로컬 카메라 복구). 양쪽 — 조각이 Ctx.bAuthority 로 가른다. 두 번 불려도 조각이 알아서 무시한다.
+	{
+		FERSkillContext EndCtx = MakeContext(GetSkillData(Handle, ActorInfo), 1.f);
+		RunFragmentsEnd(EndCtx, bWasCancelled);
+		bFragmentKeepActive = false;
+	}
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
@@ -586,7 +746,9 @@ void UERGameplayAbility::OnGiveAbility(const FGameplayAbilityActorInfo* ActorInf
 	const FGameplayTag SlotTag = GetSlotTag();
 	if (SlotTag.IsValid())
 	{
-		const FGameplayTag CooldownTag = ERSkill::CooldownTagForSlot(SlotTag);
+		// F11-04: D 는 무기 계열 태그로 (데이터의 CooldownTagOverride). 그 외는 슬롯 태그.
+		const UERSkillData* Skill = GetSkillData();
+		const FGameplayTag CooldownTag = (Skill && Skill->CooldownTagOverride.IsValid()) ? Skill->CooldownTagOverride : ERSkill::CooldownTagForSlot(SlotTag);
 		if (CooldownTag.IsValid())
 		{
 			CooldownTags.AddTag(CooldownTag);

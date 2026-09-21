@@ -40,3 +40,7 @@ crimson_shard,"진홍의 샤드","Transcendent","None","None","()","None","1","N
 dawn_shard,"새벽빛 샤드","Transcendent","None","None","()","None","1","None","None"
 branch,"나뭇가지","Common","None","None","()","None","3","None","None"
 flower,"꽃","Common","None","None","()","None","2","None","None"
+bat_t1,"방망이","Hero","Weapon","Bat","(((AttributeName=""AttackPower"",Attribute=/Script/EternalReturn.ERAttributeSet:AttackPower,AttributeOwner=""/Script/CoreUObject.Class'/Script/EternalReturn.ERAttributeSet'""), 20.000000))","None","1","None","None"
+pistol_t1,"권총","Hero","Weapon","Pistol","(((AttributeName=""AttackPower"",Attribute=/Script/EternalReturn.ERAttributeSet:AttackPower,AttributeOwner=""/Script/CoreUObject.Class'/Script/EternalReturn.ERAttributeSet'""), 20.000000))","None","1","None","None"
+shuriken_t1,"암기","Hero","Weapon","Shuriken","(((AttributeName=""AttackPower"",Attribute=/Script/EternalReturn.ERAttributeSet:AttackPower,AttributeOwner=""/Script/CoreUObject.Class'/Script/EternalReturn.ERAttributeSet'""), 20.000000))","None","1","None","None"
+throw_t1,"투척","Hero","Weapon","Throw","(((AttributeName=""AttackPower"",Attribute=/Script/EternalReturn.ERAttributeSet:AttackPower,AttributeOwner=""/Script/CoreUObject.Class'/Script/EternalReturn.ERAttributeSet'""), 20.000000))","None","1","None","None"
