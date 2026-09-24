@@ -51,7 +51,45 @@ public:
 
 	int32 GetTeamCount() const { return Teams.Num(); }
 
+	// ── 매치 시계 (F12-03 · Argument 34 A) ─────────────────────────────
+	// ⭐ 원작 시계는 **페이즈 카운트다운** 이다 — "1일차 02:20" = 1일차 낮 타이머가 2:20 남았을 때 (사용자 확인 2026-09-23).
+	//   복제는 페이즈가 바뀔 때만. 남은 시간은 클라가 서버 시각으로 계산한다 (매 틱 복제하지 않는다).
+
+	/** 페이즈가 바뀌었다 (Day, bNight). 서버 · 클라 모두 — 클라는 OnRep 에서. 야생동물 스폰 · (F14) 금지구역 · 부활 · 보스가 구독한다. */
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnPhaseChanged, int32 /*Day*/, bool /*bNight*/);
+	FOnPhaseChanged OnPhaseChanged;
+
+	/** [서버 전용] AERGameMode 만 부른다. */
+	void SetPhase(int32 InDay, bool bInNight, float InDuration, float InEndServerTime);
+
+	/** 시계가 돌고 있나 (1일차 낮이 시작됐나). */
+	bool IsClockRunning() const { return Day > 0; }
+	int32 GetDay() const { return Day; }
+	bool IsNight() const { return bNight; }
+	/** 0 = 1일차 낮 · 1 = 1일차 밤 · 2 = 2일차 낮 … (야생동물 스폰 규칙 비교용). 시계 전이면 -1. */
+	int32 GetPhaseIndex() const { return Day > 0 ? ToPhaseIndex(Day, bNight) : -1; }
+	static int32 ToPhaseIndex(int32 InDay, bool bInNight) { return (InDay - 1) * 2 + (bInNight ? 1 : 0); }
+	/** 이 페이즈의 남은 시간(초) — 원작 타이머 표기와 같은 값. 서버 · 클라 공통. */
+	float GetPhaseRemaining() const;
+	float GetPhaseDuration() const { return PhaseDuration; }
+
 protected:
+	UFUNCTION()
+	void OnRep_Phase();
+
+	UPROPERTY(ReplicatedUsing = OnRep_Phase)
+	int32 Day = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Phase)
+	bool bNight = false;
+
+	UPROPERTY(Replicated)
+	float PhaseDuration = 0.f;
+
+	/** 서버 월드 시각 기준 페이즈 종료 시각. 남은 시간 = 이 값 − GetServerWorldTimeSeconds(). */
+	UPROPERTY(Replicated)
+	float PhaseEndServerTime = 0.f;
+
 	UPROPERTY(Replicated)
 	TArray<FERTeamRoster> Teams;
 };

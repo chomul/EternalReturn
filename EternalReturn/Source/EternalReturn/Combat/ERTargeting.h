@@ -60,4 +60,23 @@ public:
 	 *   발밑을 쓰면 이동 시스템(GetNavAgentLocation)과 기준이 같아진다.
 	 */
 	static FVector GetTargetingLocation(const AActor* Actor);
+
+	/**
+	 * From 에서 대상 **판정면까지**의 거리 (uu). 콜리전이 없으면 중심(발밑) 거리로 되돌아간다.
+	 *
+	 * ⭐ 중심 기준은 몸이 큰 대상에서 무너진다 — 늑대(앞뒤 2.9m)는 배에 붙어도 중심까지 2.2m 라 망치(1.5m)가 빗나갔다
+	 *   (2026-09-22 로그 · Argument 32). SkillTarget 을 막는 프리미티브(야생동물 = HitBox · 실험체 = 캡슐)의 표면을 쓴다.
+	 * ⚠ 시전자 쪽은 아직 중심이다 — 몸이 큰 야생동물이 때리는 쪽은 F12-04 에서 (Argument 32).
+	 */
+	static float DistanceToSurface(const AActor* Target, const FVector& From, bool bIgnoreZ);
+
+	/**
+	 * SingleTarget 사거리에 쓰는 거리 (uu) — 대상 쪽은 항상 표면, **시전자 몸이 캡슐보다 크면 시전자 표면에서도** 잰다 (Argument 32).
+	 * "시전자 몸이 크다" = SkillTarget 에 응답하는 컴포넌트가 루트(캡슐)가 아니다 → 야생동물 HitBox. 실험체는 캡슐이 루트라 그대로다.
+	 * ⭐ AI 이동 판단(F12-04)과 어빌리티 판정이 **같은 함수**를 쓴다 — 다르면 "붙었는데 못 때림 / 못 붙었는데 멈춤" 이 번갈아 난다.
+	 */
+	static float SingleTargetDistance(const AActor* Instigator, const FVector& Origin, const AActor* Target, bool bIgnoreZ);
+
+	/** 판정을 받는 컴포넌트 (SkillTarget 에 Block 또는 Overlap). 야생동물 = HitBox · 실험체 = 캡슐. 없으면 nullptr. */
+	static const class UPrimitiveComponent* FindSkillShape(const AActor* Actor);
 };

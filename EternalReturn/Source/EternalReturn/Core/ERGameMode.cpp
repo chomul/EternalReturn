@@ -2,10 +2,12 @@
 
 #include "Core/ERGameMode.h"
 #include "Core/ERGameState.h"
+#include "Core/ERMatchSettings.h"
 #include "Core/ERPlayerController.h"
 #include "Core/ERPlayerState.h"
 #include "Character/ERCharacterBase.h"
 #include "EternalReturn.h"
+#include "TimerManager.h"
 
 AERGameMode::AERGameMode()
 {
@@ -78,4 +80,76 @@ void AERGameMode::Logout(AController* Exiting)
 	}
 
 	Super::Logout(Exiting);
+}
+
+void AERGameMode::StartPlay()
+{
+	Super::StartPlay();
+	if (UERMatchSettings::Get().bStartClockOnBeginPlay)
+	{
+		StartMatchClock();
+	}
+}
+
+void AERGameMode::StartMatchClock()
+{
+	EnterPhase(0);
+}
+
+void AERGameMode::EnterPhase(int32 Index, float OverrideRemaining)
+{
+	const TArray<float>& Lengths = UERMatchSettings::Get().PhaseSeconds;
+	AERGameState* GS = GetGameState<AERGameState>();
+	if (!GS)
+	{
+		return;
+	}
+	GetWorldTimerManager().ClearTimer(PhaseTimer);
+	if (!Lengths.IsValidIndex(Index))
+	{
+		// 마지막 페이즈가 끝났다 — 매치 종료 판정은 F14. 시계만 멈춘다.
+		PhaseIndex = -1;
+		UE_LOG(LogEternalReturn, Log, TEXT("[매치] 마지막 페이즈가 끝났다 — 시계 정지 (매치 종료는 F14)"));
+		return;
+	}
+	PhaseIndex = Index;
+	const int32 NewDay = Index / 2 + 1;
+	const bool bNewNight = (Index % 2) == 1;
+	const float Duration = FMath::Max(1.f, Lengths[Index]);
+	const float Remaining = OverrideRemaining > 0.f ? FMath::Min(OverrideRemaining, Duration) : Duration;
+	const float Now = static_cast<float>(GS->GetServerWorldTimeSeconds());
+
+	GS->SetPhase(NewDay, bNewNight, Duration, Now + Remaining);
+	GetWorldTimerManager().SetTimer(PhaseTimer, this, &AERGameMode::OnPhaseTimerExpired, Remaining, false);
+	if (OverrideRemaining <= 0.f)
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[매치] %d일차 %s 시작 — %.0f초"), NewDay, bNewNight ? TEXT("밤") : TEXT("낮"), Duration);
+	}
+}
+
+void AERGameMode::OnPhaseTimerExpired()
+{
+	EnterPhase(PhaseIndex + 1);
+}
+
+void AERGameMode::JumpToPhase(int32 InDay, bool bInNight)
+{
+	EnterPhase(AERGameState::ToPhaseIndex(FMath::Max(1, InDay), bInNight));
+}
+
+void AERGameMode::SkipClock(float Seconds)
+{
+	AERGameState* GS = GetGameState<AERGameState>();
+	float Left = Seconds;
+	while (GS && Left > 0.f && PhaseIndex >= 0)
+	{
+		const float Remaining = GS->GetPhaseRemaining();
+		if (Left < Remaining)
+		{
+			EnterPhase(PhaseIndex, Remaining - Left);   // 같은 페이즈 안 — 남은 시간만 줄인다
+			return;
+		}
+		Left -= Remaining;
+		EnterPhase(PhaseIndex + 1);
+	}
 }

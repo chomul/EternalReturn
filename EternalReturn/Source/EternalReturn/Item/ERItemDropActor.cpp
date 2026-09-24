@@ -38,13 +38,31 @@ void AERItemDropActor::BeginPlay()
 	}
 }
 
-void AERItemDropActor::InitializeFromLoot(FName InLootRow)
+void AERItemDropActor::InitializeCorpse(FName InLootRow, float Lifetime, bool bInKeepWhenEmpty, int32 SourceLevel)
+{
+	InitializeFromLoot(InLootRow, SourceLevel);
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// 상자와 다른 점은 **수명**이다. 비었을 때 사라질지는 부르는 쪽이 정한다 —
+	// 야생동물 시체는 열어서 필요한 것만 가져가는 것이라 비어도 남고(true), 시간이 되면 몸과 같이 사라진다 (사용자 2026-09-23).
+	bKeepWhenEmpty = bInKeepWhenEmpty;
+	bCorpse = true;   // 상자가 아니다 — 탐색 숙련도 대상에서 뺀다
+	if (Lifetime > 0.f)
+	{
+		SetLifeSpan(Lifetime);
+	}
+}
+
+void AERItemDropActor::InitializeFromLoot(FName InLootRow, int32 SourceLevel)
 {
 	if (!HasAuthority())
 	{
 		return;
 	}
 	LootRow = InLootRow;
+	bKeepWhenEmpty = true;   // 상자 · 채집물 — 비어도 남는다 (시체는 InitializeCorpse 가 되돌린다)
 	if (DropId == 0)
 	{
 		DropId = NextDropId();
@@ -53,7 +71,7 @@ void AERItemDropActor::InitializeFromLoot(FName InLootRow)
 	Items.Reset();
 	if (Row)
 	{
-		ERLoot::Roll(*Row, Items);
+		ERLoot::Roll(*Row, Items, SourceLevel);   // 시체는 동물 레벨 (레벨 조건 드랍) · 상자는 0
 	}
 	FlushNetDormancy();
 
@@ -139,9 +157,9 @@ int32 AERItemDropActor::TakeFromSlot(int32 Index, int32 Count)
 	FlushNetDormancy();
 
 	const bool bEmpty = !Items.ContainsByPredicate([](const FERItemInstance& I) { return !I.IsEmpty(); });
-	if (bEmpty)
+	if (bEmpty && !bKeepWhenEmpty)
 	{
-		// 상자 · 시체는 한 번 가져가면 끝 (원작 확인).
+		// 시체(플레이어 · 야생동물)는 다 가져가면 사라진다. ⭐ 상자는 **비어도 남는다** (원작 확인 2026-09-23 · 역기획서 몬스터 §3.3).
 		UE_LOG(LogEternalReturn, Log, TEXT("[드롭] #%d 가 비어 사라진다."), DropId);
 		Destroy();
 	}
@@ -150,7 +168,9 @@ int32 AERItemDropActor::TakeFromSlot(int32 Index, int32 Count)
 
 bool AERItemDropActor::MarkOpenedByFirst()
 {
-	if (LootRow.IsNone() || IsInfinite() || bOpenedOnce)
+	// ⚠ 야생동물 시체는 **상자가 아니다** — 보상은 사냥 숙련도이고, 여기서 탐색 숙련도까지 주면 이중이다
+	//   (2026-09-23 로그: 닭 시체를 열었는데 `Search +100 (상자 Wild_Chicken)`).
+	if (LootRow.IsNone() || IsInfinite() || bOpenedOnce || bCorpse)
 	{
 		return false;
 	}

@@ -166,11 +166,12 @@ void UERDamageExecution::Execute_Implementation(
 		//   야생동물이 없는 지금 F03 을 끝낼 수 없다.
 		//   계수는 설정에 둔다 - 0.5 는 커뮤니티 자료 기반이라 밸런싱하며 바뀔 값이다.
 		//   근거: Docs/4_Argument/7_비례피해_감쇠판별.md
-		const FGameplayTagContainer* TargetTags = Spec.CapturedTargetTags.GetAggregatedTags();
-		if (TargetTags && TargetTags->HasTag(ERTags::Actor_Type_Boss))
-		{
-			Proportional *= UERStatCapSettings::Get().BossProportionalDamageScale;
-		}
+		// ⚠ 2026-09-24 태그(Actor.Type.Boss) + 전역 0.5 → **대상 어트리뷰트 ProportionalDamageResist** (Argument 38 B).
+		//   원작은 보스마다 다르다 — 알파 70% · 오메가 60% · 위클라인 50% 만 받는다 (나무위키 · 사용자 제공 2026-09-24).
+		//   F12 클래스에 의존하지 않는 건 그대로다 (Argument 7) — 어트리뷰트는 F02 것이고 값은 대상이 들고 온다. 기본 0 = 감쇠 없음.
+		const UAbilitySystemComponent* TargetASC = ExecParams.GetTargetAbilitySystemComponent();
+		const float Resist = TargetASC ? FMath::Clamp(TargetASC->GetNumericAttribute(UERAttributeSet::GetProportionalDamageResistAttribute()), 0.f, 1.f) : 0.f;
+		Proportional *= (1.f - Resist);
 
 		Raw += Proportional;
 	}

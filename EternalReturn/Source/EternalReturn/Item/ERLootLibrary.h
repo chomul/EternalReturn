@@ -14,5 +14,5 @@ namespace ERLoot
 	const FERLootRow* Find(FName RowName);
 
 	/** 가중치 무작위로 RollCount 종을 중복 없이 뽑아 Out 에 채운다 (수량은 Min~Max). Weight 0 · 없는 ID 는 제외. */
-	void Roll(const FERLootRow& Row, TArray<FERItemInstance>& Out);
+	void Roll(const FERLootRow& Row, TArray<FERItemInstance>& Out, int32 SourceLevel = 0);
 }

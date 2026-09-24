@@ -525,7 +525,7 @@ void UERGameplayAbility::ExecuteSkill()
 	{
 		const AActor* T = Q.DesignatedTarget;
 		UE_LOG(LogEternalReturn, Log, TEXT("[스킬]   SingleTarget 빗나감 — 대상 %s · 거리 %.0fcm · 사거리 %.0f~%.0fcm · 적대 %s"),
-			*GetNameSafe(T), T ? FVector::Dist2D(Q.Origin, ERTargeting::GetTargetingLocation(T)) : -1.f,
+			*GetNameSafe(T), T ? ERTargeting::SingleTargetDistance(Q.Instigator, Q.Origin, T, true) : -1.f,
 			Q.RangeMin * 100.f, Q.RangeMax * 100.f, T && ERTeamStatics::IsHostile(Avatar, T) ? TEXT("O") : TEXT("X"));
 	}
 

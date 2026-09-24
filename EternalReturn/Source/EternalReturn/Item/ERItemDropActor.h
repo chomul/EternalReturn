@@ -33,8 +33,14 @@ public:
 	/** [서버] 시체 내용을 채운다. 스폰 직후 한 번. DropLifetime 이 걸린다. */
 	void Initialize(int32 InDropId, const TArray<FERItemInstance>& InItems);
 
-	/** [서버] 루트 행으로 채운다 (상자 · 채집물). 스폰 때 한 번. 수명 없음. */
-	void InitializeFromLoot(FName InLootRow);
+	/** [서버] 루트 행으로 채운다 (상자 · 채집물). 스폰 때 한 번. 수명 없음 · **비어도 남는다** (원작 확인 2026-09-23). */
+	void InitializeFromLoot(FName InLootRow, int32 SourceLevel = 0);
+
+	/**
+	 * [서버] 야생동물 시체 (F12-02). 루트 행으로 채우고 **Lifetime 초 뒤 사라진다** — 원작 1분 [확인] (역기획서 몬스터 §3.3).
+	 * 상자와 달리 다 가져가면 그 자리에서 사라진다.
+	 */
+	void InitializeCorpse(FName InLootRow, float Lifetime, bool bInKeepWhenEmpty, int32 SourceLevel);
 
 	/** 채집물인가 (LootRow 의 bInfinite). 클라도 행을 읽을 수 있다. */
 	bool IsInfinite() const;
@@ -63,9 +69,15 @@ public:
 	FName LootRow;
 	bool bOpenedOnce = false;
 
+	/** 비어도 남나 — 상자 · 채집물 true, 플레이어 시체 false. 야생동물 시체는 true (수명으로 사라진다). 원작 확인 2026-09-23. */
+	bool bKeepWhenEmpty = false;
+
+	/** 시체인가 — 상자가 아니므로 **탐색 숙련도(F10-05)를 주지 않는다**. 보상은 사냥 숙련도 쪽이다. */
+	bool bCorpse = false;
+
 	/**
 	 * [서버] 칸에서 Count 만큼 뺀다. 실제로 뺀 수량을 돌려준다 (칸이 비었으면 0).
-	 * 다 비면 스스로 Destroy — 부르는 쪽은 그 뒤 this 를 만지지 않는다.
+	 * 시체는 다 비면 스스로 Destroy — 부르는 쪽은 그 뒤 this 를 만지지 않는다. **상자 · 채집물은 비어도 남는다**.
 	 */
 	int32 TakeFromSlot(int32 Index, int32 Count);
 

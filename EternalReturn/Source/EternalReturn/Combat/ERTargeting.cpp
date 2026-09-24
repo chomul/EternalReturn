@@ -1,7 +1,10 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/ERTargeting.h"
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Core/ERTeamStatics.h"
+#include "GAS/ERGameplayTags.h"
 #include "ERCollisionChannels.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/OverlapResult.h"
@@ -17,7 +20,8 @@ namespace
 	FORCEINLINE float ToMeters(float UU) { return UU / MetersToUU; }
 
 	/**
-	 * ⚠ 이 파일의 모든 판정은 대상을 **한 점(발밑)** 으로 본다. 캡슐 반경을 무시한다.
+	 * ⚠ 이 파일의 **형상 판정**(반경 · 부채꼴 · 직선)은 대상을 **한 점(발밑)** 으로 본다. 캡슐 반경을 무시한다.
+	 *   (SingleTarget 의 사거리만 2026-09-23 부터 대상 판정면 기준이다 — DistanceToSurface · Argument 32)
 	 *
 	 *   가까울수록 오차가 커진다. 캡슐 반경 42uu 기준으로 대상이 차지하는 각도는
 	 *     1m -> 약 ±23도 / 3m -> 약 ±8도 / 5m -> 약 ±4.8도
@@ -49,6 +53,21 @@ namespace
 		}
 
 		if (Q.IgnoredActors.Contains(Candidate))
+		{
+			return false;
+		}
+
+		// ⭐ 판정 대상 자격 — **ASC 가 있어야** 한다 (2026-09-23).
+		//   커서는 맵 소품 · 지형(StaticMeshActor, BlockAll 프로파일)도 짚는다. 그대로 두면 평타가 벽을 때리고
+		//   쿨다운 · 이동 정지를 소비한다 (로그 06:55 `대상 StaticMeshActor_34`).
+		const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Candidate);
+		if (!ASC)
+		{
+			return false;
+		}
+		// ⭐ 시체 · 무적 연출은 대상이 아니다. 야생동물 시체는 클릭(루팅)만 되고 맞지는 않는다 — SingleTarget 은
+		//   오버랩이 아니라 "커서가 짚은 액터" 라서 콜리전을 꺼도 걸러지지 않는다. 그래서 태그로 막는다.
+		if (ASC->HasMatchingGameplayTag(ERTags::State_Untargetable))
 		{
 			return false;
 		}
@@ -174,6 +193,66 @@ FVector ERTargeting::GetTargetingLocation(const AActor* Actor)
 	return Actor->GetActorLocation();
 }
 
+float ERTargeting::DistanceToSurface(const AActor* Target, const FVector& From, bool bIgnoreZ)
+{
+	if (!Target)
+	{
+		return TNumericLimits<float>::Max();
+	}
+	const float CenterDist = MeasureDistance(From, GetTargetingLocation(Target), bIgnoreZ);
+
+	// 판정을 받는 컴포넌트 = SkillTarget 에 응답하는 것. 야생동물은 HitBox, 실험체는 캡슐이다.
+	const UPrimitiveComponent* Shape = FindSkillShape(Target);
+	if (!Shape)
+	{
+		return CenterDist;   // 판정 컴포넌트가 없다 — 기존 기준 그대로
+	}
+
+	FVector OnSurface = FVector::ZeroVector;
+	const float Dist3D = Shape->GetClosestPointOnCollision(From, OnSurface);
+	if (Dist3D < 0.f)
+	{
+		return CenterDist;   // 심플 콜리전이 없다 (Dist3D == 0 이면 안에 들어와 있다 → 거리 0)
+	}
+	// 표면이 중심보다 멀 수는 없다. 이상한 형상에서 뒤집히지 않게 막는다.
+	return FMath::Min(CenterDist, MeasureDistance(From, OnSurface, bIgnoreZ));
+}
+
+const UPrimitiveComponent* ERTargeting::FindSkillShape(const AActor* Actor)
+{
+	const UPrimitiveComponent* Shape = nullptr;
+	if (Actor)
+	{
+		Actor->ForEachComponent<UPrimitiveComponent>(false, [&Shape](const UPrimitiveComponent* Prim)
+		{
+			// Overlap 도 판정 대상이다 — 실험체 캡슐은 Pawn 프로파일에서 Overlap, 야생동물 HitBox 도 Overlap 이다.
+			if (!Shape && Prim->IsQueryCollisionEnabled() && Prim->GetCollisionResponseToChannel(ERCollisionChannel::SkillTarget) != ECR_Ignore)
+			{
+				Shape = Prim;
+			}
+		});
+	}
+	return Shape;
+}
+
+float ERTargeting::SingleTargetDistance(const AActor* Instigator, const FVector& Origin, const AActor* Target, bool bIgnoreZ)
+{
+	float Dist = DistanceToSurface(Target, Origin, bIgnoreZ);
+
+	// ⭐ 시전자 쪽 (Argument 32 · F12-04): 몸이 캡슐보다 큰 시전자(야생동물)는 **자기 몸 끝에서** 잰다.
+	//   늑대 사거리 1.4m 인데 주둥이가 중심에서 1.47m 앞이라, 중심 기준이면 제 코앞도 못 문다.
+	//   몸 끝까지의 길이 = (중심 → 대상) − (시전자 표면 → 대상). 방향에 따라 다르다 (옆구리는 짧고 머리 쪽은 길다).
+	const UPrimitiveComponent* Body = FindSkillShape(Instigator);
+	if (Body && Instigator && Body != Instigator->GetRootComponent() && Target)
+	{
+		const FVector TargetPoint = GetTargetingLocation(Target);
+		const float CenterToTarget = MeasureDistance(Origin, TargetPoint, bIgnoreZ);
+		const float SurfaceToTarget = DistanceToSurface(Instigator, TargetPoint, bIgnoreZ);
+		Dist = FMath::Max(0.f, Dist - FMath::Max(0.f, CenterToTarget - SurfaceToTarget));
+	}
+	return Dist;
+}
+
 float ERTargeting::GetDistanceAlpha(float Distance, float RangeMin, float RangeMax)
 {
 	const float Span = RangeMax - RangeMin;
@@ -207,7 +286,8 @@ FTargetResult ERTargeting::QuerySingleTarget(const UWorld* World, const FTargetQ
 		return Result;
 	}
 
-	const float Dist = MeasureDistance(Q.Origin, GetTargetingLocation(Q.DesignatedTarget), Q.bIgnoreZ);
+	// ⭐ 대상 **판정면**까지 (Argument 32). 중심 기준이면 몸이 큰 야생동물은 붙어도 빗나간다. 시전자가 큰 몸이면 그 표면에서.
+	const float Dist = SingleTargetDistance(Q.Instigator, Q.Origin, Q.DesignatedTarget, Q.bIgnoreZ);
 	if (Dist < M(Q.RangeMin) || Dist > M(Q.RangeMax))
 	{
 		return Result;

@@ -59,7 +59,7 @@ public:
 	/** 실험체 처치 → 든 무기군 (적 레벨 함수). PS 의 OnOutOfHealth(처치자 쪽) */
 	void OnPlayerKilled(int32 VictimLevel);
 	/** 야생동물 처치 → 사냥 (동물 레벨 함수). F12 가 부른다 */
-	void OnWildlifeKilled(int32 WildlifeLevel);
+	void OnWildlifeKilled(int32 WildlifeLevel, float HuntExp);
 	/** 제작 → 제작 트랙 + (무기면) 그 무기군. Inventory->OnItemCrafted */
 	void OnItemCrafted(FName ResultId, bool bFirstTime);
 	/** 상자를 처음 열었다 → 탐색. Inventory->OnBoxOpened */

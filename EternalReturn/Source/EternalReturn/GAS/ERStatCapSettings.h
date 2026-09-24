@@ -78,23 +78,8 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "자체 결정값 (미확인)", meta = (ClampMin = "0.01"))
 	float MinMoveSpeed = 1.0f;
 
-	/**
-	 * 보스가 받는 **체력 비례 피해** 배수.
-	 *
-	 * ⚠ 상한이 아니다. 이 클래스는 실질적으로 "프로젝트 전역 밸런스 상수" 다.
-	 *
-	 * ⭐ 이 값이 없으면 게임이 무너진다 - 매그너스 W 하나가 최대 체력의 27.5% 다.
-	 *   보스는 체력이 압도적으로 높아서, 감쇠가 없으면 탱커 한 명이 보스를 혼자 녹인다.
-	 *   근거: Docs/0_GameDesign/Systems/몬스터_야생동물_역기획서.md §5.1
-	 *
-	 * ⚠ 0.5 는 **커뮤니티 자료 기반이고 공식 확인이 안 됐다.** 밸런싱하며 바뀔 값이라
-	 *   C++ 상수가 아니라 여기 둔다. 근거: Docs/4_Argument/7_비례피해_감쇠판별.md
-	 *
-	 * ⚠ **일반 피해가 아니라 비례 피해에만** 곱해진다. 일반 피해에 곱하면
-	 *   보스가 모든 피해를 절반만 받는 다른 게임이 된다.
-	 */
-	UPROPERTY(config, EditAnywhere, Category = "자체 결정값 (미확인)", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float BossProportionalDamageScale = 0.5f;
+	// (2026-09-24 삭제) BossProportionalDamageScale — 보스마다 값이 달라서(알파 70% · 오메가 60% · 위클라인 50%)
+	//   전역 배수 하나로 못 담는다 → 대상 어트리뷰트 UERAttributeSet::ProportionalDamageResist 로 옮겼다 (Argument 38 B · F12-05).
 
 	// ── 클램프하지 않는 것 ──────────────────────────────────
 	// 스킬 가속: **원작에서 상한 없음이 확인됐다.** 클램프하지 않는다.

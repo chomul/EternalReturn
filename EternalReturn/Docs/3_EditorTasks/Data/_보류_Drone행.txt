@@ -1,0 +1,5 @@
+# 드론 — 메시를 못 구해 F12-01 에서 뺐다 (사용자 2026-09-23). 원작에는 있다 (연구소 드론 · 배터리 확정 드랍 · 역기획서 몬스터 §1.1 · §4).
+# [확인] 사용자 2026-09-23: 원작 이름 '공격 드론' · 크레딧 3 · 최초 1일차 01:50 · 재생성 210초 — 되돌릴 때 Credit 열을 3 으로.
+# 열 순서는 현재 CSV 헤더(… LootRow, HuntExpBase, HuntExpPerLevel, Credit, Tier)에 맞췄다 — 사냥 숙련도는 (미확인)이라 0 (공통 설정 폴백).
+# 메시를 구하면 이 줄을 DT_Wildlife.csv 에 다시 넣고 `ER.Wild.ImportCSV` 로 애셋을 만든다.
+Drone,Drone,False,False,"(MaxHP=600.000000,HPRegen=0.000000,MaxVP=0.000000,VPRegen=0.000000,AttackPower=30.000000,Defense=20.000000,AttackSpeed=1.000000,MoveSpeed=3.000000,Sight=6.000000,AttackRange=2.500000,CritChance=0.000000)","(MaxHPPerLevel=40.000000,AttackPowerPerLevel=20.000000,DefensePerLevel=1.000000,HPRegenPerLevel=0.000000)",Wild_Drone,0,0,3,2

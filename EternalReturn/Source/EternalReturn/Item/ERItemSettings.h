@@ -40,7 +40,11 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "드롭", meta = (ClampMin = "0.1"))
 	float PickupRange = 2.f;
 
-	/** 시체(드롭 액터) 소멸 시간(초). 0 = 정리 안 함. ⚠ 자체 결정값 — 원작 (미확인) (§7.3). */
+	/** 플레이어 시체(드롭 액터) 소멸 시간(초). 0 = 정리 안 함. ⚠ 자체 결정값 — 원작 (미확인) (§7.3). */
 	UPROPERTY(config, EditAnywhere, Category = "드롭", meta = (ClampMin = "0"))
 	float DropLifetime = 0.f;
+
+	/** 야생동물 시체 지속 시간(초). **원작 1분 [확인]** (사용자 2026-09-23 · 역기획서 몬스터 §3.3 — 재등장 = 리스폰 + 이 시간). */
+	UPROPERTY(config, EditAnywhere, Category = "드롭", meta = (ClampMin = "0"))
+	float WildlifeCorpseSeconds = 60.f;
 };

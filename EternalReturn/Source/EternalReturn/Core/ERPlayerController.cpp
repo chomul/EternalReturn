@@ -3,6 +3,7 @@
 #include "Core/ERPlayerController.h"
 #include "Character/ERCharacterBase.h"
 #include "Character/ERInputConfig.h"
+#include "ERCollisionChannels.h"
 #include "EternalReturn.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
@@ -190,13 +191,21 @@ void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
 
 		// 조준 = 커서 아래 지점 + 액터. 못 찾으면 빈 핸들 — 서버가 시전자 정면으로 대신한다.
 		//
-		// ⚠ **ECC_Pawn 으로 먼저 잰다.** 캐릭터 캡슐(Pawn 프로파일)은 Visibility 를 **무시**해서
+		// ⚠ **Select 채널로 먼저 잰다.** 캐릭터 캡슐(Pawn 프로파일)은 Visibility 를 **무시**해서
 		//   Visibility 트레이스는 캐릭터 위에서도 바닥을 잡는다 — SingleTarget 평타가 항상 적중 0 이었다 (2026-09-14, E13).
 		//   메시가 있으면 메시가 Visibility 를 막아 주지만 그건 연출 메시에 판정을 맡기는 것이라 캡슐로 간다.
-		//   바닥도 Pawn 채널을 막으므로(걸을 수 있어야 하니) 캐릭터 위가 아니면 바닥 지점이 나온다. 그것도 못 찾으면 Visibility.
+		//   Select 는 클릭 전용 채널이다 (2026-09-23) — 실험체는 캡슐이, 야생동물은 **히트박스**가 막는다 (몸 충돌은 캡슐만).
+		//   지형은 Select 를 무시하므로 캐릭터 위가 아니면 아래 Visibility 트레이스가 바닥 지점을 준다.
+		// ⭐ **발동은 이동 명령을 취소한다** — 평타 · 스킬 전부 (사용자 2026-09-23).
+		//   안 멈추면 클릭 이동(SimpleMoveToLocation)의 경로가 살아 있어서, 시전이 끝나면 원래 가던 방향으로 다시 걸어간다.
+		//   ⚠ 이동은 **클라가 몬다** (E07) — 그래서 여기(소유 클라)서 멈춘다. 저격 모드 진입은 _Mode 도 멈춘다(중복 무해).
+		//   ⚠ 선판정을 통과했을 때만이다 — 쿨다운 중 연타로 걸음이 끊기면 안 된다.
+		//   돌진 · 도약(_SelfMove)은 ERForcedMove 가 따로 미므로 여기서 멈춰도 영향이 없다.
+		StopMovement();
+
 		FGameplayAbilityTargetDataHandle Aim;
 		FHitResult Hit;
-		if (GetHitResultUnderCursor(ECC_Pawn, /*bTraceComplex=*/false, Hit)
+		if (GetHitResultUnderCursor(ERCollisionChannel::Select, /*bTraceComplex=*/false, Hit)
 			|| GetHitResultUnderCursor(ECC_Visibility, /*bTraceComplex=*/false, Hit))
 		{
 			Aim = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(Hit);

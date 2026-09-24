@@ -23,10 +23,26 @@ public:
 	AERGameMode();
 
 	virtual void InitGameState() override;
+	virtual void StartPlay() override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Logout(AController* Exiting) override;
 
+	// ── 매치 시계 (F12-03 · Argument 34 A) — 서버 타이머로 페이즈를 넘긴다 (Tick 없음) ──
+	/** [서버] 1일차 낮부터 시작. */
+	void StartMatchClock();
+	/** [서버 · 디버그] 해당 페이즈의 처음으로 건너뛴다. */
+	void JumpToPhase(int32 InDay, bool bInNight);
+	/** [서버 · 디버그] 시계를 Seconds 만큼 앞으로 — 페이즈 경계를 넘으면 다음 페이즈로 이어진다. */
+	void SkipClock(float Seconds);
+
 protected:
+	void EnterPhase(int32 Index, float OverrideRemaining = -1.f);
+	void OnPhaseTimerExpired();
+
+	/** 지금 페이즈 (0 = 1일차 낮). -1 = 시계 전 · 끝남. */
+	int32 PhaseIndex = -1;
+	FTimerHandle PhaseTimer;
+
 	/**
 	 * 한 팀의 인원. 기본 3 (3인 × 8팀 = 24명).
 	 *

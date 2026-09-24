@@ -9,6 +9,37 @@ void AERGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(AERGameState, Teams);
+	DOREPLIFETIME(AERGameState, Day);
+	DOREPLIFETIME(AERGameState, bNight);
+	DOREPLIFETIME(AERGameState, PhaseDuration);
+	DOREPLIFETIME(AERGameState, PhaseEndServerTime);
+}
+
+void AERGameState::SetPhase(int32 InDay, bool bInNight, float InDuration, float InEndServerTime)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	const bool bChanged = Day != InDay || bNight != bInNight;
+	Day = InDay;
+	bNight = bInNight;
+	PhaseDuration = InDuration;
+	PhaseEndServerTime = InEndServerTime;
+	if (bChanged)
+	{
+		OnPhaseChanged.Broadcast(Day, bNight);   // 서버 쪽 구독자 (클라는 OnRep_Phase)
+	}
+}
+
+float AERGameState::GetPhaseRemaining() const
+{
+	return IsClockRunning() ? FMath::Max(0.f, PhaseEndServerTime - static_cast<float>(GetServerWorldTimeSeconds())) : 0.f;
+}
+
+void AERGameState::OnRep_Phase()
+{
+	OnPhaseChanged.Broadcast(Day, bNight);
 }
 
 void AERGameState::InitTeams(int32 TeamCount)

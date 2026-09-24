@@ -17,6 +17,8 @@
 #include "Item/ERInventoryComponent.h"
 #include "Item/ERItemData.h"
 #include "Item/ERItemDropActor.h"
+#include "Item/ERLootLibrary.h"
+#include "Item/ERLootTypes.h"
 #include "EngineUtils.h"
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERSkillDamageEffect.h"
@@ -438,3 +440,39 @@ static FAutoConsoleCommandWithWorldAndArgs GERItemShowCmd(
 static FAutoConsoleCommandWithWorldAndArgs GERItemListCmd(
 	TEXT("ER.Item.List"), TEXT("[임시] 아이템 테이블 전체"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ItemListCmd));
+
+// ER.Loot.Sim <행> [레벨] [횟수] — 루트 행을 n 번 굴려 아이템별 나온 횟수 · 비율 (F12-06 확률 · 레벨 조건 검증). 실제 드랍은 안 만든다.
+//   예: ER.Loot.Sim Wild_Bear 15 1000 → 특수 재료 각 ~2.9% · 포스 코어 ~1.9% / ER.Loot.Sim Wild_Bear 6 1000 → 0
+static void LootSimCmd(const TArray<FString>& Args, UWorld*)
+{
+	if (Args.Num() < 1)
+	{
+		UE_LOG(LogEternalReturn, Error, TEXT("[루트디버그] 사용법: ER.Loot.Sim <행> [레벨=1] [횟수=1000]"));
+		return;
+	}
+	const FERLootRow* Row = ERLoot::Find(FName(*Args[0]));
+	if (!Row)
+	{
+		return;   // Find 가 Error
+	}
+	const int32 Level = Args.Num() >= 2 ? FCString::Atoi(*Args[1]) : 1;
+	const int32 N = FMath::Clamp(Args.Num() >= 3 ? FCString::Atoi(*Args[2]) : 1000, 1, 100000);
+	TMap<FName, int32> Times;   // 그 아이템이 한 번이라도 나온 판 수
+	for (int32 i = 0; i < N; ++i)
+	{
+		TArray<FERItemInstance> Out;
+		ERLoot::Roll(*Row, Out, Level);
+		TSet<FName> Seen;
+		for (const FERItemInstance& I : Out) { Seen.Add(I.ItemId); }
+		for (const FName& Id : Seen) { Times.FindOrAdd(Id)++; }
+	}
+	Times.ValueSort([](int32 A, int32 B) { return A > B; });
+	UE_LOG(LogEternalReturn, Warning, TEXT("[루트디버그] %s · 레벨 %d · %d번 굴림 (RollChance %.4f)"), *Args[0], Level, N, Row->RollChance);
+	for (const TPair<FName, int32>& P : Times)
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("  %-18s %6d번  %6.2f%%"), *P.Key.ToString(), P.Value, 100.f * P.Value / N);
+	}
+}
+static FAutoConsoleCommandWithWorldAndArgs GERLootSimCmd(
+	TEXT("ER.Loot.Sim"), TEXT("[임시] 루트 행 n 번 굴려 비율 보기. ER.Loot.Sim <행> [레벨] [횟수]"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&LootSimCmd));

@@ -337,10 +337,10 @@ void UERGrowthComponent::OnPlayerKilled(int32 VictimLevel)
 		*FString::Printf(TEXT("실험체 처치 Lv.%d"), VictimLevel));
 }
 
-void UERGrowthComponent::OnWildlifeKilled(int32 WildlifeLevel)
+void UERGrowthComponent::OnWildlifeKilled(int32 WildlifeLevel, float HuntExp)
 {
-	const UERGrowthSettings& S = UERGrowthSettings::Get();
-	AddProficiencyExp(FERProficiencyKey::Of(EERProficiencyTrack::Hunt), S.HuntExpPerKillBase + S.HuntExpPerKillPerLevel * WildlifeLevel,
+	// ⭐ 금액은 **종 정의가 정한다** — 종별 기본값 + 레벨당 (역기획서 §1.2 [확인] 2026-09-23). 여기서 배율을 곱하지 않는다.
+	AddProficiencyExp(FERProficiencyKey::Of(EERProficiencyTrack::Hunt), FMath::Max(0.f, HuntExp),
 		*FString::Printf(TEXT("야생동물 처치 Lv.%d"), WildlifeLevel));
 }
 

@@ -206,6 +206,16 @@ public:
 	FGameplayAttributeData AttackRange;
 	ATTRIBUTE_ACCESSORS(UERAttributeSet, AttackRange)
 
+	/**
+	 * 체력 비례 피해 저항 (0~1). 받는 비례 피해 = 원래 × (1 − 이 값). **기본 0 = 감쇠 없음** (실험체 · 일반 야생동물).
+	 * 보스 [확인]: 알파 0.3 · 오메가 0.4 · 위클라인 0.5 — 종 정의(UERWildlifeData)가 스폰 때 넣는다 (F12-05 · Argument 38 B).
+	 * ⭐ "배율"(기본 1)이 아니라 "저항"(기본 0)인 이유: 초기화 GE 를 안 거치는 대상의 기본값 0 이 **감쇠 없음**이 되게 — 배율이면 0 = 비례 피해 무효라 위험하다.
+	 * 복제하지 않는다 — 데미지는 서버에서만 계산한다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Defense")
+	FGameplayAttributeData ProportionalDamageResist;
+	ATTRIBUTE_ACCESSORS(UERAttributeSet, ProportionalDamageResist)
+
 	// ── 공격 파생 ───────────────────────────────────────────
 	/** ⚠ 치명타는 기본 공격 채널에만 적용된다. 스킬에는 절대 붙지 않는다. */
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CritChance, Category = "Offense")

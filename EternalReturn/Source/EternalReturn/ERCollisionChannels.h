@@ -27,4 +27,14 @@ namespace ERCollisionChannel
 	 *   (Docs/Argument/2. 판정 콜리전 설계.md A-5 참조).
 	 */
 	inline constexpr ECollisionChannel SkillTarget = ECC_GameTraceChannel1;
+
+	/**
+	 * 커서 클릭 대상 선택.
+	 *
+	 * ⭐ 물리(Pawn)와 분리한 이유: 야생동물은 **부딪히는 몸은 캡슐만큼 작고 클릭 범위는 히트박스만큼 크다** (원작 관측, 사용자 2026-09-23).
+	 *   Pawn 채널 하나로는 둘을 못 나눈다 — 히트박스를 Pawn Block 으로 두면 플레이어가 몸에 막힌다.
+	 * 실험체 캡슐은 Pawn 프로파일(DefaultEngine.ini EditProfiles)에서 Block, 야생동물은 HitBox 만 Block 이다.
+	 * ⚠ 단일 트레이스라 **Block 이어야 잡힌다** (Overlap 은 안 잡힌다).
+	 */
+	inline constexpr ECollisionChannel Select = ECC_GameTraceChannel2;
 }
