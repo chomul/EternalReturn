@@ -11,6 +11,7 @@
 class UERSkillData;
 class USkeletalMesh;
 class UAnimInstance;
+class UERPresentationData;
 
 /**
  * 야생동물 한 종의 정의 (F12-01 · Argument 30 B). `UERCharacterData` 와 같은 모양 — 스탯 · 레벨당 · 스킬 · 연출 애셋.
@@ -158,4 +159,11 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "연출")
 	FVector HitBoxOffset = FVector::ZeroVector;
+
+	/**
+	 * 연출 표 (F12.5-01 · Argument 39) — 평타 · 사망 애니 … 변이 · 잠식은 **자기 스켈레톤**이라 DA 마다 따로 (`DA_Pres_Bear_Mutant`).
+	 * 하드 — 야생동물은 매 판 전부 나온다. `ER.Pres.Fill Wild` 가 채운다 (CSV 필드가 아니라 ImportCSV Force 가 안 덮는다).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "연출")
+	TObjectPtr<UERPresentationData> Presentation;
 };

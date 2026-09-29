@@ -89,6 +89,12 @@ void UERSkillModeState::Cleanup(const TCHAR* Reason)
 	{
 		PS->SetModeAttack(nullptr, 0);
 	}
+	// 연출 모드 태그 해제 — 붙일 때와 짝 (서버 loose + 복제)
+	if (ASC && F->Mode.PresentationMode.IsValid())
+	{
+		ASC->RemoveLooseGameplayTag(F->Mode.PresentationMode);
+		ASC->RemoveReplicatedLooseGameplayTag(F->Mode.PresentationMode);
+	}
 
 	// 미사용 해제 → 남은 쿨다운의 일부를 돌려준다 (원문 "쿨 50% 반환"). 쿨다운 GE 의 시작 시각을 앞당긴다.
 	float Refunded = 0.f;
@@ -154,6 +160,14 @@ void UERSkillFragment_Mode::OnExecute(FERSkillContext& Ctx) const
 
 	Ctx.PlayerState->SetModeAttack(Mode.AttackData, Ctx.Level);
 	Ctx.PlayerState->SetModeAimLimit(Ctx.AimDirection, Mode.AimHalfAngleDeg);   // 진입 시 바라본 방향 ± 반각 (저격 30°)
+
+	// 연출 모드 태그 (Argument 42 S1) — 복제분은 **받는 쪽에서만** 태그 개수에 반영된다 (GameplayEffectTypes.cpp FMinimalReplicationTagCountMap
+	//   · UpdateOwnerTagMap 은 NetSerialize 에서만) → 서버 자신(리슨 호스트 화면 · 서버 로직)용 loose 태그도 같이 붙인다.
+	if (Mode.PresentationMode.IsValid())
+	{
+		Ctx.ASC->AddLooseGameplayTag(Mode.PresentationMode);
+		Ctx.ASC->AddReplicatedLooseGameplayTag(Mode.PresentationMode);
+	}
 
 	// 해제 조건 셋 — 선딜(BeginCast)과 같은 AbilityTask · 같은 태그/이벤트 (Argument 17). 어빌리티와 함께 죽는다. 콜백은 상태 객체에.
 	UAbilityTask_WaitDelay* Wait = UAbilityTask_WaitDelay::WaitDelay(A, Mode.Duration);

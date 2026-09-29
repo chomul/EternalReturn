@@ -65,7 +65,10 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	/** [서버] 장착 칸이 바뀐 뒤 (장착 · 해제 · 교체). F10-04 숙련도 증폭 · F11 D 교체가 받는다. */
+	/**
+	 * [서버] 장착 칸이 바뀐 뒤 (장착 · 해제 · 교체). F10-04 숙련도 증폭 · F11 D 교체가 받는다.
+	 * [클라] **무기 칸만** OnRep_Equipped 가 쏜다 (F12.5-01 — 무기 연출 세트 로드). ⚠ 서버 로직 구독은 HasAuthority 안에서 건다 (지금 그렇다).
+	 */
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnEquippedChanged, EEREquipSlot /*Slot*/);
 	FOnEquippedChanged OnEquippedChanged;
 
@@ -181,8 +184,15 @@ protected:
 	 * 장착 칸. 전원에게 복제 — 남이 내 무기를 봐야 한다 (F11 무기 메시). 5칸이라 가볍다.
 	 * ⚠ 가방은 이것과 별도 배열이고 COND_OwnerOnly 다.
 	 */
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing = OnRep_Equipped)
 	TArray<FEREquippedSlot> Equipped;
+
+	/** [클라] 무기 칸이 바뀌었으면 OnEquippedChanged(Weapon) — 남의 무기 연출 세트도 로드해야 한다 (F12.5-01). */
+	UFUNCTION()
+	void OnRep_Equipped();
+
+	/** OnRep_Equipped 가 무기 변경을 가려내는 직전 값 (클라 전용). */
+	FName LastRepWeaponId;
 
 	/**
 	 * 가방. **`COND_OwnerOnly`** — 남의 가방을 복제하면 정보 유출이다 (UI_HUD 역기획서 :101).

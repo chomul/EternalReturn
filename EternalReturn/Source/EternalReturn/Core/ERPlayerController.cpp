@@ -15,6 +15,7 @@
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERGameplayAbility.h"
 #include "NavigationSystem.h"
+#include "Presentation/ERPresentationComponent.h"
 
 AERPlayerController::AERPlayerController()
 {
@@ -470,6 +471,13 @@ void AERPlayerController::OnMoveToCursor()
 	//   서버가 목적지를 거부하면 CMC 의 보정이 위치를 되돌린다.
 	StartMoveTo(Destination);
 
+	// 움직이면 액션 모션을 끊는다 (§5.1 "후딜 중 이동 = 애니메이션 캔슬"). 소유 클라가 로컬로 재생한 몫이라 여기서 — 서버 몫은 ServerSetDestination.
+	//   ⚠ 없으면 평타 모션이 끝까지 돌며 미끄러진다 (2026-09-27 사용자 "움직이면서 때린다").
+	if (UERPresentationComponent* Pres = GetPawn() ? GetPawn()->FindComponentByClass<UERPresentationComponent>() : nullptr)
+	{
+		Pres->StopActionAnim();
+	}
+
 	// ⚠ **원본 클릭 지점**을 보낸다. 서버는 클라의 계산을 믿지 않고 **직접 다시** 푼다.
 	//   같은 함수를 쓰므로 결과는 같다.
 	ServerSetDestination(Hit.ImpactPoint);
@@ -544,6 +552,12 @@ void AERPlayerController::ServerSetDestination_Implementation(const FVector& Des
 	//   PC 는 어빌리티 내부를 모른다 — 이벤트 태그 하나가 경계다 (Docs/4_Argument/17).
 	//   ⚠ 검증 ①(CC · Block.Movement)을 통과한 뒤라야 한다 — 이동 차단형 선딜은 여기까지 못 온다.
 	UAbilitySystemBlueprintLibrary::SendGameplayEventToActor(GetPawn(), ERTags::Event_Input_Move, FGameplayEventData());
+
+	// 서버 몫의 모션도 끊는다 → RepAnimMontageInfo 로 다른 클라에서도 멈춘다 (소유 클라는 OnMoveToCursor 에서 이미).
+	if (UERPresentationComponent* Pres = GetPawn()->FindComponentByClass<UERPresentationComponent>())
+	{
+		Pres->StopActionAnim();
+	}
 
 	// ── 서버가 무엇을 하고 무엇을 하지 않는가 ──────────────
 	//

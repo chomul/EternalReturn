@@ -62,6 +62,17 @@ void UERInventoryComponent::OnRep_Bag()
 	UE_LOG(LogEternalReturn, Verbose, TEXT("[인벤토리] %s 가방 복제 (%d칸)"), *GetNameSafe(GetOwner()), Bag.Num());
 }
 
+void UERInventoryComponent::OnRep_Equipped()
+{
+	// 무기 칸만 알린다 — 다른 칸의 클라 반응(UI)은 아직 없다.
+	const FName WeaponId = GetEquippedItem(EEREquipSlot::Weapon);
+	if (WeaponId != LastRepWeaponId)
+	{
+		LastRepWeaponId = WeaponId;
+		OnEquippedChanged.Broadcast(EEREquipSlot::Weapon);
+	}
+}
+
 // ─────────────────────────────────────────────────────────────
 // 가방
 // ─────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
+#include "GameplayCueInterface.h"  // 연출 큐 (F12.5-05) — 인터페이스라 전방 선언 불가
 #include "GameplayEffectTypes.h"   // FOnAttributeChangeData
 #include "GAS/ERSkillData.h"        // FERGrantedSkillHandles (USTRUCT 라 전방 선언 불가)
 #include "ERCharacterBase.generated.h"
@@ -14,6 +15,9 @@ class UERCharacterData;
 class UGameplayEffect;
 class UCameraComponent;
 class USpringArmComponent;
+class UERPresentationComponent;
+class UERForcedMoveComponent;
+class AERPlayerState;
 
 /**
  * 모든 실험체의 베이스.
@@ -26,7 +30,7 @@ class USpringArmComponent;
  *   각 기능이 자기 것을 들고 와서 붙는다.
  */
 UCLASS()
-class AERCharacterBase : public ACharacter, public IAbilitySystemInterface
+class AERCharacterBase : public ACharacter, public IAbilitySystemInterface, public IGameplayCueInterface
 {
 	GENERATED_BODY()
 
@@ -48,6 +52,10 @@ public:
 	 */
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
+	/** IGameplayCueInterface — 연출 큐(`GameplayCue.Pres.*`)를 연출 컴포넌트로 (F12.5-05 · Argument 49). 큐 애셋 없이 C++ 로 받는다 (GameplayCueManager.cpp:222). */
+	using IGameplayCueInterface::HandleGameplayCue;
+	virtual void HandleGameplayCue(UObject* Self, FGameplayTag GameplayCueTag, EGameplayCueEvent::Type EventType, const FGameplayCueParameters& Parameters) override;
+
 	/** 이 캐릭터의 실험체 데이터. 장착 검사(F08-02) 등이 읽는다. 초기화 전엔 nullptr 일 수 있다. */
 	const UERCharacterData* GetCharacterData() const { return CharacterData; }
 
@@ -56,55 +64,6 @@ public:
 
 	/** [클라] PlayerState 가 복제되어 도착한 뒤 */
 	virtual void OnRep_PlayerState() override;
-
-	/**
-	 * 강제 이동(넉백 · 그랩)을 각 머신에 전파한다.
-	 *
-	 * ⭐⭐ **왜 Multicast 인가**: CMC 의 `CurrentRootMotion` 은 복제되지 않는다
-	 *   (`CharacterMovementComponent.h:2677`, Transient). 서버에서만 소스를 붙이면
-	 *   클라는 모르고, 서버가 위치를 교정하면서 **러버밴딩이 난다** (역기획서 §3.5).
-	 *   그래서 파라미터를 뿌려 **각 머신이 같은 소스를 자기 CMC 에 붙인다.**
-	 *
-	 * ⚠ **시작·목표 위치를 그대로 보낸다.** 방향·거리를 보내고 각자 계산하게 하면
-	 *   기준 위치가 미세하게 달라 결과가 어긋난다.
-	 *
-	 * ⚠ Reliable 이다. 놓치면 그 클라만 캐릭터가 안 밀린다.
-	 *
-	 * 근거: Docs/4_Argument/13_강제이동_구현방식.md (방안 B)
-	 */
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_ForcedMove(const FVector& StartLocation, const FVector& TargetLocation, float Duration);
-
-	/** 강제 이동 중단(벽 충돌)을 전파한다. 서버가 판정하고 각 머신이 소스를 뗀다. */
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_StopForcedMove();
-
-	/**
-	 * [서버] 강제 이동 중 벽에 부딪혔다.
-	 *
-	 * ⭐ **무엇을 할지는 여기가 정하지 않는다.** 추가 피해·기절은 스킬마다 달라서
-	 *   (매그너스 E 와 레니 R 의 피해량이 다르다) 구독하는 쪽이 정한다.
-	 *   ⏸ F07 에서 스킬이 넉백을 걸 때 이걸 구독한다.
-	 *
-	 * 근거: 역기획서 §3.5 — "충돌 시 추가 피해 + 기절 부여 후 NetMulticast 로 연출"
-	 */
-	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnForcedMoveWallImpact, AERCharacterBase*, const FHitResult&);
-	FOnForcedMoveWallImpact OnForcedMoveWallImpact;
-
-	/**
-	 * [서버] 강제 이동 중 벽 감시를 시작한다. `ERForcedMove::ApplyForcedMove` 가 부른다.
-	 *
-	 * ⭐ **Tick 을 이때만 켠다.** 역기획서 §3.5 가 "이동 중 매 틱 지오메트리 트레이스" 를
-	 *   요구하는데, 넉백은 0.4초 남짓이라 평소에 Tick 을 돌릴 이유가 없다.
-	 *   (`CLAUDE.md` §2 — "Tick 은 정말 매 프레임 필요할 때만")
-	 */
-	void StartForcedMoveWatch();
-
-protected:
-	/** ⚠ 강제 이동 중에만 돈다. 평소에는 꺼져 있다 — StartForcedMoveWatch 참조. */
-	virtual void Tick(float DeltaSeconds) override;
-
-public:
 
 	/**
 	 * 카메라 오프셋을 리그에 반영한다. **컨트롤러가 부른다.**
@@ -194,6 +153,25 @@ protected:
 
 	/** 구독 해제용. 안 풀면 dangling 델리게이트가 남는다. */
 	FDelegateHandle MoveSpeedHandle;
+
+	/**
+	 * 연출 연결 (F12.5-01) — 기본 표 · 스킨 · 장착 무기를 연출 컴포넌트에 넣고, 스킨 · 무기 변경을 구독한다.
+	 * ⭐ 서버 · 클라 양쪽 (InitAbilityActorInfo 에서). 서버도 애니를 골라 재생하고, 클라는 메시 · 소리를 바꾼다.
+	 */
+	void InitPresentation(AERPlayerState* PS);
+	void ApplyPresentationSkin();
+	void ApplyPresentationWeapon();
+
+	FDelegateHandle SkinChangedHandle;
+	FDelegateHandle EquippedChangedHandle;
+
+	/** 연출 해석기 (Argument 39). 복제 없음 — 각 머신이 같은 스킨 · 무기로 같은 답을 낸다. */
+	UPROPERTY(VisibleAnywhere, Category = "연출")
+	TObjectPtr<UERPresentationComponent> Presentation;
+
+	/** 강제 이동 받기 — 전파 · 벽 감시 · 벽 충돌 알림 (Argument 44 K1 · 야생동물과 공용). */
+	UPROPERTY(VisibleAnywhere, Category = "전투")
+	TObjectPtr<UERForcedMoveComponent> ForcedMove;
 
 	/**
 	 * 이 캐릭터가 어느 실험체인지.

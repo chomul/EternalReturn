@@ -173,6 +173,30 @@ void AERPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 
 	// 남의 포인트는 볼 일이 없다. 24명분을 전원에게 보내지 않는다.
 	DOREPLIFETIME_CONDITION(AERPlayerState, SkillPoints, COND_OwnerOnly);
+
+	// 스킨은 모두가 본다 (F12.5-01).
+	DOREPLIFETIME(AERPlayerState, SkinIndex);
+	DOREPLIFETIME(AERPlayerState, GatherSeconds);   // 채집 포즈 재생 속도 (F12.5-04 · Argument 47)
+}
+
+// ─────────────────────────────────────────────────────────────
+// 스킨
+// ─────────────────────────────────────────────────────────────
+
+void AERPlayerState::SetSkinIndex(int32 NewIndex)
+{
+	if (!HasAuthority() || NewIndex < 0 || NewIndex == SkinIndex)
+	{
+		return;
+	}
+	SkinIndex = NewIndex;
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 스킨 인덱스 -> %d (서버)"), *GetName(), SkinIndex);
+	OnSkinChanged.Broadcast();   // 서버는 OnRep 이 안 불린다
+}
+
+void AERPlayerState::OnRep_SkinIndex()
+{
+	OnSkinChanged.Broadcast();
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@
 #include "Abilities/GameplayAbilityTargetTypes.h"
 #include "DrawDebugHelpers.h"
 #include "GAS/Fragment/ERSkillFragment.h"
+#include "Presentation/ERPresentationComponent.h"
 
 /** 눈으로 보는 디버그 — 판정 형상 · 적중 · 모드 상태를 서버 월드에 그린다 (리슨 서버 창). 0 = 끔. */
 static TAutoConsoleVariable<int32> CVarSkillDebugDraw(TEXT("ER.Skill.DebugDraw"), 0,
@@ -168,6 +169,27 @@ void UERGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 		}
 	}
 
+	// ⭐ 대상 지정(SingleTarget) — 사거리 안에 유효한 대상이 없으면 **없던 일** (쿨다운 · 모션 없음).
+	//   빈 땅을 찍어도 평타가 나가던 문제 (사용자 2026-09-28). 판정과 같은 질의(조준 보조 포함)로 미리 본다.
+	//   ⏸ 사거리 밖 대상에게 다가가서 치기(원작 우클릭 · A 공격 명령)는 F17.
+	if (Skill->Shape.Shape == ESkillTargeting::SingleTarget)
+	{
+		const AActor* Avatar = GetAvatarActorFromActorInfo();
+		const FTargetQuery Q = MakeTargetQuery(*Skill);
+		if (!Avatar || ERTargeting::Query(Avatar->GetWorld(), Q).IsEmpty())
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 보류 — 대상 없음 · 사거리 밖 (대상 %s · 거리 %.1fcm · 사거리 %.0fcm · 몸 Yaw %.0f — 조준 회전 뒤) · 쿨다운 · 모션 없음"),
+				*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(Skill), *GetNameSafe(Q.DesignatedTarget),
+				Q.DesignatedTarget && Avatar ? ERTargeting::SingleTargetDistance(Avatar, Q.Origin, Q.DesignatedTarget, true) : -1.f, Q.RangeMax * 100.f,
+				Avatar ? Avatar->GetActorRotation().Yaw : 0.f);
+			EndAbility(Handle, ActorInfo, ActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/true);
+			return;
+		}
+	}
+
+	// 연출 — 선딜 시작(또는 즉발) 순간. 판정 타이머와 따로 돈다 (Argument 36 "판정은 애니에 걸지 않는다").
+	PlaySkillAnim(*Skill);
+
 	if (Skill->CastTime > 0.f)
 	{
 		BeginCast(*Skill);       // [2] -> OnCastFinished -> ExecuteAndRecover
@@ -176,6 +198,40 @@ void UERGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	{
 		ExecuteAndRecover();     // 즉발: [4] -> [5]
 	}
+}
+
+void UERGameplayAbility::PlaySkillAnim(const UERSkillData& Skill)
+{
+	// 서버 = 복제 원천 · 소유 클라 = 엔진이 복제 재생을 안 해 주니 직접 (ServerInitiated 라 RTT/2 늦다 — 예측 안 함, CLAUDE.md §8).
+	if (!HasAuthority(&CurrentActivationInfo) && !IsLocallyControlled())
+	{
+		return;
+	}
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	UERPresentationComponent* Pres = Avatar ? Avatar->FindComponentByClass<UERPresentationComponent>() : nullptr;
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo();
+	if (!Pres || !ASC)
+	{
+		return;
+	}
+	const FGameplayTag Slot = GetSlotTag();
+	// 평타만 공속으로 빨라진다 (쿨다운 = 1/공속 · ERBasicAttackAbility.h).
+	const float AttackSpeed = Slot == ERTags::Ability_Slot_Attack ? ASC->GetNumericAttribute(UERAttributeSet::GetAttackSpeedAttribute()) : 0.f;
+	// 리캐스트(재입력) 발동이면 `<슬롯>.Recast` 를 먼저 — 동작표에 없으면 슬롯 키 (사용자 2026-09-29 단검 D)
+	FGameplayTag Key = Slot;
+	if (bActivatedByRecast)
+	{
+		static const TMap<FGameplayTag, FGameplayTag> RecastKeys = {
+			{ ERTags::Ability_Slot_Q, ERTags::Ability_Slot_Q_Recast }, { ERTags::Ability_Slot_W, ERTags::Ability_Slot_W_Recast },
+			{ ERTags::Ability_Slot_E, ERTags::Ability_Slot_E_Recast }, { ERTags::Ability_Slot_R, ERTags::Ability_Slot_R_Recast },
+			{ ERTags::Ability_Slot_D, ERTags::Ability_Slot_D_Recast },
+		};
+		if (const FGameplayTag* RecastKey = RecastKeys.Find(Slot); RecastKey && Pres->HasKey(*RecastKey))
+		{
+			Key = *RecastKey;
+		}
+	}
+	Pres->PlayAbilityAnim(this, CurrentActivationInfo, Key, AttackSpeed, Skill.CastTime + Skill.RecoveryTime);
 }
 
 void UERGameplayAbility::BeginCast(const UERSkillData& Skill)
@@ -456,21 +512,10 @@ const UERSkillData* UERGameplayAbility::GetExecSkill() const
 }
 
 
-void UERGameplayAbility::ExecuteSkill()
+FTargetQuery UERGameplayAbility::MakeTargetQuery(const UERSkillData& SkillRef) const
 {
-	const UERSkillData* Skill = GetExecSkill();
+	const UERSkillData* Skill = &SkillRef;
 	AActor* Avatar = GetAvatarActorFromActorInfo();
-	if (!Skill || !Avatar)
-	{
-		return;
-	}
-
-	// 조각이 판정을 대신했다 (장판).
-	if (ExecCtx.bSkipTargeting)
-	{
-		return;
-	}
-
 	// ⭐ F04 는 그대로 쓴다. 여기서는 디자이너 필드 + 조준을 FTargetQuery 로 옮길 뿐이다.
 	FTargetQuery Q;
 	Q.Shape = Skill->Shape.Shape;
@@ -513,6 +558,26 @@ void UERGameplayAbility::ExecuteSkill()
 		}
 	}
 
+	return Q;
+}
+
+void UERGameplayAbility::ExecuteSkill()
+{
+	const UERSkillData* Skill = GetExecSkill();
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	if (!Skill || !Avatar)
+	{
+		return;
+	}
+
+	// 조각이 판정을 대신했다 (장판).
+	if (ExecCtx.bSkipTargeting)
+	{
+		return;
+	}
+
+	const FTargetQuery Q = MakeTargetQuery(*Skill);
+
 	const FTargetResult Result = ERTargeting::Query(Avatar->GetWorld(), Q);
 	DrawSkillQuery(Avatar->GetWorld(), Q, Result, GetNameSafe(Skill));   // ER.Skill.DebugDraw 1
 
@@ -537,9 +602,50 @@ void UERGameplayAbility::ExecuteSkill()
 		ExecCtx.Targets = Targets;
 		ExecCtx.bHitAnything = !Targets.IsEmpty();
 		RunFragmentsTargets(ExecCtx, Targets);
+
+		// ⭐ 연출 큐 (F12.5-05 · Argument 49 W2) — **판정 시점 = 애니 타격 프레임** (선딜을 애니에 맞췄다 · 45). 소리 시점의 원천은 선딜 하나.
+		//   서버만 보낸다 → GAS 가 모든 클라에 (데디 서버는 재생 안 함). 2차 판정(ExecuteOther)에는 공격음 없음 — 시전 한 번에 한 번.
+		//   ⏸ 소유자 공격음 예측은 GAS 예측을 켤 때 (CLAUDE.md §8). 타격음은 예측하지 않는다 — 서버 확정만.
+		if (HasAuthority(&CurrentActivationInfo))
+		{
+			SendPresCues(*Skill, Avatar, Targets, /*bWithAttack=*/ExecOverride == nullptr);
+		}
 	}
 
 	OnTargetsResolved(Result);
+}
+
+void UERGameplayAbility::SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack) const
+{
+	FGameplayCueParameters Base;
+	Base.Instigator = Avatar;                       // 소리는 시전자의 무기 · 스킨에서 찾는다
+	Base.EffectCauser = Avatar;
+	Base.SourceObject = &Skill;
+	Base.AggregatedSourceTags.AddTag(Skill.SlotTag);   // 평타 / 스킬 구분 (키 Pres.Sfx.Attack · SkillCast …)
+
+	if (bWithAttack)
+	{
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponentFromActorInfo())
+		{
+			FGameplayCueParameters P = Base;
+			P.Location = Avatar->GetActorLocation();
+			ASC->ExecuteGameplayCue(ERTags::GameplayCue_Pres_Attack, P);
+		}
+	}
+	for (AActor* T : Targets)
+	{
+		UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(T);
+		if (!TargetASC)
+		{
+			continue;
+		}
+		// 타격 지점 — 대상 몸 표면의 시전자 쪽 (판정이 액터만 돌려준다 · HitResult 가 생기면 그 ImpactPoint 로)
+		FGameplayCueParameters P = Base;
+		const FVector ToCaster = (Avatar->GetActorLocation() - T->GetActorLocation()).GetSafeNormal2D();
+		P.Location = T->GetActorLocation() + ToCaster * T->GetSimpleCollisionRadius();
+		P.Normal = ToCaster;
+		TargetASC->ExecuteGameplayCue(ERTags::GameplayCue_Pres_Hit, P);
+	}
 }
 
 void UERGameplayAbility::ApplyOnTargets(const UERSkillData* Data, const TArray<AActor*>& Targets, float Scale, int32 LevelOverride, const UERSkillData* ShapeOwner, bool bEnhancement)
@@ -725,6 +831,11 @@ void UERGameplayAbility::EndAbility(const FGameplayAbilitySpecHandle Handle, con
 {
 	// 어떤 경로로 끝나든(정상 · 취소 · 외부 CancelAbility) 페이즈 GE 를 남기지 않는다.
 	RemovePhaseEffect();
+	// 취소(CC · 이동 취소형 선딜)면 모션도 끊는다. 정상 종료는 후딜 모션이 끝까지 간다. 이 어빌리티가 재생 중일 때만 멈춘다 (UGameplayAbility::MontageStop).
+	if (bWasCancelled)
+	{
+		MontageStop();
+	}
 	// 조각 OnEnd (모드 정리 · 쿨 반환 · 로컬 카메라 복구). 양쪽 — 조각이 Ctx.bAuthority 로 가른다. 두 번 불려도 조각이 알아서 무시한다.
 	{
 		FERSkillContext EndCtx = MakeContext(GetSkillData(Handle, ActorInfo), 1.f);

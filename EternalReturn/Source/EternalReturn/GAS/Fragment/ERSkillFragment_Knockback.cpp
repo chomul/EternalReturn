@@ -2,8 +2,9 @@
 
 #include "GAS/Fragment/ERSkillFragment_Knockback.h"
 
-#include "Character/ERCharacterBase.h"
 #include "Combat/ERForcedMove.h"
+#include "Combat/ERForcedMoveComponent.h"
+#include "GameFramework/Character.h"
 #include "EternalReturn.h"
 #include "GAS/ERGameplayAbility.h"
 #include "GAS/ERSkillData.h"
@@ -20,7 +21,8 @@ void UERSkillFragment_Knockback::OnTargetsResolved(FERSkillContext& Ctx, const T
 	const UERSkillData* WallSkill = WallImpactSkill;
 	for (AActor* Target : Targets)
 	{
-		AERCharacterBase* Character = Cast<AERCharacterBase>(Target);
+		// ⭐ 실험체 · 야생동물 모두 (Argument 44 — 전에는 AERCharacterBase 만 밀렸다).
+		ACharacter* Character = Cast<ACharacter>(Target);
 		if (!Character)
 		{
 			continue;
@@ -34,19 +36,21 @@ void UERSkillFragment_Knockback::OnTargetsResolved(FERSkillContext& Ctx, const T
 		{
 			continue;   // 면역 등 — ERForcedMove 가 로그
 		}
-		if (!WallSkill)
+		UERForcedMoveComponent* Receiver = Character->FindComponentByClass<UERForcedMoveComponent>();
+		if (!WallSkill || !Receiver)
 		{
-			continue;
+			continue;   // 컴포넌트 없음은 ERForcedMove 가 로그
 		}
 		// 벽 충돌 1회 구독 — 넉백 시간 + 0.5초 뒤 자동 해제. 약참조 — 어빌리티 · 대상이 사라져도 안전. 람다 타이머 (E19).
 		TWeakObjectPtr<UERGameplayAbility> WeakAbility(A);
-		TWeakObjectPtr<AERCharacterBase> WeakTarget(Character);
+		TWeakObjectPtr<UERForcedMoveComponent> WeakReceiver(Receiver);
+		TWeakObjectPtr<ACharacter> WeakTarget(Character);
 		TSharedRef<FDelegateHandle> HandleRef = MakeShared<FDelegateHandle>();
-		*HandleRef = Character->OnForcedMoveWallImpact.AddLambda([WeakAbility, WeakTarget, WallSkill, Level, HandleRef](AERCharacterBase* Hit, const FHitResult&)
+		*HandleRef = Receiver->OnForcedMoveWallImpact.AddLambda([WeakAbility, WeakTarget, WeakReceiver, WallSkill, Level, HandleRef](ACharacter* Hit, const FHitResult&)
 		{
 			UERGameplayAbility* Self = WeakAbility.Get();
-			AERCharacterBase* T = WeakTarget.Get();
-			if (T) { T->OnForcedMoveWallImpact.Remove(*HandleRef); }
+			ACharacter* T = WeakTarget.Get();
+			if (UERForcedMoveComponent* R = WeakReceiver.Get()) { R->OnForcedMoveWallImpact.Remove(*HandleRef); }
 			if (!Self || !T || Hit != T)
 			{
 				return;
@@ -55,9 +59,9 @@ void UERSkillFragment_Knockback::OnTargetsResolved(FERSkillContext& Ctx, const T
 			Self->ApplyOnTargets(WallSkill, { T }, 1.f, Level);
 		});
 		FTimerHandle Unused;
-		Character->GetWorldTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([WeakTarget, HandleRef]()
+		Character->GetWorldTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([WeakReceiver, HandleRef]()
 		{
-			if (AERCharacterBase* T = WeakTarget.Get()) { T->OnForcedMoveWallImpact.Remove(*HandleRef); }
+			if (UERForcedMoveComponent* R = WeakReceiver.Get()) { R->OnForcedMoveWallImpact.Remove(*HandleRef); }
 		}), Duration + 0.5f, false);
 		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 넉백 %s %.1fm / %.2f초%s"),
 			*GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), *GetNameSafe(Character), Distance, Duration,

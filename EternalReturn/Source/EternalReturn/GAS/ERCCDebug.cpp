@@ -13,8 +13,8 @@
 #include "GameFramework/PlayerController.h"
 #include "GameplayEffect.h"
 #include "GAS/ERCCLibrary.h"
-#include "Character/ERCharacterBase.h"
 #include "Combat/ERForcedMove.h"
+#include "Combat/ERForcedMoveComponent.h"
 #include "GameFramework/Character.h"
 #include "GAS/ERAttributeSet.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -317,12 +317,12 @@ void CCKnockback(const TArray<FString>& Args, UWorld* World)
 
 	// ⭐ 벽 충돌이 실제로 걸리는지 보려고 구독한다. ⚠ [임시] — F07 에서는 스킬이 구독한다.
 	//   람다가 캐릭터 수명을 넘지 않게 약한 참조로 잡는다.
-	if (AERCharacterBase* ERChar = Cast<AERCharacterBase>(Character))
+	if (UERForcedMoveComponent* Receiver = Character->FindComponentByClass<UERForcedMoveComponent>())
 	{
 		// ⚠ 중복 구독을 막는다. 넉백을 여러 번 치면 로그가 쌓인다.
-		ERChar->OnForcedMoveWallImpact.RemoveAll(ERChar);
-		ERChar->OnForcedMoveWallImpact.AddWeakLambda(ERChar,
-			[](AERCharacterBase* Hit, const FHitResult& HitResult)
+		Receiver->OnForcedMoveWallImpact.RemoveAll(Receiver);
+		Receiver->OnForcedMoveWallImpact.AddWeakLambda(Receiver,
+			[](ACharacter* Hit, const FHitResult& HitResult)
 			{
 				UE_LOG(LogEternalReturn, Warning,
 					TEXT("[CC디버그] ⭐ 벽 충돌! 대상=%s  위치=%s"),

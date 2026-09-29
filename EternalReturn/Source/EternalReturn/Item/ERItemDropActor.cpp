@@ -2,7 +2,11 @@
 
 #include "Item/ERItemDropActor.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "EternalReturn.h"
+#include "Core/ERPlayerState.h"
+#include "GAS/ERGameplayTags.h"
 #include "Item/ERItemSettings.h"
 #include "Item/ERLootLibrary.h"
 #include "Item/ERLootTypes.h"
@@ -102,6 +106,18 @@ bool AERItemDropActor::TryBeginGather(APlayerState* Who, float& OutSeconds)
 	Gatherer = Who;
 	if (OutSeconds > 0.f)
 	{
+		// ⭐ 채집 포즈 (F12.5-04 · Argument 46) — 저격 모드와 같은 길: 서버가 복제 loose 태그 → 각 머신 AnimBP. 연출 전용 태그, 아무것도 막지 않는다.
+		UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Who);
+		if (AERPlayerState* PS = Cast<AERPlayerState>(Who))
+		{
+			PS->SetGatherSeconds(OutSeconds);   // 포즈 애니를 이 시간에 맞춘다 (Argument 47 E2) — 태그보다 먼저
+		}
+		if (ASC && !bGatherTagged)
+		{
+			ASC->AddLooseGameplayTag(ERTags::State_Gathering);
+			ASC->AddReplicatedLooseGameplayTag(ERTags::State_Gathering);
+			bGatherTagged = true;
+		}
 		// 안전망 — 인벤토리 쪽 타이머가 못 끝내도 잠금이 영원히 남지 않게. 인벤토리가 먼저 EndGather 하면 이건 무해.
 		GetWorldTimerManager().SetTimer(GatherTimer, this, &AERItemDropActor::EndGather, OutSeconds + 1.f, false);
 	}
@@ -110,6 +126,15 @@ bool AERItemDropActor::TryBeginGather(APlayerState* Who, float& OutSeconds)
 
 void AERItemDropActor::EndGather()
 {
+	if (bGatherTagged)
+	{
+		if (UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Gatherer.Get()))
+		{
+			ASC->RemoveLooseGameplayTag(ERTags::State_Gathering);
+			ASC->RemoveReplicatedLooseGameplayTag(ERTags::State_Gathering);
+		}
+		bGatherTagged = false;
+	}
 	Gatherer.Reset();
 	GetWorldTimerManager().ClearTimer(GatherTimer);
 }

@@ -90,6 +90,8 @@ protected:
 	/** 서버 전용. 지금 캐고 있는 사람 — 한 번에 한 명 (원작 확인). 복제 안 함 — 표시는 F17. */
 	TWeakObjectPtr<APlayerState> Gatherer;
 	FTimerHandle GatherTimer;
+	/** 캐는 사람 ASC 에 State.Gathering(복제 loose)을 붙였나 — 뗄 때 짝을 맞춘다 (F12.5-04 · Argument 46). */
+	bool bGatherTagged = false;
 
 	/** 서버가 발급하는 번호. 디버그 · 로그가 액터를 가리킬 때 쓴다 (액터 이름은 머신마다 다르다). */
 	UPROPERTY(Replicated)

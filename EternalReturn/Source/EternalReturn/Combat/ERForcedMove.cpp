@@ -4,7 +4,7 @@
 
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
-#include "Character/ERCharacterBase.h"
+#include "Combat/ERForcedMoveComponent.h"
 // ⚠ 캡슐 크기를 읽으려면 완전 타입이 필요하다. Character.h 는 전방 선언만 준다 —
 //   빠뜨리면 error C2027 이 나고, 이어서 SweepSingleByChannel 의 인자 오류로 번진다 (E02 와 같은 부류).
 #include "Components/CapsuleComponent.h"
@@ -106,20 +106,19 @@ bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, f
 	//     방향·거리를 보내고 각자 계산하게 하면 위치가 미세하게 달라 어긋난다.
 	AddForcedMoveSource(Target, StartLocation, TargetLocation, Duration);
 
-	if (AERCharacterBase* ERCharacter = Cast<AERCharacterBase>(Target))
+	if (UERForcedMoveComponent* Receiver = Target->FindComponentByClass<UERForcedMoveComponent>())
 	{
-		ERCharacter->Multicast_ForcedMove(StartLocation, TargetLocation, Duration);
+		Receiver->Multicast_ForcedMove(StartLocation, TargetLocation, Duration);
 
 		// ⭐ 벽 감시를 켠다. 넉백이 끝나거나 벽에 닿으면 스스로 꺼진다.
 		//   역기획서 §3.5 — "이동 중 매 틱 지오메트리 트레이스"
-		ERCharacter->StartForcedMoveWatch();
+		Receiver->StartWatch();
 	}
 	else
 	{
-		// ⚠ 야생동물 등 AERCharacterBase 가 아닌 캐릭터는 아직 전파 경로가 없다.
-		//   서버에서만 움직이므로 클라에서 튄다. F12 에서 같은 RPC 를 붙인다.
+		// ⚠ 컴포넌트가 없으면 클라에 전파되지 않고 벽 감시도 없다 — 실험체 · 야생동물은 생성자에서 붙인다 (Argument 44).
 		UE_LOG(LogEternalReturn, Warning,
-			TEXT("[%s] %s 는 AERCharacterBase 가 아니라 클라에 전파되지 않는다."),
+			TEXT("[%s] %s 에 UERForcedMoveComponent 가 없다 — 클라에 전파되지 않는다."),
 			Label, *GetNameSafe(Target));
 	}
 

@@ -133,6 +133,13 @@ struct FERSkillMode
 	/** 진입 때 진행 중인 이동을 멈춘다 (저격: 켬 — 사용자 확인 2026-09-21 "이동 중에 쓰면 안 멈추고 쏜다"). 로컬 PC 의 경로 추적을 끊는다 — 이동은 클라가 구동한다 (E07). */
 	UPROPERTY(EditDefaultsOnly, meta = (EditCondition = "Duration > 0"))
 	bool bStopMovementOnEnter = true;
+
+	/**
+	 * 연출 모드 태그 (F12.5-03 · Argument 42 S1) — 진입 때 서버가 **복제 loose 태그**로 붙이고 해제 때 뗀다.
+	 * 각 머신의 연출 컴포넌트가 이 태그로 모드 세트(모드 자세 · 동작 덮어쓰기 · 해제 동작)를 찾는다. 비면 연출 모드 없음 (판정은 그대로).
+	 */
+	UPROPERTY(EditDefaultsOnly, meta = (Categories = "Mode", EditCondition = "Duration > 0"))
+	FGameplayTag PresentationMode;
 };
 
 /** 시전자 자기 이동 (F07-06). ERForcedMove::ApplySelfMove 로 실행 — 넉백과 같은 RootMotionSource 경로. */

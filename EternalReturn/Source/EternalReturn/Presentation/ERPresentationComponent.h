@@ -1,0 +1,163 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
+#include "Abilities/GameplayAbilityTypes.h"
+#include "Item/ERItemTypes.h"
+
+class UAbilitySystemComponent;
+class UAnimInstance;
+class UAnimMontage;
+class UAnimSequenceBase;
+class UERPresentationData;
+class UERSkinData;
+class UGameplayAbility;
+class USoundBase;
+struct FERPresentationEntry;
+struct FGameplayCueParameters;
+struct FStreamableHandle;
+
+#include "ERPresentationComponent.generated.h"
+
+/**
+ * 시전자 쪽 연출 해석기 (F12.5-01 · Argument 39). 실험체 · 야생동물이 하나씩 든다. **복제하지 않는다** — 각 머신이 같은 입력(스킨 · 무기)으로 같은 답을 낸다.
+ *
+ * 조회 순서 (좁은 것이 이긴다): 스킨(모드) > 스킨 > 모드 줄 > 무기 세트 > 캐릭터 기본 → 없으면 연출 없이 판정만. 모드 줄 = 모드 칸이 지금 모드와 같은 줄 (Argument 42 ⑤).
+ *   ⏸ ⑤ 무기 공통(효과음)은 05 에서.
+ *
+ * ⭐ P2 — 로드한 스킨 · 무기 세트를 UPROPERTY 로 **붙잡는다.** 소프트 참조는 GC 를 막지 않는다.
+ * ⭐ P3 — 스킨 · 무기가 바뀔 때만 해석해서 `Cache` 에 둔다. 재생은 해시 1회.
+ */
+UCLASS(ClassGroup = (ER))
+class ETERNALRETURN_API UERPresentationComponent : public UActorComponent
+{
+	GENERATED_BODY()
+
+public:
+	UERPresentationComponent();
+
+	/** 캐릭터 기본 표 (캐릭터 DA · 야생동물 DA 가 하드로 든 것). */
+	void SetBase(UERPresentationData* InBase);
+
+	/** 스킨 — 동기 로드 · 메시 · AnimBP 교체. 널이면 스킨 없음 (BP 기본). ⏸ P7 로딩 화면이 생기면 미리 로드. */
+	void SetSkin(const TSoftObjectPtr<UERSkinData>& SkinRef);
+
+	/** 장착 무기 계열 — 그 세트를 비동기 로드. 로드 전에는 ③ 이 비어 판정만 (기존 동작). */
+	void SetWeapon(EERWeaponType InWeapon);
+
+	/** 어빌리티 발동 애니. 서버(복제 원천)와 소유 클라가 부른다. AttackSpeed > 0 이면 평타 — 재생 속도 = max(1, 길이 × 공속). */
+	void PlayAbilityAnim(UGameplayAbility* Ability, const FGameplayAbilityActivationInfo& ActivationInfo, FGameplayTag Key, float AttackSpeed, float ExpectedSeconds);
+
+	/**
+	 * 이동이 수락됐다 — 액션 모션(평타 · 스킬)을 끊는다. 역기획서 §5.1 "후딜 중 이동 = 애니메이션 캔슬".
+	 * ⭐ 어빌리티가 이미 끝났어도 모션은 남아 있을 수 있어서(판정과 모션은 따로 돈다 · Argument 36) 어빌리티 취소만으로는 부족하다.
+	 * 부르는 곳: 소유 클라(로컬 재생분) · 서버(복제 원천 → 다른 클라). 이동 차단 중에는 수락 자체가 안 되니 부르지 않는다.
+	 */
+	void StopActionAnim();
+
+	/**
+	 * 모드 태그 구독 (Argument 42 S1) — ASC 의 `Mode` 부모 태그가 늘거나 줄면 활성 모드를 다시 고른다. 실험체만 (InitPresentation).
+	 * 채집 태그(`State.Gathering` · F12.5-04)도 같이 구독한다 — 같은 ASC · 같은 복제 loose 태그 경로.
+	 * 태그는 서버가 복제 loose 태그로 붙이므로 **각 머신이 스스로** 모드 자세 · 동작표를 바꾼다 (새 복제 없음).
+	 */
+	void BindModeTags(UAbilitySystemComponent* InASC);
+
+	/**
+	 * 사망 포즈 (04 · 야생동물). 서버는 사망 처리에서, 클라는 bDead OnRep 에서. 한 번뿐.
+	 * @param bSkipToEnd 늦게 relevant 된 클라 — 쓰러지는 과정 없이 누운 채로 (OnRep 이 BeginPlay 보다 먼저 불린 경우 · DataChannel.cpp:3331 → 3345)
+	 */
+	void SetDead(bool bSkipToEnd);
+
+	/**
+	 * 연출 큐 (F12.5-05 · Argument 49) — 액터(IGameplayCueInterface)가 넘긴다. 클라에서만 온다 (데디 서버는 GAS 가 막는다).
+	 * `GameplayCue.Pres.Attack` = 시전자 위치에 공격음 · `GameplayCue.Pres.Hit` = 타격 지점에 타격음. 소리는 **시전자**(Params.Instigator) 의 동작표에서 찾는다.
+	 */
+	void HandlePresCue(FGameplayTag CueTag, const FGameplayCueParameters& Params);
+
+	/** 이 키 줄의 소리 중 무작위 하나 (각 클라 로컬 · 복제 안 함). 없으면 nullptr. */
+	USoundBase* PickSound(FGameplayTag Key) const;
+
+	/** 지금 해석 결과에 이 키가 있나 (리캐스트 키 → 슬롯 키 대체 판단). */
+	bool HasKey(FGameplayTag Key) const { return Cache.Contains(Key); }
+
+	/** 해석 결과 전부 (ER.Pres.Show). */
+	void DumpToLog() const;
+
+protected:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	void Rebuild();
+	void OnWeaponSetLoaded(EERWeaponType LoadedWeapon);
+
+	void OnModeTagChanged(const FGameplayTag Tag, int32 NewCount);
+	/** 지금 붙은 모드 태그를 다시 읽는다. 바뀌면 Rebuild (모드 층 · AnimInstance bInMode). */
+	void RefreshMode();
+	/** 활성 모드 여부를 메인 AnimInstance(`UERAnimInstance`)에 — 진입 · 유지 · 해제는 상태머신이 (Argument 42 ④ MB). */
+	void PushModeToAnim();
+
+	/** 채집 태그가 붙으면 collect 를 **원래 속도로** 튼다 · 떨어지면 길고 부드러운 블렌드 아웃으로 일어선다 (Argument 47 F1). 이동하면 AnimInstance 가 끊는다. */
+	void OnGatherTagChanged(const FGameplayTag Tag, int32 NewCount);
+	/** 상태 포즈(사망)를 AnimInstance 에 (04). Rebuild 끝에서도 — 스킨 · 야생동물 AnimBP 교체 뒤 새 인스턴스에 다시 알린다. */
+	void PushStateToAnim();
+
+	/** 해석 결과에서 이 키의 첫 애니. */
+	UAnimSequenceBase* FindFirstAnim(FGameplayTag Key) const;
+
+	/** 무기 레이어를 메인 AnimBP 에 붙인다 (Argument 40 K2). Rebuild 끝에서 — 무기 · 세트 로드 · 스킨이 모두 여기를 지난다. */
+	void ApplyWeaponLayer();
+	/** @param bModePass false = 모드 칸이 빈 줄만 · true = 모드 칸 == 지금 모드인 줄만 (Argument 42 ⑤) */
+	void AddLayer(const TArray<FERPresentationEntry>& Entries, const TCHAR* Source, bool bFilterWeapon, bool bRequireWeaponMatch, bool bModePass);
+
+	UPROPERTY()
+	TObjectPtr<UERPresentationData> Base;
+
+	UPROPERTY()
+	TObjectPtr<UERSkinData> Skin;
+
+	/** P2 — 판 중에는 내리지 않는다 (바꾼 무기는 보통 계속 쓴다 · Argument 39 로드 시점). */
+	UPROPERTY()
+	TMap<EERWeaponType, TObjectPtr<UERPresentationData>> LoadedWeaponSets;
+
+	/** 무기 공통 (DT_WeaponClass.Presentation · Argument 49) — 세트처럼 붙잡는다. 조회의 가장 넓은 층. */
+	UPROPERTY()
+	TMap<EERWeaponType, TObjectPtr<UERPresentationData>> LoadedWeaponCommon;
+
+	EERWeaponType Weapon = EERWeaponType::None;
+
+	struct FResolved
+	{
+		const FERPresentationEntry* Entry = nullptr;
+		const TCHAR* Source = TEXT("");
+	};
+	/** P3 — 위 UPROPERTY 들이 붙잡은 DA 안의 항목을 가리킨다. Rebuild 가 전부 다시 만든다. */
+	TMap<FGameplayTag, FResolved> Cache;
+
+	/** 키별 다음 변형 (atk01 → atk02 → atk01). */
+	TMap<FGameplayTag, int32> NextVariant;
+
+	TSharedPtr<FStreamableHandle> PendingWeaponLoad;
+
+	/** 활성 모드 (없으면 빈 태그) — 모드 칸이 이것과 같은 줄이 평소 줄을 덮는다 (Argument 42 ⑤) · AnimInstance bInMode (④ MB). */
+	FGameplayTag ActiveMode;
+
+	TWeakObjectPtr<UAbilitySystemComponent> ModeASC;
+	FDelegateHandle ModeTagHandle;
+	FDelegateHandle GatherTagHandle;
+	/** 지금 트는 채집 몽타주 — 채집 끝에 이것만 멈춘다 (그 사이 스킬 몽타주가 덮었으면 이미 끝나 있다). */
+	TWeakObjectPtr<UAnimMontage> GatherMontage;
+
+	/** 상태 포즈 원천 — 컴포넌트가 들고 있다가 PushStateToAnim 이 넘긴다 (AnimInstance 가 바뀌어도 잃지 않게). */
+	bool bDead = false;
+	bool bDeathSkipToEnd = false;
+
+	/** 지금 붙어 있는 무기 레이어 — 바뀔 때 이것을 Unlink 한다. */
+	UPROPERTY()
+	TSubclassOf<UAnimInstance> LinkedLayer;
+
+	/** 재생 실패 Warning 은 액터당 한 번 (AnimBP 없는 야생동물이 평타마다 찍었다 — 2026-09-27 로그). */
+	bool bWarnedPlayFail = false;
+};

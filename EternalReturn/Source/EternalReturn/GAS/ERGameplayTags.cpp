@@ -18,6 +18,7 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Unstoppable,    "State.Unstoppable");
 	UE_DEFINE_GAMEPLAY_TAG(State_Untargetable,   "State.Untargetable");
 	UE_DEFINE_GAMEPLAY_TAG(State_CCImmune,       "State.CCImmune");
+	UE_DEFINE_GAMEPLAY_TAG(State_Gathering,      "State.Gathering");
 
 	UE_DEFINE_GAMEPLAY_TAG(State_Block_Movement,    "State.Block.Movement");
 	UE_DEFINE_GAMEPLAY_TAG(State_Block_BasicAttack, "State.Block.BasicAttack");
@@ -34,6 +35,11 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_R, "Ability.Slot.R");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_D, "Ability.Slot.D");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Attack, "Ability.Slot.Attack");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Q_Recast, "Ability.Slot.Q.Recast");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_W_Recast, "Ability.Slot.W.Recast");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_E_Recast, "Ability.Slot.E.Recast");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_R_Recast, "Ability.Slot.R.Recast");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_D_Recast, "Ability.Slot.D.Recast");
 
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_P, "Cooldown.Slot.P");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Q, "Cooldown.Slot.Q");
@@ -131,4 +137,21 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Shape_AoE,    "Damage.Shape.AoE");
 	UE_DEFINE_GAMEPLAY_TAG(Actor_Type_Wildlife, "Actor.Type.Wildlife");
 	UE_DEFINE_GAMEPLAY_TAG(Actor_Type_Boss,     "Actor.Type.Boss");
+
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_Dance, "Pres.Anim.Dance");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_Death, "Pres.Anim.Death");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_Gather, "Pres.Anim.Gather");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Attack, "Pres.Sfx.Attack");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Hit, "Pres.Sfx.Hit");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillCast, "Pres.Sfx.SkillCast");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit, "Pres.Sfx.SkillHit");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Die, "Pres.Sfx.Die");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Attack, "GameplayCue.Pres.Attack");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Hit, "GameplayCue.Pres.Hit");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeStart, "Pres.Anim.ModeStart");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeIdle, "Pres.Anim.ModeIdle");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeRun, "Pres.Anim.ModeRun");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeEnd, "Pres.Anim.ModeEnd");
+	UE_DEFINE_GAMEPLAY_TAG(Mode, "Mode");
+	UE_DEFINE_GAMEPLAY_TAG(Mode_Sniper, "Mode.Sniper");
 }

@@ -67,6 +67,7 @@ namespace ERTags
 	// ⏸ 대상 지정 불가 — 이미 적용된 효과 외 전부 무시. 요구 사례 없음. 자리만.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Untargetable);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CCImmune);       // 이동 방해 면역 (매그너스 R)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Gathering);      // 채집 중 — 연출 전용 (AnimBP 채집 포즈 · Argument 46). 아무것도 막지 않는다
 
 	// ── 차단 축 ────────────────────────────────────────────────
 	//
@@ -117,6 +118,14 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_R);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_D);       // 무기가 소유하는 슬롯
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Attack);  // 기본 공격 (F07-07). 무기가 소유 (F11). 포인트 대상 아님
+
+	// ── 리캐스트 연출 키 (F12.5-03 · 사용자 2026-09-29) ── 슬롯의 **자식**이라 슬롯 매칭(HasTagExact)에는 안 걸린다.
+	//   리캐스트(재입력)로 발동하면 연출 컴포넌트가 이 키를 먼저 찾고, 없으면 슬롯 키로 떨어진다 — 단검 D: 1번째(망토) 모션 없음 · 2번째 = 찌르기
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Q_Recast);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_W_Recast);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_E_Recast);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_R_Recast);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_D_Recast);
 
 	// ── 쿨다운 (슬롯별) ────────────────────────────────────────
 	// ⭐ 쿨다운 GE 는 UERCooldownEffect **하나**다. 어느 슬롯의 쿨인지는 이 태그가 말한다 —
@@ -271,4 +280,30 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Shape_AoE);   // 어빌리티가 GE Spec 에 붙인다
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Actor_Type_Wildlife); // 야생동물 액터가 갖는다
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Actor_Type_Boss);     // 보스 액터가 갖는다 (F12 책임)
+
+	// ── 연출 키 (F12.5 · Argument 39) ──────────────────────
+	// ⭐ 스킬 애니 키는 **슬롯 태그 그대로** (Ability.Slot.*). 여기는 스킬이 아닌 동작만.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Dance);   // 춤 — 스킨마다 다를 수 있다 (사용자 2026-09-24)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Death);   // 사망 (04 에서 재생)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Gather);  // 채집 — 공용 collect (04 · Argument 46)
+
+	// 소리 키 (F12.5-05 · Argument 49) — 동작표 줄의 키. 큐가 시전자의 연출 컴포넌트에서 이 키로 찾는다 (39 ④ K2)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Attack);     // 평타 공격음 (휘두름 · 총성)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Hit);        // 평타 타격음
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCast);  // 스킬 시전음 (D · Q~R)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit);   // 스킬 타격음
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Die);        // 사망음 (야생동물 — 사망 포즈와 같이 · 복제 상태 bDead 가 신호)
+
+	// 연출 큐 (F12.5-05 · Argument 49) — 네트워크 사건. 무엇을 틀지는 키가 정한다 (큐 ≠ 키)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Attack);   // 시전자 — 공격이 나갔다 (판정 시점)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Hit);      // 대상 — 맞았다 (서버 확정)
+	// 모드 상태 애니 (Argument 42 ⑥ A2) — 모드 칸이 있는 줄에만 쓴다. C++ 가 해석해 AnimInstance 에 넘기고 상태머신이 튼다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeStart);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeIdle);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeRun);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeEnd);
+
+	// ── 연출 모드 (Argument 42) ── 서버가 복제 loose 태그로 붙인다. 각 머신의 연출 컴포넌트가 부모(Mode)를 구독해 모드 세트를 고른다.
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode);              // 부모 — 구독용
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_Sniper);       // 저격총 D (카티야)
 }

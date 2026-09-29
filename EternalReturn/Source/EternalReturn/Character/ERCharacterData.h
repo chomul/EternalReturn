@@ -8,6 +8,8 @@
 #include "Item/ERItemTypes.h"
 
 class UERSkillData;
+class UERPresentationData;
+class UERSkinData;
 
 #include "ERCharacterData.generated.h"
 
@@ -77,4 +79,15 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "무기")
 	TMap<EERWeaponType, FERWeaponAmp> WeaponProficiencyAmp;
+
+	/**
+	 * 이 실험체의 기본 연출 (F12.5-01 · Argument 39 ③ T3) — 무기 무관 애니 · 춤 · 음성 + 무기 세트 목록(소프트).
+	 * ⭐ 하드 — 이 실험체가 판에 있으면 항상 필요하다. 스탯 DA 와 분리한 이유: 음성만 수백 줄이라 수치 편집 화면이 묻힌다.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "연출")
+	TObjectPtr<UERPresentationData> Presentation;
+
+	/** 스킨 (0 = 기본). ⭐ 소프트 — 고른 스킨만 로드. 인덱스 = PlayerState.SkinIndex. */
+	UPROPERTY(EditDefaultsOnly, Category = "연출")
+	TArray<TSoftObjectPtr<UERSkinData>> Skins;
 };

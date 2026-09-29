@@ -177,6 +177,27 @@ void WildTickCmd(const TArray<FString>& Args, UWorld* World)
 	UE_LOG(LogEternalReturn, Warning, TEXT("[야생동물디버그] %d마리 CMC · 메시 틱 %s"), N, bOn ? TEXT("켬") : TEXT("끔"));
 }
 
+// ER.Wild.NetCull <m> — 지금 있는 야생동물의 릴리번시 거리 (서버 창). F12.5-06 "늦게 relevant 된 클라도 누운 시체" 를
+//   작은 맵에서 재현하려고 — 기본 150m 는 PIE 맵보다 크다. 0 이면 엔진 기본값으로 되돌린다.
+void WildNetCullCmd(const TArray<FString>& Args, UWorld* World)
+{
+	if (!World || World->GetNetMode() == NM_Client || Args.Num() < 1)
+	{
+		UE_LOG(LogEternalReturn, Error, TEXT("[야생동물디버그] 사용법 (서버 창): ER.Wild.NetCull <m> (0 = 기본값)"));
+		return;
+	}
+	const float Meters = FCString::Atof(*Args[0]);
+	const float DistSq = Meters > 0.f ? FMath::Square(Meters * 100.f) : GetDefault<AERWildlifeCharacter>()->NetCullDistanceSquared;
+	int32 N = 0;
+	for (TActorIterator<AERWildlifeCharacter> It(World); It; ++It)
+	{
+		It->NetCullDistanceSquared = DistSq;
+		It->FlushNetDormancy();   // 잠든 액터도 새 거리로 다시 판정받게
+		++N;
+	}
+	UE_LOG(LogEternalReturn, Warning, TEXT("[야생동물디버그] %d마리 릴리번시 거리 %.0fm"), N, FMath::Sqrt(DistSq) / 100.f);
+}
+
 // ER.Wild.Clear — 모든 야생동물 제거 (서버 창)
 void WildClearCmd(const TArray<FString>& Args, UWorld* World)
 {
@@ -237,6 +258,9 @@ static FAutoConsoleCommandWithWorldAndArgs GERWildStressCmd(
 static FAutoConsoleCommandWithWorldAndArgs GERWildTickCmd(
 	TEXT("ER.Wild.Tick"), TEXT("[임시] 야생동물 CMC · 메시 틱 on/off (서버 창). ER.Wild.Tick <0|1>"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&WildTickCmd));
+static FAutoConsoleCommandWithWorldAndArgs GERWildNetCullCmd(
+	TEXT("ER.Wild.NetCull"), TEXT("[임시] 야생동물 릴리번시 거리 (서버 창) — 늦은 relevant 재현용. ER.Wild.NetCull <m> (0 = 기본값)"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&WildNetCullCmd));
 static FAutoConsoleCommandWithWorldAndArgs GERWildClearCmd(
 	TEXT("ER.Wild.Clear"), TEXT("[임시] 야생동물 전부 제거 (서버 창)"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&WildClearCmd));

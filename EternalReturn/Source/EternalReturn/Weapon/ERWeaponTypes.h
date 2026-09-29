@@ -8,6 +8,7 @@
 #include "ERWeaponTypes.generated.h"
 
 class UERSkillData;
+class UERPresentationData;
 
 /**
  * 무기 계열 한 행 (F11-01). RowName = 계열명 ("Hammer") — EERWeaponType 과 1:1. 초기 데이터는 8행 (역기획서 §4.2), enum 자리는 23.
@@ -44,4 +45,11 @@ struct FERWeaponClassRow : public FTableRowBase
 	/** D 강화 숙련도 레벨 — [i] 에 닿으면 스킬 레벨 +1. [확인] {10, 15} */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<int32> UpgradeLevels = { 10, 15 };
+
+	/**
+	 * 무기 공통 연출 (F12.5-05 · Argument 39 ④ · 49) — 캐릭터와 무관한 무기 소리 (공격음 · 타격음). 연출 조회의 **가장 넓은 층**.
+	 * 소프트 — 그 무기를 든 캐릭터가 있을 때만 로드 (연출 컴포넌트가 무기 세트와 같이). 비면 무기 소리 없음.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TSoftObjectPtr<UERPresentationData> Presentation;
 };

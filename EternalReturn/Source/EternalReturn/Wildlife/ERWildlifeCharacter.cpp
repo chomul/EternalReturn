@@ -5,6 +5,7 @@
 #include "AbilitySystemComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Components/BoxComponent.h"
+#include "Combat/ERForcedMoveComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "ERCollisionChannels.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -14,10 +15,12 @@
 #include "GAS/ERAttributeSet.h"
 #include "GAS/ERGameplayTags.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Core/ERPlayerState.h"
 #include "Growth/ERGrowthComponent.h"
 #include "Growth/ERGrowthSettings.h"
+#include "Presentation/ERPresentationComponent.h"
 #include "Item/ERItemDropActor.h"
 #include "Item/ERItemSettings.h"
 #include "Wildlife/ERWildlifeAIController.h"
@@ -64,6 +67,17 @@ AERWildlifeCharacter::AERWildlifeCharacter()
 	{
 		Move->bOrientRotationToMovement = true;
 	}
+
+	// 연출 (F12.5-01) · P1 — 안 그려지면 몽타주만 진행 (실험체와 같은 이유 · ERCharacterBase 생성자 참조).
+	Presentation = CreateDefaultSubobject<UERPresentationComponent>(TEXT("Presentation"));
+	ForcedMove = CreateDefaultSubobject<UERForcedMoveComponent>(TEXT("ForcedMove"));
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickMontagesWhenNotRendered;
+		// Argument 40 ⑤ — URO · 고정 바운드 (실험체와 같은 이유. 120~200 마리라 효과가 더 크다 — 역기획서 §7.3).
+		MeshComp->bEnableUpdateRateOptimizations = true;
+		MeshComp->bComponentUseFixedSkelBounds = true;
+	}
 }
 
 void AERWildlifeCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -73,6 +87,17 @@ void AERWildlifeCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 	DOREPLIFETIME(AERWildlifeCharacter, Level);   // 시간 성장(03)이 바꾼다
 	DOREPLIFETIME(AERWildlifeCharacter, Corpse);  // 죽은 뒤 한 번 — 클라가 클릭해서 열 대상
 	DOREPLIFETIME(AERWildlifeCharacter, bDead);   // 사망 포즈 (AnimBP) — Argument 36 "상태는 복제 값"
+	DOREPLIFETIME(AERWildlifeCharacter, DeathServerTime);   // bDead 와 같은 묶음으로 간다 — OnRep_Dead 때 이미 있다
+}
+
+void AERWildlifeCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// [진단] F12.5-06 스트레스 — 200마리 스폰 뒤 30초 안에 87마리만 남았다 (로그 없이 사라짐). 살아 있는 채로 지워지면 사유 · 위치를 남긴다
+	if (HasAuthority() && !bDead && EndPlayReason == EEndPlayReason::Destroyed)
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[야생동물] %s 살아 있는 채로 제거 — 위치 %s"), *GetName(), *GetActorLocation().ToCompactString());
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void AERWildlifeCharacter::BeginPlay()
@@ -235,6 +260,11 @@ void AERWildlifeCharacter::ApplyVisuals()
 			GetMesh()->SetAnimInstanceClass(Anim);
 		}
 	}
+	// 서버(Initialize) · 클라(OnRep_Data) 양쪽이 여기를 지난다.
+	if (Presentation)
+	{
+		Presentation->SetBase(Data->Presentation);
+	}
 }
 
 void AERWildlifeCharacter::SpawnCorpse()
@@ -324,11 +354,27 @@ void AERWildlifeCharacter::SetBodyActive(bool bActive)
 	const UERWildlifeSettings& S = UERWildlifeSettings::Get();
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
+		if (!bActive)
+		{
+			// ⭐ 잠들기 전에 속도를 0 으로 — AI StopMovement 는 경로만 끊고 CMC Velocity 는 남긴다. 그대로 틱을 끄면
+			//   마지막 복제 속도가 달리는 값으로 굳어 클라 AnimBP 가 계속 뛴다 (2026-09-28 "제자리로 돌아가면 Idle 로 안 돌아감").
+			const float Speed = Move->Velocity.Size2D();
+			if (Speed > 1.f)
+			{
+				UE_LOG(LogEternalReturn, Log, TEXT("[야생동물] %s 잠들기 전 속도 %.0f → 0"), *GetName(), Speed);
+			}
+			Move->StopMovementImmediately();
+		}
 		Move->SetComponentTickEnabled(bActive);
 	}
-	if (USkeletalMeshComponent* BodyMesh = GetMesh())
+	// 메시 틱은 **데디 서버에서만** 끈다 — 리슨 서버 호스트 화면에서는 대기 모션이 돌아야 한다 (끄면 포즈가 굳는다).
+	//   렌더 안 되는 메시의 비용은 P1(OnlyTickMontagesWhenNotRendered) · URO 가 이미 줄인다 (Argument 40 ⑤). ⏸ 06 에서 측정.
+	if (GetNetMode() == NM_DedicatedServer)
 	{
-		BodyMesh->SetComponentTickEnabled(bActive);
+		if (USkeletalMeshComponent* BodyMesh = GetMesh())
+		{
+			BodyMesh->SetComponentTickEnabled(bActive);
+		}
 	}
 	if (Data && Data->bBoss)
 	{
@@ -352,6 +398,34 @@ void AERWildlifeCharacter::OnRep_Data()
 	ApplyVisuals();
 }
 
+void AERWildlifeCharacter::HandleGameplayCue(UObject* Self, FGameplayTag GameplayCueTag, EGameplayCueEvent::Type EventType, const FGameplayCueParameters& Parameters)
+{
+	if (EventType == EGameplayCueEvent::Executed && Presentation)
+	{
+		Presentation->HandlePresCue(GameplayCueTag, Parameters);
+	}
+	IGameplayCueInterface::HandleGameplayCue(Self, GameplayCueTag, EventType, Parameters);
+}
+
+void AERWildlifeCharacter::OnRep_Dead()
+{
+	// ⭐ 새로 relevant 된 액터는 복제 값 OnRep 이 PostNetInit(BeginPlay) **전에** 불린다 (DataChannel.cpp:3331 → 3345)
+	//   → 그때 이미 죽어 있었다 = 쓰러지는 걸 못 본 클라. 누운 채로 시작한다 (Task 04 "늦게 relevant 된 클라도 누운 시체").
+	// ⭐ 그것만으로는 모자란다 — 대기 야생동물은 DormantAll 이라 **한 번 본 클라에 산 채로 남는다** (도먼시로 닫힌 채널은
+	//   클라가 액터를 지우지 않는다). 떠났다 돌아오면 BeginPlay 가 끝난 액터에 bDead 가 늦게 온다 (F12.5-06 2026-09-30 로그).
+	//   → 죽은 지 LateDeathSeconds 가 지났으면 누운 채로. 서버 시각 오차(핑 · GameState 동기 주기)보다 넉넉히 1초.
+	static constexpr float LateDeathSeconds = 1.f;
+	if (bDead && Presentation)
+	{
+		const AGameStateBase* GS = GetWorld()->GetGameState();
+		const float Elapsed = GS ? GS->GetServerWorldTimeSeconds() - DeathServerTime : 0.f;
+		const bool bLate = !HasActorBegunPlay() || Elapsed > LateDeathSeconds;
+		UE_LOG(LogEternalReturn, Log, TEXT("[야생동물] %s 사망 수신 — 죽은 지 %.2f초 · BeginPlay %s"),
+			*GetName(), Elapsed, HasActorBegunPlay() ? TEXT("끝남") : TEXT("전"));
+		Presentation->SetDead(bLate);
+	}
+}
+
 void AERWildlifeCharacter::HandleOutOfHealth(AActor* Killer)
 {
 	if (bDead)
@@ -359,6 +433,14 @@ void AERWildlifeCharacter::HandleOutOfHealth(AActor* Killer)
 		return;
 	}
 	bDead = true;
+	if (const AGameStateBase* GS = GetWorld()->GetGameState())
+	{
+		DeathServerTime = GS->GetServerWorldTimeSeconds();
+	}
+	if (Presentation)
+	{
+		Presentation->SetDead(false);   // 서버(리슨 호스트 화면) — 클라는 OnRep_Dead
+	}
 	UE_LOG(LogEternalReturn, Log, TEXT("[야생동물] %s (%s Lv.%d) 사망 — 처치 %s"), *GetName(), *GetNameSafe(Data), Level, *GetNameSafe(Killer));
 
 	if (AERWildlifeAIController* AI = GetController<AERWildlifeAIController>())

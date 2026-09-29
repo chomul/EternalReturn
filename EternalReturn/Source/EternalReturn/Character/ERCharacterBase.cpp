@@ -11,7 +11,11 @@
 #include "GAS/ERAttributeSet.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Character/ERCharacterMovementComponent.h"
-#include "Combat/ERForcedMove.h"
+#include "Combat/ERForcedMoveComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Item/ERInventoryComponent.h"
+#include "Item/ERItemData.h"
+#include "Presentation/ERPresentationComponent.h"
 
 AERCharacterBase::AERCharacterBase(const FObjectInitializer& ObjectInitializer)
 	// ⭐ 이동 차단이 들어 있는 CMC 로 교체한다. **생성자에서만 가능하다.**
@@ -19,11 +23,25 @@ AERCharacterBase::AERCharacterBase(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<UERCharacterMovementComponent>(
 		ACharacter::CharacterMovementComponentName))
 {
-	// ⚠ Tick 은 **강제 이동 중에만** 돈다. 평소에는 꺼져 있어 비용이 0 이다.
-	//   켜는 곳은 StartForcedMoveWatch 한 곳뿐이고, 벽에 닿거나 넉백이 끝나면 스스로 끈다.
-	//   (역기획서 §3.5 가 "이동 중 매 틱 트레이스" 를 요구한다 · CLAUDE.md §2)
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = false;
+	// ⚠ 액터 Tick 은 쓰지 않는다. 강제 이동 벽 감시는 ForcedMove 컴포넌트 Tick (그때만 켜진다 · Argument 44).
+	PrimaryActorTick.bCanEverTick = false;
+
+	ForcedMove = CreateDefaultSubobject<UERForcedMoveComponent>(TEXT("ForcedMove"));
+
+	// ── 연출 (F12.5-01 · Argument 39) ─────────────────────────
+	Presentation = CreateDefaultSubobject<UERPresentationComponent>(TEXT("Presentation"));
+
+	// ⭐ P1 — 안 그려지면 AnimBP 그래프를 돌리지 않고 몽타주만 진행한다 ("otherwise, just update montages and skip everything else",
+	//   SkinnedMeshComponent.h:88-92). 데디 서버는 아무것도 안 그리므로 전원 해당 — ACharacter 기본값 AlwaysTickPose(Character.cpp:105)는 전부 낭비였다.
+	//   몽타주는 계속 진행돼야 한다 — GAS 몽타주 복제가 서버의 재생 위치를 쓴다.
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickMontagesWhenNotRendered;
+		// Argument 40 ⑤ — 공식 문서 Animation Optimization: 멀리 · 작게 보이면 업데이트 빈도를 낮춘다(URO) ·
+		//   바운드를 물리 애셋으로 매 프레임 다시 재지 않는다 (판정은 캡슐 · HitBox 라 물리 애셋 바운드가 필요 없다).
+		MeshComp->bEnableUpdateRateOptimizations = true;
+		MeshComp->bComponentUseFixedSkelBounds = true;
+	}
 
 	// ── 탑다운 카메라 리그 ──────────────────────────────────
 	//
@@ -117,72 +135,13 @@ UAbilitySystemComponent* AERCharacterBase::GetAbilitySystemComponent() const
 	return ERPlayerState ? ERPlayerState->GetAbilitySystemComponent() : nullptr;
 }
 
-void AERCharacterBase::Multicast_ForcedMove_Implementation(
-	const FVector& StartLocation, const FVector& TargetLocation, float Duration)
+void AERCharacterBase::HandleGameplayCue(UObject* Self, FGameplayTag GameplayCueTag, EGameplayCueEvent::Type EventType, const FGameplayCueParameters& Parameters)
 {
-	// ⚠ 서버는 ApplyForcedMove 에서 이미 붙였다. 여기서 또 붙이면 두 번 들어간다.
-	//   (Multicast 는 서버에서도 실행된다)
-	if (HasAuthority())
+	if (EventType == EGameplayCueEvent::Executed && Presentation)
 	{
-		return;
+		Presentation->HandlePresCue(GameplayCueTag, Parameters);
 	}
-
-	ERForcedMove::AddForcedMoveSource(this, StartLocation, TargetLocation, Duration);
-}
-
-void AERCharacterBase::Multicast_StopForcedMove_Implementation()
-{
-	// ⚠ 여기는 서버도 포함해서 전부 뗀다 — 중단은 서버가 판정만 하고 제거는 각자 한다.
-	ERForcedMove::RemoveForcedMoveSource(this);
-}
-
-void AERCharacterBase::StartForcedMoveWatch()
-{
-	// ⚠ 벽 판정은 서버 권위다 (역기획서 §3.5). 클라는 Tick 을 돌 이유가 없다 —
-	//   클라는 Multicast 로 받은 소스를 CMC 가 재생하기만 한다.
-	if (HasAuthority())
-	{
-		SetActorTickEnabled(true);
-	}
-}
-
-void AERCharacterBase::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	// ⚠ 이 Tick 은 강제 이동 감시 전용이다. 다른 용도를 여기에 붙이지 않는다 —
-	//   붙이면 "평소엔 꺼져 있다" 는 전제가 깨진다.
-	if (!HasAuthority())
-	{
-		SetActorTickEnabled(false);
-		return;
-	}
-
-	// 넉백이 끝났으면(만료 또는 제거) 감시를 멈춘다.
-	if (!ERForcedMove::IsForcedMoving(this))
-	{
-		SetActorTickEnabled(false);
-		return;
-	}
-
-	FHitResult Hit;
-	if (!ERForcedMove::CheckWallImpact(this, Hit))
-	{
-		return;
-	}
-
-	// ── 벽에 부딪혔다 ─────────────────────────────────────
-	//
-	// ⭐ 서버가 판정하고, 각 머신이 소스를 뗀다. 클라가 따로 판정하지 않는다.
-	ERForcedMove::RemoveForcedMoveSource(this);
-	Multicast_StopForcedMove();
-	SetActorTickEnabled(false);
-
-	UE_LOG(LogEternalReturn, Verbose, TEXT("[강제이동] %s 가 벽에 부딪혔다 — %s"),
-		*GetNameSafe(this), *GetNameSafe(Hit.GetActor()));
-
-	// ⏸ 추가 피해·기절은 **구독하는 쪽**이 정한다 (스킬마다 다르다). F07 에서 붙는다.
-	OnForcedMoveWallImpact.Broadcast(this, Hit);
+	IGameplayCueInterface::HandleGameplayCue(Self, GameplayCueTag, EventType, Parameters);
 }
 
 void AERCharacterBase::PossessedBy(AController* NewController)
@@ -236,6 +195,78 @@ void AERCharacterBase::InitAbilityActorInfo()
 
 	// ⭐ 서버·클라 양쪽에서 건다. 각자 자기 CMC 를 갱신한다.
 	BindMoveSpeed();
+
+	InitPresentation(ERPlayerState);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 연출 (F12.5-01 · Argument 39)
+// ─────────────────────────────────────────────────────────────
+
+void AERCharacterBase::InitPresentation(AERPlayerState* PS)
+{
+	if (!Presentation || !PS || !CharacterData)
+	{
+		return;
+	}
+	Presentation->SetBase(CharacterData->Presentation);
+
+	// InitAbilityActorInfo 는 여러 번 불린다 — 구독은 한 번만.
+	if (!SkinChangedHandle.IsValid())
+	{
+		SkinChangedHandle = PS->OnSkinChanged.AddUObject(this, &AERCharacterBase::ApplyPresentationSkin);
+	}
+	if (!EquippedChangedHandle.IsValid())
+	{
+		if (UERInventoryComponent* Inventory = PS->GetInventory())
+		{
+			EquippedChangedHandle = Inventory->OnEquippedChanged.AddWeakLambda(this, [this](EEREquipSlot Slot)
+			{
+				if (Slot == EEREquipSlot::Weapon)
+				{
+					ApplyPresentationWeapon();
+				}
+			});
+		}
+	}
+	ApplyPresentationSkin();
+	ApplyPresentationWeapon();
+	// 모드 태그 (Argument 42) — ASC 는 PlayerState 에. 부활로 폰이 바뀌면 새 컴포넌트가 다시 구독 · 이미 모드 중이면 바로 반영
+	Presentation->BindModeTags(PS->GetAbilitySystemComponent());
+}
+
+void AERCharacterBase::ApplyPresentationSkin()
+{
+	const AERPlayerState* PS = GetPlayerState<AERPlayerState>();
+	if (!Presentation || !PS || !CharacterData)
+	{
+		return;
+	}
+	const int32 Index = PS->GetSkinIndex();
+	if (CharacterData->Skins.IsEmpty())
+	{
+		Presentation->SetSkin(nullptr);
+		return;
+	}
+	if (!CharacterData->Skins.IsValidIndex(Index))
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[연출] %s 스킨 인덱스 %d 가 %s 의 Skins(%d개) 밖 — 0 번으로"),
+			*GetName(), Index, *GetNameSafe(CharacterData), CharacterData->Skins.Num());
+	}
+	Presentation->SetSkin(CharacterData->Skins[CharacterData->Skins.IsValidIndex(Index) ? Index : 0]);
+}
+
+void AERCharacterBase::ApplyPresentationWeapon()
+{
+	const AERPlayerState* PS = GetPlayerState<AERPlayerState>();
+	const UERInventoryComponent* Inventory = PS ? PS->GetInventory() : nullptr;
+	if (!Presentation || !Inventory)
+	{
+		return;
+	}
+	const FName WeaponId = Inventory->GetEquippedItem(EEREquipSlot::Weapon);
+	const FERItemRow* Item = WeaponId.IsNone() ? nullptr : ERItem::Find(WeaponId);
+	Presentation->SetWeapon(Item ? Item->WeaponType : EERWeaponType::None);
 }
 
 void AERCharacterBase::SetCameraTargetOffset(const FVector& Offset)
@@ -306,6 +337,18 @@ void AERCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 		MoveSpeedHandle.Reset();
 	}
+
+	// 연출 구독 해제 — PlayerState 는 폰보다 오래 산다 (부활).
+	if (AERPlayerState* PS = GetPlayerState<AERPlayerState>())
+	{
+		PS->OnSkinChanged.Remove(SkinChangedHandle);
+		if (UERInventoryComponent* Inventory = PS->GetInventory())
+		{
+			Inventory->OnEquippedChanged.Remove(EquippedChangedHandle);
+		}
+	}
+	SkinChangedHandle.Reset();
+	EquippedChangedHandle.Reset();
 
 	Super::EndPlay(EndPlayReason);
 }

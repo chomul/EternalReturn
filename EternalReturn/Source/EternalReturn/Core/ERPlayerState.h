@@ -86,9 +86,37 @@ public:
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerLevelUpSkill(FGameplayTag SlotTag);
 
+	// ── 스킨 (F12.5-01 · Argument 39) ──────────────────────────
+	// ⭐ 전원 복제 — 남의 스킨도 보인다. 서버도 쓴다 (스킨 전용 애니를 서버가 골라 재생한다).
+	//   인덱스 = UERCharacterData.Skins. 로비가 생기기 전에는 ER.Skin.Set 이 바꾼다.
+
+	int32 GetSkinIndex() const { return SkinIndex; }
+
+	/** [서버] */
+	void SetSkinIndex(int32 NewIndex);
+
+	/** 스킨이 바뀌었다 — 서버는 SetSkinIndex, 클라는 OnRep 에서. 폰이 구독해 몸 · 연출을 바꾼다. */
+	DECLARE_MULTICAST_DELEGATE(FOnSkinChanged);
+	FOnSkinChanged OnSkinChanged;
+
+	// ── 채집 시간 (F12.5-04 · Argument 47 E2) ──────────────────
+	// ⭐ 채집 포즈 애니를 채집 시간에 맞춰 재생하려고 **모든 머신이** 알아야 한다. 채집 태그(State.Gathering)와 같은 액터(ASC 가 여기)라 같은 번들로 도착한다.
+	float GetGatherSeconds() const { return GatherSeconds; }
+	/** [서버] 채집 시작 때 (ERItemDropActor::TryBeginGather). */
+	void SetGatherSeconds(float Seconds) { GatherSeconds = Seconds; }
+
 protected:
 	UFUNCTION()
 	void OnRep_SkillPoints();
+
+	UFUNCTION()
+	void OnRep_SkinIndex();
+
+	UPROPERTY(ReplicatedUsing = OnRep_SkinIndex)
+	int32 SkinIndex = 0;
+
+	UPROPERTY(Replicated)
+	float GatherSeconds = 0.f;
 
 	/**
 	 * 초기화 전에는 유효하지 않을 수 있다. 호출부는 항상 null 검사를 한다.

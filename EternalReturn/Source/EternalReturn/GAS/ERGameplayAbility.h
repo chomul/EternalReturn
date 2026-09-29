@@ -6,6 +6,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "GameplayEffectTypes.h"
 #include "GAS/Fragment/ERSkillContext.h"
+#include "Combat/ERTargetingTypes.h"   // FTargetQuery (MakeTargetQuery 반환값)
 #include "ERGameplayAbility.generated.h"
 
 class UERSkillFragment;
@@ -130,6 +131,15 @@ protected:
 	 */
 	virtual void ExecuteSkill();
 
+	/** [서버] 연출 큐 (F12.5-05 · Argument 49 W2) — 판정 순간에 시전자 `GameplayCue.Pres.Attack` · 맞은 대상마다 `GameplayCue.Pres.Hit`. */
+	void SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack) const;
+
+	/**
+	 * 디자이너 필드 + 조준 → 판정 질의 (조준 보조 포함). 판정(ExecuteSkill)과 발동 전 대상 확인이 **같은 질의**를 쓴다 —
+	 * 다르면 "확인은 통과했는데 판정은 빗나감" 이 생긴다.
+	 */
+	FTargetQuery MakeTargetQuery(const UERSkillData& Skill) const;
+
 	/**
 	 * 판정 결과의 어빌리티 고유 후처리. 기본은 아무것도 안 한다 — 대상 효과는 조각(ExecuteSkill 이 먼저 돌린다).
 	 * 평타가 "강화 소비 · N회 버프 소비" 를 여기에 둔다. 판정 **계산**(F04)은 건드리지 않는다.
@@ -201,6 +211,12 @@ private:
 	UFUNCTION() void OnRecoveryCancelledByMove(FGameplayEventData Payload);
 
 	void ExecuteAndRecover();
+
+	/**
+	 * 발동 애니 (F12.5-01 · Argument 39) — 키 = 자기 슬롯 태그, 애니는 시전자의 연출 컴포넌트가 고른다. **판정 흐름과 무관** (Argument 36).
+	 * 서버(복제 원천) + 소유 클라 — 엔진은 복제된 몽타주를 소유자에게는 재생하지 않는다 (`AbilitySystemComponent_Abilities.cpp:3145` · 예측 전제).
+	 */
+	void PlaySkillAnim(const UERSkillData& Skill);
 
 	/** [3] 발동 요청의 TargetData 에서 조준점을 읽고 사거리 [RangeMin, RangeMax] 로 클램프한다. 없으면 시전자 정면. */
 	void ResolveAim(const FGameplayEventData* TriggerEventData, const UERSkillData& Skill);

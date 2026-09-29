@@ -6,6 +6,8 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "Combat/ERTargeting.h"
+#include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Core/ERGameState.h"
 #include "Core/ERPlayerState.h"
 #include "Core/ERTeamStatics.h"
@@ -306,6 +308,13 @@ void AERWildlifeAIController::Think()
 			StopMovement();
 			MoveTarget.Reset();
 		}
+		// [진단 · E31] AI 는 "안" 인데 어빌리티가 "밖" 으로 거부하는 경우 — 어빌리티는 발동 때 몸을 돌린 뒤 다시 잰다 (ResolveAim → 사전 확인).
+		//   히트박스가 비대칭인 종(박쥐: 날개 좌우 72 · 앞 끝 6 · 캡슐 34)에서 난다. 평소엔 Verbose — `log LogEternalReturn Verbose` 로 본다.
+		const UBoxComponent* Box = Me->FindComponentByClass<UBoxComponent>();
+		UE_LOG(LogEternalReturn, Verbose, TEXT("[야생AI] %s 공격 시도 — 거리 %.1fcm · 사거리 %.0fcm · 몸 Yaw %.0f (회전 전) · 히트박스 중심 %s 반크기 %s · 캡슐 반경 %.0f"),
+			*GetNameSafe(Me), Dist, RangeUU, Me->GetActorRotation().Yaw,
+			Box ? *Box->GetRelativeLocation().ToCompactString() : TEXT("-"), Box ? *Box->GetUnscaledBoxExtent().ToCompactString() : TEXT("-"),
+			Me->GetCapsuleComponent() ? Me->GetCapsuleComponent()->GetScaledCapsuleRadius() : -1.f);
 		TryAttack(Target);
 	}
 	else if (MoveTarget.Get() != Target || GetMoveStatus() != EPathFollowingStatus::Moving)
