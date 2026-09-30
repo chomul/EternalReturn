@@ -216,6 +216,14 @@ public:
 	FGameplayAttributeData ProportionalDamageResist;
 	ATTRIBUTE_ACCESSORS(UERAttributeSet, ProportionalDamageResist)
 
+	/**
+	 * 받는 피해 증가 (0.2 = +20%). **기본 0** — 좌절(멧돼지 돌진 실패 · F12.6-03) 같은 디버프 GE 가 더한다. 고정 피해에는 안 붙는다.
+	 * 적용: ERDamageExecution 8-c (채널 증감 뒤). 복제하지 않는다 — 데미지는 서버에서만 (ProportionalDamageResist 와 같다).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Defense")
+	FGameplayAttributeData DamageTakenAmp;
+	ATTRIBUTE_ACCESSORS(UERAttributeSet, DamageTakenAmp)
+
 	// ── 공격 파생 ───────────────────────────────────────────
 	/** ⚠ 치명타는 기본 공격 채널에만 적용된다. 스킬에는 절대 붙지 않는다. */
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CritChance, Category = "Offense")

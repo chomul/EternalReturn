@@ -13,7 +13,7 @@
 void UERSkillFragment_Knockback::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
 {
 	UERGameplayAbility* A = Ctx.Ability;
-	if (!A || !Ctx.Avatar || !Ctx.bAuthority || Distance <= 0.f)
+	if (!A || !Ctx.Avatar || !Ctx.bAuthority || (Distance <= 0.f && Height <= 0.f))
 	{
 		return;
 	}
@@ -27,12 +27,13 @@ void UERSkillFragment_Knockback::OnTargetsResolved(FERSkillContext& Ctx, const T
 		{
 			continue;
 		}
-		FVector Dir = Ctx.AimDirection; Dir.Z = 0.f;
+		FVector Dir = bAwayFromCaster ? (Character->GetActorLocation() - Ctx.Avatar->GetActorLocation()) : Ctx.AimDirection;
+		Dir.Z = 0.f;
 		if (!Dir.Normalize())
 		{
 			Dir = Ctx.Avatar->GetActorForwardVector();
 		}
-		if (!ERForcedMove::ApplyForcedMove(Character, Dir, Distance * 100.f, Duration))
+		if (!ERForcedMove::ApplyForcedMove(Character, Dir, Distance * 100.f, Duration, Height * 100.f))
 		{
 			continue;   // 면역 등 — ERForcedMove 가 로그
 		}
@@ -63,8 +64,8 @@ void UERSkillFragment_Knockback::OnTargetsResolved(FERSkillContext& Ctx, const T
 		{
 			if (UERForcedMoveComponent* R = WeakReceiver.Get()) { R->OnForcedMoveWallImpact.Remove(*HandleRef); }
 		}), Duration + 0.5f, false);
-		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 넉백 %s %.1fm / %.2f초%s"),
-			*GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), *GetNameSafe(Character), Distance, Duration,
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 넉백 %s %.1fm · 높이 %.1fm / %.2f초%s"),
+			*GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), *GetNameSafe(Character), Distance, Height, Duration,
 			WallSkill ? TEXT(" (벽 충돌 감시)") : TEXT(""));
 	}
 }

@@ -26,6 +26,9 @@ public:
 	/** 커밋 **전** — false 면 발동을 없던 일로 (쿨다운 · 리캐스트 창 소비 없음). 단검 블링크의 "대상 없음 · 사거리 밖". */
 	virtual bool CanExecute(const FERSkillContext& Ctx, FString& OutReason) const { return true; }
 
+	/** [서버] **선딜 시작** (CastTime > 0 인 스킬만 · 커밋 전) — 충전하는 동안의 자기 효과 (위클라인 「격리」 피해 감소 · 회복 · F12.6-06). */
+	virtual void OnCastStart(FERSkillContext& Ctx) const {}
+
 	/** [서버] 커밋 뒤 · 판정 **전** — 자기 이동 · 자기 버프 · 장판 스폰(bSkipTargeting) · 모드 진입(bKeepActive). */
 	virtual void OnExecute(FERSkillContext& Ctx) const {}
 

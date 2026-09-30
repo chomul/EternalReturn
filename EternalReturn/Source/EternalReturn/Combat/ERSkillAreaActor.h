@@ -25,10 +25,18 @@ public:
 
 	/** [서버] 스폰 직후 한 번. 첫 판정은 즉시. */
 	/** 장판 조각이 반경 · 주기 · 감쇠를 넘긴다. 펄스마다 Ability->ApplyOnTargets (피해 · 적중 효과 조각). */
-	void InitializeFromFragment(UERGameplayAbility* InAbility, const UERSkillData* InSkill, int32 InLevel, float InDuration, float InRadius, float InTickInterval, float InDecay);
+	void InitializeFromFragment(UERGameplayAbility* InAbility, const UERSkillData* InSkill, int32 InLevel, float InDuration, float InRadius, float InTickInterval, float InDecay,
+		const class UERSkillFragment_Area* InFragment = nullptr);
 
 protected:
 	void Pulse();
+	/** 시전자가 안에 있으면 CasterEffectsInside 를 다시 건다 (F12.6-06 신경 가스). */
+	void ApplyCasterInside(AActor* Caster);
+
+	/** 어그로 · 시전자 효과 옵션을 읽는 조각 (애셋 — 상태 없음). */
+	UPROPERTY()
+	TObjectPtr<const class UERSkillFragment_Area> Fragment;
+	float TickInterval = 1.f;
 
 	TWeakObjectPtr<UERGameplayAbility> Ability;
 	UPROPERTY()

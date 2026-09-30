@@ -13,6 +13,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/RootMotionSource.h"
 #include "GAS/ERGameplayTags.h"
+#include "TimerManager.h"
 
 namespace ERForcedMove
 {
@@ -25,10 +26,10 @@ namespace
 	 * 넉백과 자기 이동의 공통 몸통 — 검증, 소스 추가, Multicast, 벽 감시.
 	 * 면역 검사만 밖에 있다: ApplyForcedMove 는 하고, ApplySelfMove 는 안 한다 (F07-06).
 	 */
-	bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, const TCHAR* Label);
+	bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU, bool bPassThroughPawns, const TCHAR* Label);
 }
 
-bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration)
+bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU)
 {
 	if (!Target)
 	{
@@ -53,19 +54,19 @@ bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float Distanc
 		}
 	}
 
-	return StartMove(Target, Direction, DistanceUU, Duration, TEXT("강제이동"));
+	return StartMove(Target, Direction, DistanceUU, Duration, HeightUU, false, TEXT("강제이동"));
 }
 
-bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration)
+bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns)
 {
 	// 면역 검사 없음 — 자기가 시작하는 이동은 "방해" 가 아니다.
-	return StartMove(Target, Direction, DistanceUU, Duration, TEXT("자기이동"));
+	return StartMove(Target, Direction, DistanceUU, Duration, 0.f, bPassThroughPawns, TEXT("자기이동"));
 }
 
 namespace
 {
 
-bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, const TCHAR* Label)
+bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU, bool bPassThroughPawns, const TCHAR* Label)
 {
 	if (!Target)
 	{
@@ -82,7 +83,12 @@ bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, f
 		return false;
 	}
 
-	const FVector Dir = Direction.GetSafeNormal2D();
+	// 제자리 띄우기(거리 0 · 높이만 — 에어본)는 방향이 필요 없다 → 몸 앞으로 둔다
+	FVector Dir = Direction.GetSafeNormal2D();
+	if (Dir.IsNearlyZero() && DistanceUU <= 0.f && HeightUU > 0.f)
+	{
+		Dir = Target->GetActorForwardVector().GetSafeNormal2D();
+	}
 	if (Dir.IsNearlyZero())
 	{
 		// ⚠ 시전자와 대상이 정확히 겹치면 방향이 나오지 않는다. 실제로 일어난다.
@@ -91,7 +97,7 @@ bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, f
 		return false;
 	}
 
-	if (DistanceUU <= 0.f || Duration <= 0.f)
+	if ((DistanceUU <= 0.f && HeightUU <= 0.f) || Duration <= 0.f)
 	{
 		UE_LOG(LogEternalReturn, Error,
 			TEXT("[%s] 거리(%.1f) 또는 시간(%.2f)이 0 이하다."), Label, DistanceUU, Duration);
@@ -104,11 +110,11 @@ bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, f
 	// ⭐ 서버 자신에게 먼저 붙이고, 폰이 클라들에게 Multicast 로 뿌린다.
 	//   ⚠ 각 머신이 **같은 StartLocation/TargetLocation** 을 써야 결과가 같다.
 	//     방향·거리를 보내고 각자 계산하게 하면 위치가 미세하게 달라 어긋난다.
-	AddForcedMoveSource(Target, StartLocation, TargetLocation, Duration);
+	AddForcedMoveSource(Target, StartLocation, TargetLocation, Duration, HeightUU, bPassThroughPawns);
 
 	if (UERForcedMoveComponent* Receiver = Target->FindComponentByClass<UERForcedMoveComponent>())
 	{
-		Receiver->Multicast_ForcedMove(StartLocation, TargetLocation, Duration);
+		Receiver->Multicast_ForcedMove(StartLocation, TargetLocation, Duration, HeightUU, bPassThroughPawns);
 
 		// ⭐ 벽 감시를 켠다. 넉백이 끝나거나 벽에 닿으면 스스로 꺼진다.
 		//   역기획서 §3.5 — "이동 중 매 틱 지오메트리 트레이스"
@@ -122,8 +128,8 @@ bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, f
 			Label, *GetNameSafe(Target));
 	}
 
-	UE_LOG(LogEternalReturn, Log, TEXT("[%s] %s — %.0fcm, %.2f초, %s -> %s"),
-		Label, *GetNameSafe(Target), DistanceUU, Duration,
+	UE_LOG(LogEternalReturn, Log, TEXT("[%s] %s — %.0fcm%s, %.2f초, %s -> %s"),
+		Label, *GetNameSafe(Target), DistanceUU, HeightUU > 0.f ? *FString::Printf(TEXT(" · 높이 %.0fcm"), HeightUU) : TEXT(""), Duration,
 		*StartLocation.ToCompactString(), *TargetLocation.ToCompactString());
 
 	return true;
@@ -132,7 +138,7 @@ bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, f
 } // namespace
 
 void AddForcedMoveSource(ACharacter* Target, const FVector& StartLocation,
-	const FVector& TargetLocation, float Duration)
+	const FVector& TargetLocation, float Duration, float HeightUU, bool bPassThroughPawns)
 {
 	UCharacterMovementComponent* CMC = Target ? Target->GetCharacterMovement() : nullptr;
 	if (!CMC)
@@ -142,6 +148,66 @@ void AddForcedMoveSource(ACharacter* Target, const FVector& StartLocation,
 
 	// ⚠ 이미 걸려 있으면 먼저 뗀다. 두 개가 겹치면 서로 덮어써서 위치가 튄다.
 	RemoveForcedMoveSource(Target);
+
+	// 밀어내며 돌진 (멧돼지 · F12.6-04) — 캐릭터에 막혀 멈추지 않게 캡슐의 Pawn 채널만 이동 시간 동안 Overlap. 벽(WorldStatic)은 그대로 막힌다.
+	//   부딪힌 캐릭터를 미는 건 스킬의 넉백 조각.
+	//   모든 머신이 같은 시간에 바꿨다 되돌린다 (이 함수는 서버 · 멀티캐스트 양쪽에서 불린다). 원래 값으로 되돌린다.
+	if (bPassThroughPawns)
+	{
+		if (UCapsuleComponent* Capsule = Target->GetCapsuleComponent())
+		{
+			const ECollisionResponse Original = Capsule->GetCollisionResponseToChannel(ECC_Pawn);
+			Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+			TWeakObjectPtr<UCapsuleComponent> WeakCapsule(Capsule);
+			FTimerHandle Unused;
+			Target->GetWorldTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([WeakCapsule, Original]()
+			{
+				if (UCapsuleComponent* C = WeakCapsule.Get())
+				{
+					C->SetCollisionResponseToChannel(ECC_Pawn, Original);
+				}
+			}), Duration, false);
+		}
+	}
+
+	// [진단] F12.6-04 "넉백이 가끔 안 먹는다" (2026-09-30) — 서버 로그엔 매번 걸렸다. 머신마다 끝났을 때 실제로 얼마나 갔나를 남긴다.
+	{
+		TWeakObjectPtr<ACharacter> WeakTarget(Target);
+		const FVector Start2D(StartLocation.X, StartLocation.Y, 0.f);
+		const FVector Goal2D(TargetLocation.X, TargetLocation.Y, 0.f);
+		FTimerHandle Unused;
+		Target->GetWorldTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([WeakTarget, Start2D, Goal2D]()
+		{
+			if (const ACharacter* T = WeakTarget.Get())
+			{
+				const FVector Now2D(T->GetActorLocation().X, T->GetActorLocation().Y, 0.f);
+				UE_LOG(LogEternalReturn, Log, TEXT("[강제이동] %s 끝 — 간 거리 %.0fcm / 목표 %.0fcm · 오차 %.0fcm (%s · %s)"),
+					*T->GetName(), FVector::Dist(Start2D, Now2D), FVector::Dist(Start2D, Goal2D), FVector::Dist(Now2D, Goal2D),
+					T->HasAuthority() ? TEXT("서버") : TEXT("클라"), *UEnum::GetValueAsString(T->GetLocalRole()));
+			}
+		}), Duration + 0.05f, false);
+	}
+
+	// ⭐ 높이가 있으면 **포물선** (에어본 · 띄우며 밀기 — F12.6-04 멧돼지 돌진). 엔진 JumpForce — 거리 · 높이 · 시간.
+	//   설정은 GAS 태스크와 같게 (AbilityTask_ApplyRootMotionJumpForce.cpp:103-116). 뜨는 순간 Walking → Falling 은
+	//   UseSensitiveLiftoffCheck 가 맡는다 (MoveToForce 와 같은 플래그). 애니 애셋이 없어 몸만 뜬다 [자체].
+	if (HeightUU > 0.f)
+	{
+		const FVector Delta = FVector(TargetLocation - StartLocation) * FVector(1.f, 1.f, 0.f);
+		TSharedPtr<FRootMotionSource_JumpForce> Jump = MakeShared<FRootMotionSource_JumpForce>();
+		Jump->InstanceName = ForceName;
+		Jump->AccumulateMode = ERootMotionAccumulateMode::Override;
+		Jump->Settings.SetFlag(ERootMotionSourceSettingsFlags::UseSensitiveLiftoffCheck);
+		Jump->Priority = 1000;
+		Jump->Rotation = Delta.IsNearlyZero() ? Target->GetActorRotation() : Delta.Rotation();
+		Jump->Distance = Delta.Size();
+		Jump->Height = HeightUU;
+		Jump->Duration = Duration;
+		Jump->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::SetVelocity;
+		Jump->FinishVelocityParams.SetVelocity = FVector::ZeroVector;
+		CMC->ApplyRootMotionSource(Jump);
+		return;
+	}
 
 	TSharedPtr<FRootMotionSource_MoveToForce> MoveToForce = MakeShared<FRootMotionSource_MoveToForce>();
 	MoveToForce->InstanceName = ForceName;
@@ -236,8 +302,14 @@ bool CheckWallImpact(ACharacter* Target, FHitResult& OutHit)
 	Params.AddIgnoredActor(Target);
 
 	// ⚠ 캡슐로 스윕한다. 라인 트레이스는 캐릭터 옆구리가 걸리는 경우를 놓친다.
-	const bool bHit = Target->GetWorld()->SweepSingleByChannel(
-		OutHit, Start, End, FQuat::Identity, ECC_WorldStatic,
+	// ⭐⭐ **오브젝트 종류로** 찾는다 (벽 · 지형 = WorldStatic · WorldDynamic). 채널(ECC_WorldStatic)로 찾으면
+	//   캐릭터 캡슐(Pawn 프로필)도 그 채널을 막아서 **앞에 있는 캐릭터를 벽으로 잡는다** — 멧돼지 돌진이 맞은 사람과 서로를
+	//   벽으로 보고 둘 다 30~80cm 에서 멈췄다 (E34 · 2026-09-30 진단 로그 "간 거리 42cm / 목표 600cm").
+	FCollisionObjectQueryParams WallTypes;
+	WallTypes.AddObjectTypesToQuery(ECC_WorldStatic);
+	WallTypes.AddObjectTypesToQuery(ECC_WorldDynamic);
+	const bool bHit = Target->GetWorld()->SweepSingleByObjectType(
+		OutHit, Start, End, FQuat::Identity, WallTypes,
 		FCollisionShape::MakeCapsule(Capsule->GetScaledCapsuleRadius(),
 			Capsule->GetScaledCapsuleHalfHeight()),
 		Params);

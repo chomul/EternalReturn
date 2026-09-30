@@ -5,6 +5,8 @@
 namespace ERTags
 {
 	UE_DEFINE_GAMEPLAY_TAG(State_CC_Stun,        "State.CC.Stun");
+	UE_DEFINE_GAMEPLAY_TAG(State_CC_Airborne,    "State.CC.Airborne");
+	UE_DEFINE_GAMEPLAY_TAG(State_Frustrated,     "State.Frustrated");
 	UE_DEFINE_GAMEPLAY_TAG(State_CC_Snare,       "State.CC.Snare");
 	UE_DEFINE_GAMEPLAY_TAG(State_CC_Silence,     "State.CC.Silence");
 	UE_DEFINE_GAMEPLAY_TAG(State_CC_Disarm,      "State.CC.Disarm");
@@ -40,6 +42,11 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_E_Recast, "Ability.Slot.E.Recast");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_R_Recast, "Ability.Slot.R.Recast");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_D_Recast, "Ability.Slot.D.Recast");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Q_Execute, "Ability.Slot.Q.Execute");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_W_Execute, "Ability.Slot.W.Execute");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_E_Execute, "Ability.Slot.E.Execute");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_R_Execute, "Ability.Slot.R.Execute");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_D_Execute, "Ability.Slot.D.Execute");
 
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_P, "Cooldown.Slot.P");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Q, "Cooldown.Slot.Q");
@@ -146,6 +153,27 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillCast, "Pres.Sfx.SkillCast");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit, "Pres.Sfx.SkillHit");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Die, "Pres.Sfx.Die");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_Appear, "Pres.Anim.Appear");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_EndBattle, "Pres.Anim.EndBattle");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Appear, "Pres.Sfx.Appear");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Discover, "Pres.Sfx.Discover");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_BewareStart, "Pres.Anim.BewareStart");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_BewareLoop, "Pres.Anim.BewareLoop");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_BewareEnd, "Pres.Anim.BewareEnd");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_SleepStart, "Pres.Anim.SleepStart");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_SleepLoop, "Pres.Anim.SleepLoop");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_Wake, "Pres.Anim.Wake");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Beware, "Pres.Sfx.Beware");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillCast_Q, "Pres.Sfx.SkillCast.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillCast_W, "Pres.Sfx.SkillCast.W");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillCast_E, "Pres.Sfx.SkillCast.E");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillCast_R, "Pres.Sfx.SkillCast.R");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillCast_D, "Pres.Sfx.SkillCast.D");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit_Q, "Pres.Sfx.SkillHit.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit_W, "Pres.Sfx.SkillHit.W");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit_E, "Pres.Sfx.SkillHit.E");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit_R, "Pres.Sfx.SkillHit.R");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit_D, "Pres.Sfx.SkillHit.D");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Attack, "GameplayCue.Pres.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Hit, "GameplayCue.Pres.Hit");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeStart, "Pres.Anim.ModeStart");

@@ -64,7 +64,8 @@ namespace
 
 	/** CSV 가 가진 필드만 DA 에 쓴다 (연출 · 스킬은 손대지 않는다 — Force 로 덮어쓸 때 날아가면 안 된다). */
 	void ApplyCsvRow(UERWildlifeData* D, const TArray<FString>& F, int32 CType, int32 CMut, int32 CBoss, int32 CLoot, int32 CExp, int32 CTier, int32 CStats, int32 CGrow, int32 CExpLv, int32 CCredit,
-		int32 CVar, int32 CBaseLv, int32 CDay, int32 CNight, int32 CTimer, int32 CResp, int32 CRespSec, int32 CResist, int32 CHeal, int32 CSpawnAggro, int32 CTeamCredit)
+		int32 CVar, int32 CBaseLv, int32 CDay, int32 CNight, int32 CTimer, int32 CResp, int32 CRespSec, int32 CResist, int32 CHeal, int32 CSpawnAggro, int32 CTeamCredit,
+		int32 CBeware, int32 CSleep, int32 CTrack, int32 CRoams)
 	{
 		const int64 TypeValue = StaticEnum<EERWildlifeType>()->GetValueByNameString(F[CType].TrimStartAndEnd());
 		D->Type = TypeValue == INDEX_NONE ? EERWildlifeType::None : static_cast<EERWildlifeType>(TypeValue);
@@ -93,6 +94,10 @@ namespace
 		D->ProportionalDamageResist = FMath::Clamp(Num(CResist, 0.f), 0.f, 1.f);
 		D->bHealOnReturn = CHeal < 0 || F[CHeal].TrimStartAndEnd().ToBool();
 		D->SpawnAggroRadius = Num(CSpawnAggro, 0.f);
+		D->bCanBeware = CBeware >= 0 && F[CBeware].TrimStartAndEnd().ToBool();   // F12.6-02
+		D->bCanSleep = CSleep >= 0 && F[CSleep].TrimStartAndEnd().ToBool();
+		D->SpawnTrackRadius = Num(CTrack, 0.f);   // F12.6-06 위클라인 20
+		D->bRoams = CRoams >= 0 && F[CRoams].TrimStartAndEnd().ToBool();   // F12.6-06 위클라인
 		D->bBoss = CBoss >= 0 && F[CBoss].TrimStartAndEnd().ToBool();
 		D->LootRow = CLoot >= 0 ? FName(*F[CLoot].TrimStartAndEnd()) : NAME_None;
 		D->HuntExpBase = CExp >= 0 ? FCString::Atof(*F[CExp]) : 0.f;
@@ -135,7 +140,8 @@ namespace
 			CExpLv = Col(TEXT("HuntExpPerLevel")), CCredit = Col(TEXT("Credit")),
 			CVar = Col(TEXT("Variant")), CBaseLv = Col(TEXT("BaseLevel")), CDay = Col(TEXT("FirstSpawnDay")), CNight = Col(TEXT("bFirstSpawnNight")),
 			CTimer = Col(TEXT("FirstSpawnTimer")), CResp = Col(TEXT("RespawnMode")), CRespSec = Col(TEXT("RespawnSeconds")),
-			CResist = Col(TEXT("ProportionalDamageResist")), CHeal = Col(TEXT("bHealOnReturn")), CSpawnAggro = Col(TEXT("SpawnAggroRadius")), CTeamCredit = Col(TEXT("TeamCredit"));
+			CResist = Col(TEXT("ProportionalDamageResist")), CHeal = Col(TEXT("bHealOnReturn")), CSpawnAggro = Col(TEXT("SpawnAggroRadius")), CTeamCredit = Col(TEXT("TeamCredit")),
+			CBeware = Col(TEXT("bCanBeware")), CSleep = Col(TEXT("bCanSleep")), CTrack = Col(TEXT("SpawnTrackRadius")), CRoams = Col(TEXT("bRoams"));
 		if (CType < 0 || CStats < 0 || CGrow < 0)
 		{
 			UE_LOG(LogEternalReturn, Error, TEXT("[야생동물 임포트] 헤더에 Type · BaseStats · PerLevel 이 있어야 한다: %s"), *Lines[0]);
@@ -167,7 +173,7 @@ namespace
 					continue;
 				}
 				Exist->Modify();
-				ApplyCsvRow(Exist, F, CType, CMut, CBoss, CLoot, CExp, CTier, CStats, CGrow, CExpLv, CCredit, CVar, CBaseLv, CDay, CNight, CTimer, CResp, CRespSec, CResist, CHeal, CSpawnAggro, CTeamCredit);
+				ApplyCsvRow(Exist, F, CType, CMut, CBoss, CLoot, CExp, CTier, CStats, CGrow, CExpLv, CCredit, CVar, CBaseLv, CDay, CNight, CTimer, CResp, CRespSec, CResist, CHeal, CSpawnAggro, CTeamCredit, CBeware, CSleep, CTrack, CRoams);
 				Exist->MarkPackageDirty();
 				++Updated;
 				UE_LOG(LogEternalReturn, Log, TEXT("[야생동물 임포트] %s 덮어씀 — 체력 %.0f · 공격력 %.0f (+%.0f/Lv) · 루트 %s · 사냥 숙련도 %.0f (연출 · 스킬 유지)"),
@@ -177,7 +183,7 @@ namespace
 			UPackage* Package = CreatePackage(*PackagePath);
 			UERWildlifeData* D = NewObject<UERWildlifeData>(Package, *AssetName, RF_Public | RF_Standalone | RF_Transactional);
 
-			ApplyCsvRow(D, F, CType, CMut, CBoss, CLoot, CExp, CTier, CStats, CGrow, CExpLv, CCredit, CVar, CBaseLv, CDay, CNight, CTimer, CResp, CRespSec, CResist, CHeal, CSpawnAggro, CTeamCredit);
+			ApplyCsvRow(D, F, CType, CMut, CBoss, CLoot, CExp, CTier, CStats, CGrow, CExpLv, CCredit, CVar, CBaseLv, CDay, CNight, CTimer, CResp, CRespSec, CResist, CHeal, CSpawnAggro, CTeamCredit, CBeware, CSleep, CTrack, CRoams);
 
 			FAssetRegistryModule::AssetCreated(D);
 			Package->MarkPackageDirty();

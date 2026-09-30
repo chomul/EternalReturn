@@ -52,6 +52,24 @@ void UERAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		DeathStartPosition = bPendingDeathSkipToEnd ? DeathAnim->GetPlayLength() : 0.f;
 		bDead = true;
 	}
+	if (bPendingRest)
+	{
+		bPendingRest = false;
+		BewareStartAnim = PendingRestAnims[0]; BewareLoopAnim = PendingRestAnims[1]; BewareEndAnim = PendingRestAnims[2];
+		SleepStartAnim = PendingRestAnims[3];  SleepLoopAnim = PendingRestAnims[4];  WakeAnim = PendingRestAnims[5];
+		// 반복 애니가 없으면 그 자세에 들어가지 않는다 (들어가면 빈 포즈)
+		bBeware = bPendingBeware && BewareLoopAnim;
+		bSleep = bPendingSleep && SleepLoopAnim;
+		// 전이 조건 조합 (Fast Path — AnimBP 는 하나씩만 읽는다)
+		bBewareIntro = bBeware && BewareStartAnim && !bPendingRestSkipIntro;
+		bBewareDirect = bBeware && !bBewareIntro;
+		bBewareOutro = !bBeware && BewareEndAnim;
+		bBewareQuit = !bBeware && !BewareEndAnim;
+		bSleepIntro = bSleep && SleepStartAnim && !bPendingRestSkipIntro;
+		bSleepDirect = bSleep && !bSleepIntro;
+		bSleepOutro = !bSleep && WakeAnim;
+		bSleepQuit = !bSleep && !WakeAnim;
+	}
 }
 
 void UERAnimInstance::NativeThreadSafeUpdateAnimation(float DeltaSeconds)

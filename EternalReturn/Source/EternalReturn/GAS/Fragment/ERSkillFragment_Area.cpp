@@ -19,6 +19,6 @@ void UERSkillFragment_Area::OnExecute(FERSkillContext& Ctx) const
 	Params.Owner = Ctx.Avatar;
 	if (AERSkillAreaActor* Area = Ctx.Avatar->GetWorld()->SpawnActor<AERSkillAreaActor>(AERSkillAreaActor::StaticClass(), Ctx.AimPoint, FRotator::ZeroRotator, Params))
 	{
-		Area->InitializeFromFragment(Ctx.Ability, Ctx.Skill, Ctx.Level, Duration, Radius, TickInterval, DamageDecay);
+		Area->InitializeFromFragment(Ctx.Ability, Ctx.Skill, Ctx.Level, Duration, Radius, TickInterval, DamageDecay, this);
 	}
 }

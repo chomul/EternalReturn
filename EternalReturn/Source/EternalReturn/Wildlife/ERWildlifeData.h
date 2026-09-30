@@ -55,6 +55,28 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "AI", meta = (ClampMin = "0"))
 	float SpawnAggroRadius = 0.f;
 
+	/**
+	 * **생성 때 한 번** 이 반경(m) 안 가장 가까운 실험체를 **추적** — 다가가기만, 공격 안 함 (F12.6-06 위클라인 "실험 대상 추적" 20m).
+	 * 전투가 한 번이라도 시작되거나 대상이 반경 밖으로 나가면 풀린다 · 아무도 없거나 풀리면 순찰 (⏸ F13). 0 = 없음. CSV `SpawnTrackRadius`.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "AI", meta = (ClampMin = "0"))
+	float SpawnTrackRadius = 0.f;
+
+	/**
+	 * 맵을 돌아다니는 종 (F12.6-06 위클라인) — 고정 자리가 없어서 **전투가 시작된 지점 · 전투 중 맞은 지점이 새 자리**가 된다 (사용자 2026-10-01).
+	 * 어그로 한계(10m) · 귀환 목적지가 거기 기준. 리스폰 자리는 그대로. 순찰 자체는 ⏸ F13. CSV `bRoams`.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "AI")
+	bool bRoams = false;
+
+	/** 다가가면 경계 (F12.6-02 · 연출만). 원본에 beware 애니가 있는 종 — 닭 · 박쥐 · 멧돼지 · 들개 · 늑대 · 곰. CSV `bCanBeware`. */
+	UPROPERTY(EditDefaultsOnly, Category = "AI")
+	bool bCanBeware = false;
+
+	/** 근처에 아무도 없으면 잔다 (F12.6-02 · 연출만). 원본에 sleep 애니가 있는 종 — 곰 · 늑대 · 들개. CSV `bCanSleep`. */
+	UPROPERTY(EditDefaultsOnly, Category = "AI")
+	bool bCanSleep = false;
+
 	/** 티어 (추정 1~4 · 보스 5). 스폰 · 표시용. */
 	UPROPERTY(EditDefaultsOnly, Category = "분류", meta = (ClampMin = "0"))
 	int32 Tier = 1;

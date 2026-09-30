@@ -142,6 +142,19 @@ struct FERSkillMode
 	FGameplayTag PresentationMode;
 };
 
+/** 야생동물 · 보스 AI 가 이 스킬을 언제 쓰나 (F12.6-03 · Argument 51 K1). 실험체는 입력으로 쓰니 None. 쿨다운은 GAS 가 거른다. */
+UENUM()
+enum class EERAIUse : uint8
+{
+	None,
+	/** 전투 중 대상이 AIUseRange 안이면 — 평타보다 먼저 시도 (쿨이면 평타). 멧돼지 돌진 · 곰 강타 · 들개 깨물기 */
+	InRange,
+	/** 같은 무리의 다른 개체가 죽으면 (자기 대상 · 조준 없음). 늑대 울부짖기 */
+	OnAllyDeath,
+	/** 움직이는 동안 (추적 · 전투 · 귀환) 쿨이 돌 때마다 자기 자리에 (위클라인 유해 물질 — 지나간 경로에 독 · F12.6-06) */
+	WhileMoving,
+};
+
 /** 시전자 자기 이동 (F07-06). ERForcedMove::ApplySelfMove 로 실행 — 넉백과 같은 RootMotionSource 경로. */
 UENUM()
 enum class ESkillSelfMove : uint8
@@ -185,6 +198,13 @@ struct FERSkillShape
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
 	float RadiusOuter = 0.f;
 
+	/**
+	 * 자기 원(SelfRadius · DualRadius)의 중심을 **조준 방향 앞으로** 이만큼(m) 옮긴다. 0 = 시전자 중심 (지금까지와 같다).
+	 * 곰 지면 강타 — 앞발이 내려친 자리를 중심으로 한 원 (F12.6-04 · 사용자 2026-09-30). 반경은 RangeMax.
+	 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "Shape == ESkillTargeting::SelfRadius || Shape == ESkillTargeting::DualRadius"))
+	float ForwardOffset = 0.f;
+
 	/** DualRadius 중앙 반경 (m) — 레니 W 1.25 */
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
 	float RadiusInner = 0.f;
@@ -200,6 +220,14 @@ struct FERSkillShape
 	/** Projectile 관통. 관통이면 광역으로 본다 (아래 IsAoE). */
 	UPROPERTY(EditDefaultsOnly)
 	bool bPenetrate = false;
+
+	/** Projectile 발 수 — 조준 방향을 가운데로 SpreadAngleDeg 만큼씩 부채처럼 편다. 1 = 한 발 (지금까지와 같다). 위클라인 트리플렛 코드 = 3 (F12.6-06). 같은 대상은 한 번만 맞는다. */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "1", EditCondition = "Shape == ESkillTargeting::Projectile"))
+	int32 ProjectileCount = 1;
+
+	/** 발 사이 각도(도). ProjectileCount > 1 일 때. `[자체]` */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", ClampMax = "180", EditCondition = "Shape == ESkillTargeting::Projectile"))
+	float SpreadAngleDeg = 15.f;
 
 	/**
 	 * SingleTarget 조준 보조 (m). 커서 아래에 유효한 대상이 없으면 조준점 반경 안에서 **가장 가까운 대상**을 대신 잡는다.
@@ -272,6 +300,11 @@ public:
 
 	/** 레벨별 배열에서 값 하나. 비면 0, 레벨이 배열보다 크면 마지막 값. 레벨은 1부터. Cooldowns · Costs 도 이걸 쓴다. */
 	static float LevelValue(const TArray<float>& Values, int32 Level);
+	/**
+	 * 음수를 자르지 않는 판 — GE 크기(SetByCaller.OnHitMagnitude)용. 치유 감소(HealAmp −0.4) 처럼 **깎는** 효과가 음수다.
+	 * ⚠ LevelValue 는 0 으로 자른다 → −0.4 가 0 이 되어 크기가 안 넘어갔다 (F12.6-04 들개 깨물기 · 로그 "GetMagnitude … not yet been set").
+	 */
+	static float LevelValueSigned(const TArray<float>& Values, int32 Level);
 
 	// ── 적중 시 CC (F07-07) ────────────────────────────────────
 	// ApplySkillDamage 가 피해 직후 ERCC::ApplyCC 로 건다 (F06 그대로 — 저항 · 면역 · 둔화 재계산 전부 거기서).
@@ -307,6 +340,15 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "시전", meta = (EditCondition = "CastTime > 0"))
 	bool bMoveCancelsCast = false;
+
+	// ── AI (F12.6-03 · 야생동물 · 보스) ─────────────────────────
+	/** AI 가 언제 쓰나. None = AI 가 안 쓴다 (평타 슬롯은 AI 가 따로 친다). */
+	UPROPERTY(EditDefaultsOnly, Category = "AI")
+	EERAIUse AIUse = EERAIUse::None;
+
+	/** InRange — 대상이 이 거리(m, 시전자 몸 끝 → 대상 표면 · 평타 사거리와 같은 잼) 안이면 쓴다 `[자체]`. 0 = Shape.RangeMax. */
+	UPROPERTY(EditDefaultsOnly, Category = "AI", meta = (ClampMin = "0", EditCondition = "AIUse == EERAIUse::InRange"))
+	float AIUseRange = 0.f;
 
 	// ── 레벨 규칙 ─────────────────────────────────────────────
 	// ⭐ **슬롯이 아니라 스킬이 자기 규칙을 든다.** "R 은 3" 이 아니다 — 궁이 4레벨인 실험체,

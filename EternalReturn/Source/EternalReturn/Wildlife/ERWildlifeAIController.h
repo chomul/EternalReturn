@@ -18,6 +18,12 @@ enum class EERWildlifeAIState : uint8
 	Combat,
 	/** 자리로 돌아간다. 맞아도 돌아서지 않는다 · 도착하면 체력 회복 → Idle. */
 	Return,
+	/**
+	 * 실험 대상 추적 (F12.6-06 위클라인) — **생성 때 한 번만** 반경 안 가장 가까운 실험체에게 **다가가기만** 한다 (공격 안 함).
+	 * 전투가 한 번이라도 시작되거나 대상이 반경 밖으로 나가면 풀린다 (나무위키 · 사용자 확인 2026-10-01).
+	 * 풀리면 · 처음부터 아무도 없으면 **정해진 경로 순찰** (⏸ F13 — 지금은 대기).
+	 */
+	Tracking,
 };
 
 /**
@@ -49,6 +55,18 @@ public:
 	/** [서버] 대기 → 전투. 무리 전파 · 디버그(ER.Wild.Aggro)도 여기로. */
 	void EnterCombat(int32 TeamId, bool bPropagateToPack, const TCHAR* Reason = nullptr);
 
+	/** [서버] 같은 무리의 다른 개체가 죽었다 — AIUse = OnAllyDeath 스킬을 쓴다 (늑대 울부짖기 · F12.6-03). 캐릭터 사망 처리가 무리에게 부른다. */
+	void NotifyAllyDied();
+
+	/** [서버] 내 장판(유해 물질)을 누가 밟았다 — 대기 · 추적 중이면 그 사람 팀으로 전투 (F12.6-06). 장판 액터가 부른다. */
+	void NotifySteppedOnHazard(AActor* Victim);
+
+	/** [서버] 내 평타 · 스킬이 누굴 맞혔다 — 돌아다니는 종(DA bRoams)은 전투 중이면 지금 자리가 새 기준 (F12.6-06). 어빌리티 판정이 부른다. 장판 펄스는 아니다. */
+	void NotifyDealtHit();
+
+	/** [서버] **생성 때 한 번** — 반경(m) 안 가장 가까운 실험체를 추적 (다가가기만 · F12.6-06). 없으면 아무것도 안 한다 (⏸ F13 순찰). DA.SpawnTrackRadius. */
+	void StartTrackingNearest(float Meters);
+
 	EERWildlifeAIState GetAIState() const { return State; }
 	int32 GetAggroTeam() const { return AggroTeam; }
 	static const TCHAR* StateName(EERWildlifeAIState InState);
@@ -60,8 +78,16 @@ protected:
 
 	void SetState(EERWildlifeAIState NewState, const TCHAR* Reason);
 	void Think();
+	/** 추적 중 판단 — 반경 · 대상 확인 · 다가가기. */
+	void ThinkTracking();
+	/** AIUse = WhileMoving 스킬 (위클라인 유해 물질) — 움직이는 중이면 시도 (쿨은 GAS). 추적 · 전투 · 귀환 판단에서. ⏸ 순찰(F13)도 부를 것. */
+	void TryWhileMovingSkills();
 	APawn* PickTarget() const;
 	void TryAttack(AActor* Target);
+	/** AIUse = InRange 스킬을 시도 (F12.6-03 K1). 발동했으면 true — 이번 판단은 끝. 쿨 · CC 로 거부되면 false (평타로). */
+	bool TrySkill(AActor* Target, float DistUU);
+	/** 스펙 하나를 플레이어와 같은 경로(조준 이벤트)로 발동. Target 없으면 자기 자리. */
+	bool TriggerSpec(const struct FGameplayAbilitySpec& Spec, AActor* Target);
 	void Heal();
 	AERWildlifeCharacter* GetWildlife() const;
 
@@ -70,6 +96,11 @@ protected:
 	TWeakObjectPtr<AActor> MoveTarget;
 	FAIRequestID ReturnRequestId;
 	FTimerHandle ThinkTimer;
+	/** 추적 대상 · 반경 (uu). */
+	TWeakObjectPtr<APawn> TrackTarget;
+	float TrackRadiusUU = 0.f;
+	/** 돌아다니는 종 — 지난 판단 때 루트 모션(통제 돌진 · 강제 이동) 중이었나. 끝난 첫 판단에서 착지 자리를 새 기준으로. */
+	bool bWasRootMoving = false;
 	bool bStopped = false;
 	bool bWarnedNoAttack = false;
 };

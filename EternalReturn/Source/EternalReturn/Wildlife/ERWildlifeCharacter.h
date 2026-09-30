@@ -15,6 +15,32 @@ class UERAttributeSet;
 class UERWildlifeData;
 class UGameplayEffect;
 
+/** 연출용 상태 (F12.6-01 · Argument 50 N1). AI 상태와 따로 — 02 가 대기의 하위(경계 · 잠)를 더한다. None = 아직 안 받음(스폰 전). */
+UENUM()
+enum class EERWildlifePresState : uint8
+{
+	None,
+	Idle,
+	Combat,
+	Return,
+	/** 대기의 하위 (F12.6-02) — AI 는 여전히 대기. 연출만 (Argument 51 B1). */
+	Beware,
+	Sleep,
+};
+
+/** 상태와 **바뀐 서버 시각**을 한 번에 — OnRep 때 둘 다 있다. 늦게 relevant 된 클라가 지난 사건을 다시 틀지 않게 (E32). */
+USTRUCT()
+struct FERWildlifePresState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	EERWildlifePresState State = EERWildlifePresState::None;
+
+	UPROPERTY()
+	float ServerTime = 0.f;
+};
+
 /**
  * 야생동물 한 마리 (F12-01). ASC + UERAttributeSet 을 **폰이** 든다 — PlayerState 가 없다. 종 정의는 UERWildlifeData (Argument 30 B).
  *
@@ -55,6 +81,8 @@ public:
 
 	/** [서버] 자기 자리 — 귀환 지점 · 어그로 한계 기준 · 무리 조회. 스폰 서브시스템이 넣는다 (디버그 스폰은 AI 가 빙의 위치로). */
 	void SetHome(class AERWildlifeSpawnPoint* Point, const FVector& Location);
+	/** 돌아다니는 종 (DA bRoams) — 지금 위치를 자리로. 리스폰 자리(HomePoint)는 그대로. */
+	void MoveHomeHere() { HomeLocation = GetActorLocation(); }
 	const FVector& GetHomeLocation() const { return HomeLocation; }
 	bool HasHome() const { return bHasHome; }
 	class AERWildlifeSpawnPoint* GetHomePoint() const { return HomePoint.Get(); }
@@ -65,6 +93,17 @@ public:
 	 */
 	void SetBodyActive(bool bActive);
 	bool IsBoss() const;
+
+	/** [서버] 연출 상태 — AI 상태 전이 · 첫 초기화(등장)가 부른다. 같으면 건너뛴다. 리슨 호스트 화면은 여기서 바로 연출. */
+	void SetPresState(EERWildlifePresState NewState);
+	EERWildlifePresState GetPresState() const { return PresState.State; }
+
+	/**
+	 * [서버] 경계 · 수면 판정 (F12.6-02) — 스폰 서브시스템 타이머가 주기마다 부른다 (몸 틱 없음 · Argument 51 P2).
+	 * @param NearestMeters 살아 있는 가장 가까운 실험체까지 (m) · 없으면 큰 값
+	 * 대기 · 경계 · 잠일 때만 바꾼다 — 전투 · 귀환 · 사망 · 보스는 건드리지 않는다.
+	 */
+	void SenseNearby(float NearestMeters, double Now);
 
 	/** 사망 (OnOutOfHealth). 02 가 드랍 · 사냥 숙련도를 붙인다. 지금은 로그 + 제거. */
 	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnWildlifeKilled, AERWildlifeCharacter* /*Self*/, AActor* /*Killer*/);
@@ -89,6 +128,11 @@ protected:
 	/** 사망 포즈 (F12.5-04) — 클라. BeginPlay 전이면 늦게 relevant 된 것: 누운 채로. */
 	UFUNCTION()
 	void OnRep_Dead();
+
+	UFUNCTION()
+	void OnRep_PresState(const FERWildlifePresState& OldState);
+	/** 바뀐 쌍 → 몽타주 · 소리 (서버 · 클라 공통). bLate = 바뀐 지 오래 — 상태만 받고 사건은 틀지 않는다. */
+	void PlayPresTransition(EERWildlifePresState Old, EERWildlifePresState New, float Elapsed);
 
 	UPROPERTY(VisibleAnywhere, Category = "GAS")
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
@@ -134,6 +178,15 @@ protected:
 	/** 죽은 서버 시각 (GetServerWorldTimeSeconds) — 클라가 "쓰러지는 걸 볼 때인가" 를 판정 (F12.5-06 · 한 번 본 뒤 다시 relevant 된 클라). */
 	UPROPERTY(Replicated)
 	float DeathServerTime = 0.f;
+
+	/** ⚠ Data 뒤에 둔다 — 같은 묶음이면 OnRep_Data(연출 표 지정)가 먼저 불린다. */
+	UPROPERTY(ReplicatedUsing = OnRep_PresState)
+	FERWildlifePresState PresState;
+	/** 클라 — BeginPlay 전에 받은 전이 (새 액터는 OnRep 이 BeginPlay 보다 먼저 · DataChannel.cpp:3331 → 3345). BeginPlay 에서 튼다. */
+	EERWildlifePresState PendingPresOld = EERWildlifePresState::None;
+	bool bPresPending = false;
+	/** [서버] 마지막으로 SleepMeters 안에 실험체가 있던 시각 — 스폰 시각으로 시작 (아무도 없으면 SleepDelay 뒤 잔다). */
+	double LastPlayerNearTime = 0.0;
 
 	bool bInitializedOnce = false;
 	FVector HomeLocation = FVector::ZeroVector;

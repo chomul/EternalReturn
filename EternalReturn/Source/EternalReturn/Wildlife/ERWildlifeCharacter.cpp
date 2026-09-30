@@ -27,6 +27,7 @@
 #include "Wildlife/ERWildlifeData.h"
 #include "Wildlife/ERWildlifeSettings.h"
 #include "Wildlife/ERWildlifeSpawnPoint.h"
+#include "Wildlife/ERWildlifeSpawnSubsystem.h"
 
 AERWildlifeCharacter::AERWildlifeCharacter()
 {
@@ -88,6 +89,7 @@ void AERWildlifeCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 	DOREPLIFETIME(AERWildlifeCharacter, Corpse);  // 죽은 뒤 한 번 — 클라가 클릭해서 열 대상
 	DOREPLIFETIME(AERWildlifeCharacter, bDead);   // 사망 포즈 (AnimBP) — Argument 36 "상태는 복제 값"
 	DOREPLIFETIME(AERWildlifeCharacter, DeathServerTime);   // bDead 와 같은 묶음으로 간다 — OnRep_Dead 때 이미 있다
+	DOREPLIFETIME(AERWildlifeCharacter, PresState);         // 연출 상태 + 바뀐 시각 (F12.6-01 · Argument 50 N1)
 }
 
 void AERWildlifeCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -96,6 +98,10 @@ void AERWildlifeCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (HasAuthority() && !bDead && EndPlayReason == EEndPlayReason::Destroyed)
 	{
 		UE_LOG(LogEternalReturn, Warning, TEXT("[야생동물] %s 살아 있는 채로 제거 — 위치 %s"), *GetName(), *GetActorLocation().ToCompactString());
+	}
+	if (UERWildlifeSpawnSubsystem* Sub = HasAuthority() ? GetWorld()->GetSubsystem<UERWildlifeSpawnSubsystem>() : nullptr)
+	{
+		Sub->UnregisterAnimal(this);
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -106,6 +112,24 @@ void AERWildlifeCharacter::BeginPlay()
 
 	// Owner = Avatar = 이 폰. 서버 · 클라 양쪽 — 클라도 어트리뷰트 복제를 받으려면 ActorInfo 가 있어야 한다.
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+
+	// BeginPlay 전에 받은 연출 전이 (새로 relevant 된 액터 — 등장 등). 시각은 지금 기준으로 다시 잰다.
+	if (bPresPending)
+	{
+		bPresPending = false;
+		const AGameStateBase* GS = GetWorld()->GetGameState();
+		PlayPresTransition(PendingPresOld, PresState.State, GS ? GS->GetServerWorldTimeSeconds() - PresState.ServerTime : 0.f);
+	}
+
+	// 경계 · 수면 판정 대상 (F12.6-02 · 서버) — 스폰 시각부터 "아무도 없음" 을 잰다
+	if (HasAuthority())
+	{
+		LastPlayerNearTime = GetWorld()->GetTimeSeconds();
+		if (UERWildlifeSpawnSubsystem* Sub = GetWorld()->GetSubsystem<UERWildlifeSpawnSubsystem>())
+		{
+			Sub->RegisterAnimal(this);
+		}
+	}
 
 	if (HasAuthority() && AttributeSet)
 	{
@@ -205,12 +229,26 @@ bool AERWildlifeCharacter::Initialize(const UERWildlifeData* InData, int32 InLev
 	}
 	FlushNetDormancy();   // 초기값이 나가게
 
-	// 스폰 선공 (위클라인 20m — 실험 대상 추적). 첫 초기화 때만.
+	// 등장 (F12.6-01) — 첫 초기화 한 번. 선공(아래)보다 먼저: 같은 프레임이면 클라는 마지막 값만 받지만 None → * 는 등장으로 본다.
+	if (!bInitializedOnce)
+	{
+		SetPresState(EERWildlifePresState::Idle);
+	}
+
+	// 스폰 선공 (선제 공격 종 후보). 첫 초기화 때만.
 	if (!bInitializedOnce && Data->SpawnAggroRadius > 0.f)
 	{
 		if (AERWildlifeAIController* AI = GetController<AERWildlifeAIController>())
 		{
 			AI->AggroNearestInRadius(Data->SpawnAggroRadius);
+		}
+	}
+	// 실험 대상 추적 (위클라인 20m — **생성 때 한 번** · 다가가기만 · F12.6-06)
+	if (!bInitializedOnce && Data->SpawnTrackRadius > 0.f)
+	{
+		if (AERWildlifeAIController* AI = GetController<AERWildlifeAIController>())
+		{
+			AI->StartTrackingNearest(Data->SpawnTrackRadius);
 		}
 	}
 	bInitializedOnce = true;
@@ -426,6 +464,163 @@ void AERWildlifeCharacter::OnRep_Dead()
 	}
 }
 
+namespace
+{
+	const TCHAR* PresStateName(EERWildlifePresState S)
+	{
+		switch (S)
+		{
+		case EERWildlifePresState::Idle:   return TEXT("대기");
+		case EERWildlifePresState::Combat: return TEXT("전투");
+		case EERWildlifePresState::Return: return TEXT("귀환");
+		case EERWildlifePresState::Beware: return TEXT("경계");
+		case EERWildlifePresState::Sleep:  return TEXT("잠");
+		default:                           return TEXT("없음");
+		}
+	}
+	/** 이보다 오래된 전이는 사건을 틀지 않는다 — 사망(OnRep_Dead)과 같은 1초 (서버 시각 오차 여유 · E32). */
+	constexpr float LatePresSeconds = 1.f;
+}
+
+void AERWildlifeCharacter::SetPresState(EERWildlifePresState NewState)
+{
+	if (!HasAuthority() || PresState.State == NewState)
+	{
+		return;
+	}
+	const EERWildlifePresState Old = PresState.State;
+	PresState.State = NewState;
+	// 전투 · 귀환에서 막 돌아왔으면 "아무도 없음" 을 다시 잰다 — 안 그러면 도착하자마자(endbattle 중) 잠든다 (2026-09-30 로그: 도착 13ms 뒤 잠) [자체]
+	if (NewState == EERWildlifePresState::Idle && (Old == EERWildlifePresState::Combat || Old == EERWildlifePresState::Return))
+	{
+		LastPlayerNearTime = GetWorld()->GetTimeSeconds();
+	}
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	PresState.ServerTime = GS ? GS->GetServerWorldTimeSeconds() : 0.f;
+	FlushNetDormancy();
+	PlayPresTransition(Old, NewState, 0.f);   // 리슨 호스트 화면 (데디는 연출 컴포넌트가 건너뛴다)
+}
+
+void AERWildlifeCharacter::SenseNearby(float NearestMeters, double Now)
+{
+	const EERWildlifePresState Cur = PresState.State;
+	const bool bResting = Cur == EERWildlifePresState::Idle || Cur == EERWildlifePresState::Beware || Cur == EERWildlifePresState::Sleep;
+	if (!Data || Data->bBoss || bDead || !bResting)
+	{
+		return;
+	}
+	const UERWildlifeSettings& S = UERWildlifeSettings::Get();
+	if (NearestMeters <= S.SleepMeters)
+	{
+		LastPlayerNearTime = Now;
+	}
+	// 규칙 (Argument 51 B1 · 사용자 확인 2026-09-30 "다가가면 경계 · 근처에 사람이 없을 때 잠") — 수치 [자체]
+	EERWildlifePresState Next = Cur;
+	switch (Cur)
+	{
+	case EERWildlifePresState::Sleep:
+		if (NearestMeters <= S.SleepMeters)
+		{
+			Next = (Data->bCanBeware && NearestMeters <= S.BewareMeters) ? EERWildlifePresState::Beware : EERWildlifePresState::Idle;   // 깬다
+		}
+		break;
+	case EERWildlifePresState::Beware:
+		if (NearestMeters > S.BewareExitMeters)
+		{
+			Next = EERWildlifePresState::Idle;
+		}
+		break;
+	default:   // Idle
+		if (Data->bCanBeware && NearestMeters <= S.BewareMeters)
+		{
+			Next = EERWildlifePresState::Beware;
+		}
+		else if (Data->bCanSleep && Now - LastPlayerNearTime >= S.SleepDelaySeconds)
+		{
+			Next = EERWildlifePresState::Sleep;
+		}
+		break;
+	}
+	if (Next != Cur)
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s %s → %s (가장 가까운 실험체 %.1fm)"), *GetName(), PresStateName(Cur), PresStateName(Next),
+			NearestMeters > 1e6f ? -1.f : NearestMeters);
+		SetPresState(Next);
+	}
+}
+
+void AERWildlifeCharacter::OnRep_PresState(const FERWildlifePresState& OldState)
+{
+	if (!HasActorBegunPlay())
+	{
+		// 애님 인스턴스 · 연출 표가 아직일 수 있다 — BeginPlay 에서. 여러 번 받으면 처음 Old 를 지킨다 (None → 등장).
+		if (!bPresPending)
+		{
+			PendingPresOld = OldState.State;
+			bPresPending = true;
+		}
+		return;
+	}
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	PlayPresTransition(OldState.State, PresState.State, GS ? GS->GetServerWorldTimeSeconds() - PresState.ServerTime : 0.f);
+}
+
+void AERWildlifeCharacter::PlayPresTransition(EERWildlifePresState Old, EERWildlifePresState New, float Elapsed)
+{
+	if (!Presentation || bDead)
+	{
+		return;
+	}
+	// 경계 · 잠 = **상태** → AnimBP 상태머신 (Argument 48). 매 전이마다 넘긴다 (늦게 받았으면 시작 동작 없이 반복부터).
+	const bool bLate = Elapsed > LatePresSeconds;
+	Presentation->SetRestPose(New == EERWildlifePresState::Beware ? EERRestPose::Beware : New == EERWildlifePresState::Sleep ? EERRestPose::Sleep : EERRestPose::None, bLate);
+	// 전이 → 사건 (Task F12.6-01 표). 발견은 소리만 (Argument 50 (b)) · 전투 끝은 자리 도착 때 [자체] (귀환 출발에 틀면 걸으며 미끄러진다).
+	FGameplayTag AnimKey;
+	FGameplayTag SfxKey;
+	const TCHAR* What = nullptr;
+	if (Old == EERWildlifePresState::None && New != EERWildlifePresState::Idle)
+	{
+		// 처음 받았는데 이미 경계 · 잠 · 전투 — 스폰이 아니라 **나중에 보게 된 것** (시각은 그 전이의 것). 등장을 틀지 않는다
+		//   (2026-09-30 데디 로그: 늦게 들어온 클라가 경계 중인 닭에 `없음 → 경계 · 등장` 을 틀었다)
+		return;
+	}
+	if (Old == EERWildlifePresState::None)
+	{
+		AnimKey = ERTags::Pres_Anim_Appear;
+		SfxKey = ERTags::Pres_Sfx_Appear;
+		What = TEXT("등장");
+	}
+	else if (New == EERWildlifePresState::Combat && (Old == EERWildlifePresState::Idle || Old == EERWildlifePresState::Beware || Old == EERWildlifePresState::Sleep))
+	{
+		SfxKey = ERTags::Pres_Sfx_Discover;
+		What = TEXT("발견");
+	}
+	else if (New == EERWildlifePresState::Beware)
+	{
+		SfxKey = ERTags::Pres_Sfx_Beware;   // 몸짓은 AnimBP (위 SetRestPose)
+		What = TEXT("경계");
+	}
+	else if (New == EERWildlifePresState::Idle && Old != EERWildlifePresState::Beware && Old != EERWildlifePresState::Sleep)
+	{
+		AnimKey = ERTags::Pres_Anim_EndBattle;
+		What = TEXT("전투 끝");
+	}
+	if (!What)
+	{
+		return;   // 전투 → 귀환 — 사건 없음
+	}
+	const TCHAR* Side = HasAuthority() ? TEXT("서버") : TEXT("클라");
+	if (Elapsed > LatePresSeconds)
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[야생연출] %s %s → %s · %s (늦음 %.1f초 · 건너뜀) (%s)"),
+			*GetName(), PresStateName(Old), PresStateName(New), What, Elapsed, Side);
+		return;
+	}
+	const FString Played = Presentation->PlayEventPres(AnimKey, SfxKey);
+	UE_LOG(LogEternalReturn, Log, TEXT("[야생연출] %s %s → %s · %s %s (%s · %.2f초)"),
+		*GetName(), PresStateName(Old), PresStateName(New), What, *Played, Side, Elapsed);
+}
+
 void AERWildlifeCharacter::HandleOutOfHealth(AActor* Killer)
 {
 	if (bDead)
@@ -446,6 +641,19 @@ void AERWildlifeCharacter::HandleOutOfHealth(AActor* Killer)
 	if (AERWildlifeAIController* AI = GetController<AERWildlifeAIController>())
 	{
 		AI->NotifyPawnDied();   // 판단 · 이동을 멈춘다
+	}
+	// 무리에게 알린다 — 짝이 죽으면 쓰는 스킬 (늑대 울부짖기 · F12.6-03). 무리 = 같은 스폰 자리 (GetPackMates · 살아 있는 개체만)
+	if (const UERWildlifeSpawnSubsystem* Sub = GetWorld()->GetSubsystem<UERWildlifeSpawnSubsystem>())
+	{
+		TArray<AERWildlifeCharacter*> Mates;
+		Sub->GetPackMates(this, Mates);
+		for (AERWildlifeCharacter* Mate : Mates)
+		{
+			if (AERWildlifeAIController* MateAI = Mate ? Mate->GetController<AERWildlifeAIController>() : nullptr)
+			{
+				MateAI->NotifyAllyDied();
+			}
+		}
 	}
 	SpawnCorpse();
 	GrantKillRewards(Killer);

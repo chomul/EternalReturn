@@ -30,6 +30,15 @@ float UERSkillData::LevelValue(const TArray<float>& Values, int32 Level)
 	return FMath::Max(Values[Index], 0.f);
 }
 
+float UERSkillData::LevelValueSigned(const TArray<float>& Values, int32 Level)
+{
+	if (Values.IsEmpty())
+	{
+		return 0.f;
+	}
+	return Values[FMath::Clamp(Level - 1, 0, Values.Num() - 1)];
+}
+
 float UERSkillData::GetCooldown(int32 Level) const
 {
 	return LevelValue(Cooldowns, Level);

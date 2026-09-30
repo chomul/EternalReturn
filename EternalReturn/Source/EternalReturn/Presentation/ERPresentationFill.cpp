@@ -14,6 +14,7 @@
 
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Character/ERCharacterData.h"
@@ -600,11 +601,39 @@ namespace
 					continue;
 				}
 				const FString N = Anim.AssetName.ToString().ToLower();
-				const FGameplayTag Key = (N.EndsWith(TEXT("_atk01")) || N.EndsWith(TEXT("_atk02"))) ? ERTags::Ability_Slot_Attack
-					: N.EndsWith(TEXT("_death")) ? ERTags::Pres_Anim_Death : FGameplayTag();
+				// F12.6-04 동물 스킬 = Q 슬롯 (DA SlotTag Ability.Slot.Q). 차징 → 돌진 두 단계면 두 번째가 판정 순간(Execute)
+				const FGameplayTag Key = (N.EndsWith(TEXT("_skill01")) || N.EndsWith(TEXT("_skill01_ready"))) ? ERTags::Ability_Slot_Q
+					: (N.EndsWith(TEXT("_skill01_assault")) || N.EndsWith(TEXT("_skill01_atk"))) ? ERTags::Ability_Slot_Q_Execute   // 알파 · 오메가 아크 블레이드 휘두르기 (F12.6-05)
+					: N.EndsWith(TEXT("_skill02")) ? ERTags::Ability_Slot_W                                                          // 오메가 VF 방출
+					// F12.6-06a 위클라인 (사용자 확인 2026-10-01) — 01 신경 가스 · 02 트리플렛 (start → shot) · 04 격리 (start → end). 통제 · 유해 물질은 애니 없음
+					//   04 충전 반복은 에디터 몽타주 AM_Wickline_01_ActiveSkill04_start (Start → Loop 섹션) 가 같은 키로 잡혀 _start 를 대신한다 (Argument 53 L2)
+					: N.EndsWith(TEXT("_activeskill01")) ? ERTags::Ability_Slot_Q
+					: N.EndsWith(TEXT("_activeskill02_start")) ? ERTags::Ability_Slot_W
+					: N.EndsWith(TEXT("_activeskill02_shot")) ? ERTags::Ability_Slot_W_Execute
+					: N.EndsWith(TEXT("_activeskill04_start")) ? ERTags::Ability_Slot_R
+					: N.EndsWith(TEXT("_activeskill04_end")) ? ERTags::Ability_Slot_R_Execute
+					: (N.EndsWith(TEXT("_atk01")) || N.EndsWith(TEXT("_atk02"))) ? ERTags::Ability_Slot_Attack
+					: N.EndsWith(TEXT("_death")) ? ERTags::Pres_Anim_Death
+					: N.EndsWith(TEXT("_appear")) ? ERTags::Pres_Anim_Appear          // F12.6-01 (appear_idle 은 아니다)
+					: N.EndsWith(TEXT("_endbattle")) ? ERTags::Pres_Anim_EndBattle
+					// F12.6-02 경계 · 잠 (beware_loop_wait 는 아니다 — 들개만 있고 뜻 미확인)
+					: N.EndsWith(TEXT("_beware_start")) ? ERTags::Pres_Anim_BewareStart
+					: N.EndsWith(TEXT("_beware_loop")) ? ERTags::Pres_Anim_BewareLoop
+					: N.EndsWith(TEXT("_beware_end")) ? ERTags::Pres_Anim_BewareEnd
+					: N.EndsWith(TEXT("_sleep_start")) ? ERTags::Pres_Anim_SleepStart
+					: N.EndsWith(TEXT("_sleep")) ? ERTags::Pres_Anim_SleepLoop
+					: N.EndsWith(TEXT("_wake")) ? ERTags::Pres_Anim_Wake : FGameplayTag();
 				if (Key.IsValid())
 				{
 					Groups.FindOrAdd({ EERWeaponType::None, Key }).Add(Anim.GetAsset());
+				}
+			}
+			// Argument 53 L2 — 같은 키에 에디터 몽타주가 있으면 몽타주만 (시퀀스와 번갈아 틀지 않는다)
+			for (TPair<TPair<EERWeaponType, FGameplayTag>, TArray<UObject*>>& G : Groups)
+			{
+				if (G.Value.ContainsByPredicate([](const UObject* O) { return O && O->IsA<UAnimMontage>(); }))
+				{
+					G.Value.RemoveAll([](const UObject* O) { return !O || !O->IsA<UAnimMontage>(); });
 				}
 			}
 			if (Groups.IsEmpty())
@@ -614,17 +643,19 @@ namespace
 			// 소리 (F12.5-05 · Argument 49) — 원작 이름이 종마다 제각각이라 **종 표**로. 변이 · 잠식도 같은 종 소리. 접두어로 찾는다 (atk01 · atk02 · r1 · r2 가 변형)
 			//   ⚠ "<종>Hit" 이 "그 종의 공격이 맞은 소리" 인지 "그 종이 맞은 소리" 인지 (미확인) — 무기 hit<무기> 와 같은 뜻으로 보고 **공격 타격음**에 둔다
 			{
-				struct FWildSfx { const TCHAR* Attack; const TCHAR* Hit; const TCHAR* Die; };
+				struct FWildSfx { const TCHAR* Attack; const TCHAR* Hit; const TCHAR* Die; const TCHAR* Discover = nullptr; const TCHAR* Appear = nullptr; const TCHAR* Beware = nullptr; };
+					// Beware (F12.6-02 경계 들어갈 때) = <종>WakeUp_Ing — 뜻 (미확인) · 사용자가 들어보고 정한다. 멧돼지 없음
+					// Discover (F12.6-01 발견음) = <종>WakeUp_Start — 닭은 _Ing 뿐 · 멧돼지 없음. ready_bear · ready_wolf 는 뜻 (미확인) → 02 에서. Appear = 등장음 (보스만 원본에 있다)
 				static const TMap<EERWildlifeType, FWildSfx> SfxOf = {
-					{ EERWildlifeType::Chicken,   { TEXT("chickenAttack"),   TEXT("chickenHit"),          TEXT("chickenDie") } },
-					{ EERWildlifeType::Bat,       { TEXT("batAttack"),       TEXT("batHit"),              TEXT("batDie") } },
+					{ EERWildlifeType::Chicken,   { TEXT("chickenAttack"),   TEXT("chickenHit"),          TEXT("chickenDie"), nullptr, nullptr, TEXT("chickenWakeUp_Ing") } },
+					{ EERWildlifeType::Bat,       { TEXT("batAttack"),       TEXT("batHit"),              TEXT("batDie"), TEXT("batWakeUp_Start"), nullptr, TEXT("batWakeUp_Ing") } },
 					{ EERWildlifeType::Boar,      { TEXT("boar_attack"),     TEXT("boarHit"),             TEXT("boarDie") } },   // boarAttack 아님 — 사용자가 들어보고 고름 (2026-09-29)
-					{ EERWildlifeType::WildDog,   { TEXT("wildDogAttack"),   TEXT("wildDogHit"),          TEXT("wildDogDie") } },
-					{ EERWildlifeType::Wolf,      { TEXT("wolfAttack"),      TEXT("wolfHit"),             TEXT("wolfDie") } },
-					{ EERWildlifeType::Bear,      { TEXT("bearAttack"),      TEXT("bearHit"),             TEXT("bearDie") } },
-					{ EERWildlifeType::Alpha,     { TEXT("AlphaOmega_atk0"), TEXT("AlphaOmega_atk_hit"),  TEXT("AlphaOmega_dead") } },
-					{ EERWildlifeType::Omega,     { TEXT("AlphaOmega_atk0"), TEXT("AlphaOmega_atk_hit"),  TEXT("AlphaOmega_dead") } },
-					{ EERWildlifeType::Wickeline, { TEXT("wicklineAttack"),  nullptr,                     TEXT("wicklineDie") } },
+					{ EERWildlifeType::WildDog,   { TEXT("wildDogAttack"),   TEXT("wildDogHit"),          TEXT("wildDogDie"), TEXT("wildDogWakeUp_Start"), nullptr, TEXT("wildDogWakeUp_Ing") } },
+					{ EERWildlifeType::Wolf,      { TEXT("wolfAttack"),      TEXT("wolfHit"),             TEXT("wolfDie"), TEXT("wolfWakeUp_Start"), nullptr, TEXT("wolfWakeUp_Ing") } },
+					{ EERWildlifeType::Bear,      { TEXT("bearAttack"),      TEXT("bearHit"),             TEXT("bearDie"), TEXT("bearWakeUp_Start"), nullptr, TEXT("bearWakeUp_Ing") } },
+					{ EERWildlifeType::Alpha,     { TEXT("AlphaOmega_atk0"), TEXT("AlphaOmega_atk_hit"),  TEXT("AlphaOmega_dead"), nullptr, TEXT("AlphaOmega_appear") } },
+					{ EERWildlifeType::Omega,     { TEXT("AlphaOmega_atk0"), TEXT("AlphaOmega_atk_hit"),  TEXT("AlphaOmega_dead"), nullptr, TEXT("AlphaOmega_appear") } },
+					{ EERWildlifeType::Wickeline, { TEXT("wicklineAttack"),  nullptr,                     TEXT("wicklineDie"), TEXT("Wickline_TrackingStart") } },   // 발견음 자리 = 추적 시작 (F12.6-06 · 추적은 연출상 전투)
 				};
 				static TArray<FAssetData> MonsterSounds;   // 한 번만 찾는다
 				if (MonsterSounds.IsEmpty())
@@ -655,6 +686,43 @@ namespace
 					AddSound(Sfx->Attack, ERTags::Pres_Sfx_Attack);
 					AddSound(Sfx->Hit, ERTags::Pres_Sfx_Hit);
 					AddSound(Sfx->Die, ERTags::Pres_Sfx_Die);
+					AddSound(Sfx->Discover, ERTags::Pres_Sfx_Discover);
+					AddSound(Sfx->Appear, ERTags::Pres_Sfx_Appear);
+					AddSound(Sfx->Beware, ERTags::Pres_Sfx_Beware);
+				}
+				// 동물 스킬 소리 (F12.6-04) — 시전음 · 타격음. 들개는 원본에 없다. 멧돼지 boar_Skill_Attack · 곰 bear_Skill_Impact 는 뜻 (미확인) → 빼둔다
+				{
+					struct FSkillSfx { const TCHAR* Cast; const TCHAR* Hit; };
+					static const TMap<EERWildlifeType, FSkillSfx> SkillSfxOf = {
+						{ EERWildlifeType::Boar, { TEXT("boar_Skill_Activation"), TEXT("boar_Skill_Hit") } },
+						{ EERWildlifeType::Bear, { TEXT("bear_Skill_Activation"), TEXT("bear_Skill_Hit") } },
+						{ EERWildlifeType::Wolf, { TEXT("wolf_Skill_Activation"), nullptr } },
+					};
+					if (const FSkillSfx* SS = SkillSfxOf.Find(D->Type))
+					{
+						AddSound(SS->Cast, ERTags::Pres_Sfx_SkillCast);
+						AddSound(SS->Hit, ERTags::Pres_Sfx_SkillHit);
+					}
+					// 알파 · 오메가 (F12.6-05) — 스킬이 둘이라 **슬롯별** 키. 알파는 Q 만 쓰지만 같은 소리 파일이라 W 줄이 있어도 무해
+					//   시전음 큐는 **판정 순간**에 온다 (Argument 49) → 휘두르기 `_skill01_Swing` · 분출 `_skill02_Spout` 가 맞다.
+					//   충전 소리 `_skill01_Start` · `_skill02_Ready` 는 선딜 시작 시점 큐가 없어 빼둔다 (미사용)
+					// 위클라인 (F12.6-06) — 슬롯 = Q 가스 · W 트리플렛 · E 통제 · R 격리. 파일 이름으로 **추정** 연결 (뜻 미확인 · 들어보고 바꾼다)
+					if (D->Type == EERWildlifeType::Wickeline)
+					{
+						AddSound(TEXT("Wickline_GasDispersionStart"), ERTags::Pres_Sfx_SkillCast_Q);
+						AddSound(TEXT("wickline_Skill02_Activation"), ERTags::Pres_Sfx_SkillCast_W);
+						AddSound(TEXT("wickline_Skill02_Hit"), ERTags::Pres_Sfx_SkillHit_W);
+						AddSound(TEXT("Wickline_QuickMove"), ERTags::Pres_Sfx_SkillCast_E);
+						AddSound(TEXT("Wickline_KnockbackStart"), ERTags::Pres_Sfx_SkillCast_R);
+						AddSound(TEXT("Wickline_KnockbackHit"), ERTags::Pres_Sfx_SkillHit_R);
+					}
+					if (D->Type == EERWildlifeType::Alpha || D->Type == EERWildlifeType::Omega)
+					{
+						AddSound(TEXT("AlphaOmega_skill01_Swing"), ERTags::Pres_Sfx_SkillCast_Q);
+						AddSound(TEXT("AlphaOmega_skill01_Hit"), ERTags::Pres_Sfx_SkillHit_Q);
+						AddSound(TEXT("AlphaOmega_skill02_Spout"), ERTags::Pres_Sfx_SkillCast_W);
+						AddSound(TEXT("AlphaOmega_skill02_Hit"), ERTags::Pres_Sfx_SkillHit_W);
+					}
 				}
 			}
 			if (Groups.IsEmpty())

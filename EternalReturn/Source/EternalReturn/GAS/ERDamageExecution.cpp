@@ -277,6 +277,13 @@ void UERDamageExecution::Execute_Implementation(
 			Damage *= 1.f + TargetLostRatio * TargetLostHPScaleMax;
 		}
 
+		// 8-c. 대상의 받는 피해 증가 (좌절 등 디버프 · F12.6-03). 자체 배치 — 대상 어트리뷰트를 직접 읽는다 (ProportionalDamageResist 와 같은 방식). 음수는 받지 않는다.
+		{
+			const UAbilitySystemComponent* AmpASC = ExecParams.GetTargetAbilitySystemComponent();
+			const float TakenAmp = AmpASC ? FMath::Max(AmpASC->GetNumericAttribute(UERAttributeSet::GetDamageTakenAmpAttribute()), 0.f) : 0.f;
+			Damage *= 1.f + TakenAmp;
+		}
+
 		// 9. 최종 피해 추가 - **보류**. 원본 표기가 `x 최종 피해 추가(%)` 라
 		//    (1+x) 인지 x 배인지 해석이 안 됐다 (§8). 추측해서 넣으면 피해가 배 단위로 틀린다.
 

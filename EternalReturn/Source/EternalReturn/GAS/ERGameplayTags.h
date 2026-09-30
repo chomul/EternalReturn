@@ -13,14 +13,16 @@
  *
  * ⚠ 태그 이름을 바꾸면 이미 만든 GameplayEffect 애셋 참조가 끊어진다.
  *
- * 행동 강제 계열(공포·매혹·도발·광기)과 수면·에어본은 일부러 넣지 않았다.
+ * 행동 강제 계열(공포·매혹·도발·광기)과 수면은 일부러 넣지 않았다.
  * 선행 구현 6인 중 요구하는 캐릭터가 없어 검증할 방법이 없다.
- * 7번째 캐릭터가 올 때 추가한다.
+ * 7번째 캐릭터가 올 때 추가한다. (에어본은 F12.6 멧돼지 돌진이 요구해 추가 — 2026-09-30)
  */
 namespace ERTags
 {
 	// ── 군중 제어 ──────────────────────────────────────────────
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CC_Stun);        // 기절 — 이동·평타·스킬 전부 차단
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CC_Airborne);    // 에어본 — 기절과 같은 축 전부 차단 · 방해 저항 안 받음 (F12.6-03 멧돼지 돌진)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Frustrated);     // 좌절 — 스킬 실패 벌칙 표시 (멧돼지 돌진 빗나감 · 시전 중 CC). 막는 축은 함께 거는 기절이 맡는다
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CC_Snare);       // 속박 — 이동만 차단
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CC_Silence);     // 침묵 — 스킬만 차단
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CC_Disarm);      // 무장 해제 — 평타 + "평타 판정 스킬"까지 차단
@@ -126,6 +128,12 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_E_Recast);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_R_Recast);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_D_Recast);
+	// 판정 순간 애니 (동작표 키 · F12.6-04 멧돼지 차징 → 돌진). 줄이 없으면 안 튼다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Q_Execute);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_W_Execute);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_E_Execute);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_R_Execute);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_D_Execute);
 
 	// ── 쿨다운 (슬롯별) ────────────────────────────────────────
 	// ⭐ 쿨다운 GE 는 UERCooldownEffect **하나**다. 어느 슬롯의 쿨인지는 이 태그가 말한다 —
@@ -293,6 +301,30 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCast);  // 스킬 시전음 (D · Q~R)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit);   // 스킬 타격음
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Die);        // 사망음 (야생동물 — 사망 포즈와 같이 · 복제 상태 bDead 가 신호)
+	// 야생동물 상태 사건 (F12.6-01 · 복제 상태 PresState 가 신호)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Appear);    // 등장 appear
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_EndBattle); // 전투 끝 endbattle — 자리 도착 때
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Appear);     // 등장음 (보스만 원본에 있다)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Discover);   // 발견음 — 대기 → 전투 (<종>WakeUp_Start · ready_bear/wolf)
+	// 경계 · 잠 (F12.6-02) — 상태라 AnimBP 가 튼다 (연출 컴포넌트가 애니를 넘긴다)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_BewareStart);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_BewareLoop);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_BewareEnd);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_SleepStart);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_SleepLoop);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Wake);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Beware);
+	// 스킬별 시전음 · 타격음 (F12.6-05 · F19) — 있으면 공통 SkillCast/SkillHit 보다 먼저
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCast_Q);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCast_W);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCast_E);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCast_R);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCast_D);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit_Q);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit_W);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit_E);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit_R);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit_D);     // 경계 들어갈 때 (<종>WakeUp_Ing — 뜻 (미확인) · 사용자가 들어보고 정한다)
 
 	// 연출 큐 (F12.5-05 · Argument 49) — 네트워크 사건. 무엇을 틀지는 키가 정한다 (큐 ≠ 키)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Attack);   // 시전자 — 공격이 나갔다 (판정 시점)

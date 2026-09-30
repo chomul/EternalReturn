@@ -18,6 +18,7 @@
 #include "Core/ERPlayerState.h"
 #include "GAS/ERGameplayTags.h"
 #include "Presentation/ERAnimInstance.h"
+#include "Presentation/ERAnimNotify_HitMarker.h"
 #include "GameplayEffectTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
@@ -276,9 +277,30 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 		return;   // 시전자가 이미 사라졌다 · 연출 없는 액터
 	}
 	const bool bBasic = Params.AggregatedSourceTags.HasTagExact(ERTags::Ability_Slot_Attack);
-	const FGameplayTag Key = bAttackCue
+	FGameplayTag Key = bAttackCue
 		? (bBasic ? ERTags::Pres_Sfx_Attack : ERTags::Pres_Sfx_SkillCast)
 		: (bBasic ? ERTags::Pres_Sfx_Hit : ERTags::Pres_Sfx_SkillHit);
+	// 스킬마다 다른 소리 (F12.6-05 오메가 Q · W · F19 실험체) — `<SkillCast|SkillHit>.<슬롯>` 줄이 있으면 그것 · 없으면 공통 키
+	if (!bBasic)
+	{
+		struct FSlotSfx { FGameplayTag Slot; FGameplayTag Cast; FGameplayTag Hit; };
+		static const FSlotSfx SlotSfx[] = {
+			{ ERTags::Ability_Slot_Q, ERTags::Pres_Sfx_SkillCast_Q, ERTags::Pres_Sfx_SkillHit_Q },
+			{ ERTags::Ability_Slot_W, ERTags::Pres_Sfx_SkillCast_W, ERTags::Pres_Sfx_SkillHit_W },
+			{ ERTags::Ability_Slot_E, ERTags::Pres_Sfx_SkillCast_E, ERTags::Pres_Sfx_SkillHit_E },
+			{ ERTags::Ability_Slot_R, ERTags::Pres_Sfx_SkillCast_R, ERTags::Pres_Sfx_SkillHit_R },
+			{ ERTags::Ability_Slot_D, ERTags::Pres_Sfx_SkillCast_D, ERTags::Pres_Sfx_SkillHit_D },
+		};
+		for (const FSlotSfx& S : SlotSfx)
+		{
+			const FGameplayTag SlotKey = bAttackCue ? S.Cast : S.Hit;
+			if (Params.AggregatedSourceTags.HasTagExact(S.Slot) && Source->HasKey(SlotKey))
+			{
+				Key = SlotKey;
+				break;
+			}
+		}
+	}
 	USoundBase* Sound = Source->PickSound(Key);
 	// 공격음 = 시전자 위치 · 타격음 = 서버가 준 타격 지점 (Argument 49 — 이펙트가 생기면 같은 지점을 쓴다)
 	const FVector Location = Params.Location.IsNearlyZero() ? GetOwner()->GetActorLocation() : FVector(Params.Location);
@@ -321,6 +343,24 @@ void UERPresentationComponent::PushStateToAnim()
 		}
 		Anim->SetDead(Death, bDeathSkipToEnd);
 	}
+	// 쉬는 자세 (F12.6-02) — 애니는 동작표에서 (없으면 null → 상태머신이 그 단계를 건너뛴다)
+	Anim->SetRest(RestPose == EERRestPose::Beware, RestPose == EERRestPose::Sleep, bRestSkipIntro,
+		FindFirstAnim(ERTags::Pres_Anim_BewareStart), FindFirstAnim(ERTags::Pres_Anim_BewareLoop), FindFirstAnim(ERTags::Pres_Anim_BewareEnd),
+		FindFirstAnim(ERTags::Pres_Anim_SleepStart), FindFirstAnim(ERTags::Pres_Anim_SleepLoop), FindFirstAnim(ERTags::Pres_Anim_Wake));
+}
+
+void UERPresentationComponent::SetRestPose(EERRestPose Pose, bool bSkipIntro)
+{
+	if (RestPose == Pose)
+	{
+		return;
+	}
+	RestPose = Pose;
+	bRestSkipIntro = bSkipIntro;
+	PushStateToAnim();
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 쉬는 자세 %s%s (%s)"), *GetNameSafe(GetOwner()),
+		Pose == EERRestPose::Beware ? TEXT("경계") : Pose == EERRestPose::Sleep ? TEXT("잠") : TEXT("없음"),
+		bSkipIntro && Pose != EERRestPose::None ? TEXT(" · 늦게 받음 — 반복부터") : TEXT(""), NetTag(GetOwner()));
 }
 
 void UERPresentationComponent::SetDead(bool bSkipToEnd)
@@ -344,6 +384,34 @@ void UERPresentationComponent::SetDead(bool bSkipToEnd)
 	}
 	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 사망 포즈 %s (%s)"), *GetNameSafe(GetOwner()),
 		bSkipToEnd ? TEXT("누운 채로 (늦은 relevant)") : TEXT("쓰러짐"), NetTag(GetOwner()));
+}
+
+FString UERPresentationComponent::PlayEventPres(FGameplayTag AnimKey, FGameplayTag SfxKey)
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return TEXT("데디 서버 · 안 틂");
+	}
+	FString Played;
+	if (AnimKey.IsValid())
+	{
+		const ACharacter* Character = Cast<ACharacter>(GetOwner());
+		UAnimInstance* Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+		UAnimSequenceBase* Seq = FindFirstAnim(AnimKey);
+		if (Anim && Seq && Anim->PlaySlotAnimationAsDynamicMontage(Seq, AnimSlotName, BlendIn, BlendOut))
+		{
+			Played = Seq->GetName();
+		}
+	}
+	if (SfxKey.IsValid())
+	{
+		if (USoundBase* Sound = PickSound(SfxKey))
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, Sound, GetOwner()->GetActorLocation());
+			Played += (Played.IsEmpty() ? TEXT("") : TEXT(" · ")) + Sound->GetName();
+		}
+	}
+	return Played.IsEmpty() ? FString(TEXT("동작표에 없음")) : Played;
 }
 
 void UERPresentationComponent::PushModeToAnim()
@@ -420,7 +488,54 @@ void UERPresentationComponent::ApplyWeaponLayer()
 	LinkedLayer = Desired;
 }
 
-void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const FGameplayAbilityActivationInfo& ActivationInfo, FGameplayTag Key, float AttackSpeed, float ExpectedSeconds)
+namespace
+{
+	/**
+	 * 선딜 구간 재생 속도 (Argument 52 T2) — **자르지 않는다** (사용자 2026-10-01 "0.25배 해도 됨"): 맞는 순간과 판정 일치가 목적이라
+	 * 이 범위 밖이면 **경고만** [자체]. 안전 범위(아래 Safe*)는 마커를 엉뚱한 프레임에 찍은 사고만 막는다.
+	 */
+	constexpr float WarnMinCastRate = 0.5f;
+	constexpr float WarnMaxCastRate = 2.0f;
+	constexpr float SafeMinCastRate = 0.1f;
+	constexpr float SafeMaxCastRate = 10.0f;
+
+	/** "ER 타격 지점" 마커의 **실제 재생 시각** (초) — 시퀀스 RateScale 반영. 없으면 −1. */
+	float FindHitMarkerSeconds(const UAnimSequenceBase* Anim)
+	{
+		for (const FAnimNotifyEvent& E : Anim->Notifies)
+		{
+			if (Cast<UERAnimNotify_HitMarker>(E.Notify))
+			{
+				const float Scale = FMath::IsNearlyZero(Anim->RateScale) ? 1.f : FMath::Abs(Anim->RateScale);
+				return E.GetTriggerTime() / Scale;
+			}
+		}
+		return -1.f;
+	}
+}
+
+void UERPresentationComponent::RestoreSkillAnimRate(UGameplayAbility* Ability)
+{
+	UAbilitySystemComponent* ASC = Ability ? Ability->GetAbilitySystemComponentFromActorInfo() : nullptr;
+	UAnimMontage* Current = ASC ? ASC->GetCurrentMontage() : nullptr;
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	UAnimInstance* Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	if (!Current || !Anim || ASC->GetAnimatingAbility() != Ability || FMath::IsNearlyEqual(Anim->Montage_GetPlayRate(Current), 1.f))
+	{
+		return;
+	}
+	if (GetOwner()->HasAuthority())
+	{
+		ASC->CurrentMontageSetPlayRate(1.f);   // 복제 원천 — RepAnimMontageInfo 의 재생 속도가 다른 클라로 간다
+	}
+	else
+	{
+		Anim->Montage_SetPlayRate(Current, 1.f);   // 소유 클라 — 자기 것만 (ASC 판은 서버로 RPC 를 또 보낸다)
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 판정 순간 — 재생 속도 1.00 으로 (%s)"), *GetNameSafe(GetOwner()), NetTag(GetOwner()));
+}
+
+void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const FGameplayAbilityActivationInfo& ActivationInfo, FGameplayTag Key, float AttackSpeed, float ExpectedSeconds, float CastTime)
 {
 	const FResolved* R = Cache.Find(Key);
 	if (!R)
@@ -449,7 +564,34 @@ void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const 
 
 	const float Length = Anim->GetPlayLength();
 	// 평타 재생 속도 [자체] — 간격(1/공속)보다 긴 애니만 빨라진다. 느려지지는 않는다.
-	const float Rate = AttackSpeed > 0.f ? FMath::Max(1.f, Length * AttackSpeed) : 1.f;
+	float Rate = AttackSpeed > 0.f ? FMath::Max(1.f, Length * AttackSpeed) : 1.f;
+
+	// ⭐ Argument 52 T2 — "ER 타격 지점" 마커가 있으면 선딜 구간을 **마커 시각 ÷ CastTime** 으로 튼다 → 맞는 순간이 CastTime 에 온다.
+	//   판정 순간에 1배속으로 돌아간다 (RestoreSkillAnimRate — 어빌리티가 부른다). 마커가 없으면 지금처럼 1배속.
+	FString MarkerNote;
+	if (AttackSpeed <= 0.f && CastTime > 0.f)
+	{
+		const float MarkerSec = FindHitMarkerSeconds(Anim);
+		if (MarkerSec > 0.f)
+		{
+			const float Raw = MarkerSec / CastTime;
+			Rate = FMath::Clamp(Raw, SafeMinCastRate, SafeMaxCastRate);   // 사고 방지만 — 보통은 Raw 그대로
+			const bool bUnusual = Raw < WarnMinCastRate || Raw > WarnMaxCastRate;
+			MarkerNote = FString::Printf(TEXT(" · 타격 지점 %.2f초 → 선딜 %.2f초%s"), MarkerSec, CastTime,
+				Rate != Raw ? *FString::Printf(TEXT(" (⚠ %.2f배 → 안전 범위 %.1f~%.0f 로 자름 — 마커 위치를 본다)"), Raw, SafeMinCastRate, SafeMaxCastRate)
+				: bUnusual ? TEXT(" (⚠ 속도 큼 — 의도가 아니면 CastTime · 마커를 본다)") : TEXT(""));
+			if (bUnusual)
+			{
+				static TSet<const UObject*> WarnedRate;   // 애니당 한 번
+				if (!WarnedRate.Contains(Anim))
+				{
+					WarnedRate.Add(Anim);
+					UE_LOG(LogEternalReturn, Warning, TEXT("[연출] %s 타격 지점 %.2f초 ÷ 선딜 %.2f초 = %.2f배 — 보통 범위(%.1f~%.1f) 밖. 의도가 아니면 CastTime 또는 마커를 본다"),
+						*Anim->GetName(), MarkerSec, CastTime, Raw, WarnMinCastRate, WarnMaxCastRate);
+				}
+			}
+		}
+	}
 
 	if (ExpectedSeconds > 0.f && Length / Rate > ExpectedSeconds * LengthWarnRatio)
 	{
@@ -467,7 +609,24 @@ void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const 
 	{
 		return;
 	}
-	UAnimMontage* Montage = ASC->PlaySlotAnimationAsDynamicMontage(Ability, ActivationInfo, Anim, AnimSlotName, BlendIn, BlendOut, Rate);
+	// Argument 53 L2 — 에디터 몽타주(여러 단계 · 섹션 반복)는 그대로 튼다. 복제는 ASC 가 같은 길(RepAnimMontageInfo)로
+	UAnimMontage* Montage = nullptr;
+	if (UAnimMontage* Authored = Cast<UAnimMontage>(Anim))
+	{
+		if (!Authored->IsValidSlot(AnimSlotName))
+		{
+			UE_LOG(LogEternalReturn, Warning, TEXT("[연출] %s 몽타주 %s 에 슬롯 %s 트랙이 없다 — 재생해도 안 보인다 (몽타주 슬롯을 맞춘다)"),
+				*GetNameSafe(GetOwner()), *Authored->GetName(), *AnimSlotName.ToString());
+		}
+		if (ASC->PlayMontage(Ability, ActivationInfo, Authored, Rate) > 0.f)
+		{
+			Montage = Authored;
+		}
+	}
+	else
+	{
+		Montage = ASC->PlaySlotAnimationAsDynamicMontage(Ability, ActivationInfo, Anim, AnimSlotName, BlendIn, BlendOut, Rate);
+	}
 	// 재생 성공이면 ASC 의 현재 몽타주가 된다 (AbilitySystemComponent_Abilities.cpp PlayMontage — AnimInstance 가 없거나 스켈레톤이 안 맞으면 실패).
 	if (!Montage || ASC->GetCurrentMontage() != Montage)
 	{
@@ -489,8 +648,8 @@ void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const 
 		}
 		return;
 	}
-	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s %s 재생 %s (%s) ×%.2f (%s)"),
-		*GetNameSafe(GetOwner()), *Key.ToString(), *Anim->GetName(), R->Source, Rate, NetTag(GetOwner()));
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s %s 재생 %s (%s) ×%.2f%s (%s)"),
+		*GetNameSafe(GetOwner()), *Key.ToString(), *Anim->GetName(), R->Source, Rate, *MarkerNote, NetTag(GetOwner()));
 }
 
 void UERPresentationComponent::StopActionAnim()

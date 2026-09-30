@@ -27,6 +27,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0.01"))
 	float Duration = 0.3f;
 
+	/**
+	 * **밀어내며 돌진** — 앞에 있는 캐릭터에 막혀 멈추지 않고 목적지까지 간다 (벽 · 지형은 그대로 막힌다). 부딪힌 캐릭터는 넉백 조각이 밀어낸다.
+	 * 멧돼지 돌진 (사용자 2026-09-30 "돌진하면서 다른 걸 다 밀어버린다" · F12.6-04).
+	 * 구현: 이동 시간 동안 시전자 캡슐의 Pawn 채널을 Overlap (막힘 없음) · 끝나면 되돌린다. 모든 머신에서 (강제 이동 멀티캐스트).
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	bool bPushThroughPawns = false;
+
 	virtual bool CanExecute(const FERSkillContext& Ctx, FString& OutReason) const override;
 	virtual void OnExecute(FERSkillContext& Ctx) const override;
 	virtual FString GetDebugName() const override { return TEXT("자기 이동"); }

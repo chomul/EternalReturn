@@ -11,9 +11,11 @@
 #include "Core/ERGameState.h"
 #include "Core/ERPlayerState.h"
 #include "Core/ERTeamStatics.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "EternalReturn.h"
 #include "GAS/ERAttributeSet.h"
 #include "GAS/ERGameplayTags.h"
+#include "GAS/ERSkillData.h"
 #include "Navigation/PathFollowingComponent.h"
 #include "TimerManager.h"
 #include "Wildlife/ERWildlifeCharacter.h"
@@ -34,6 +36,7 @@ const TCHAR* AERWildlifeAIController::StateName(EERWildlifeAIState InState)
 	case EERWildlifeAIState::Idle:   return TEXT("대기");
 	case EERWildlifeAIState::Combat: return TEXT("전투");
 	case EERWildlifeAIState::Return: return TEXT("귀환");
+	case EERWildlifeAIState::Tracking: return TEXT("추적");
 	}
 	return TEXT("?");
 }
@@ -77,8 +80,17 @@ void AERWildlifeAIController::NotifyDamaged(AActor* Attacker)
 	{
 		return;
 	}
-	// ⭐ 전투 중 다른 팀이 때려도 **먼저 때린 팀 우선** · 귀환 중에는 **돌아서지 않는다** (사용자 2026-09-24).
-	if (State != EERWildlifeAIState::Idle)
+	// 돌아다니는 종 (위클라인) — 전투 중 맞을 때마다 그 자리가 새 기준 (사용자 2026-10-01). 어그로 한계 10m 는 "마지막으로 맞은 곳에서" 가 된다. 귀환 중엔 그대로
+	if (State == EERWildlifeAIState::Combat)
+	{
+		if (AERWildlifeCharacter* Roamer = GetWildlife(); Roamer && Roamer->GetData() && Roamer->GetData()->bRoams)
+		{
+			Roamer->MoveHomeHere();
+			UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s 피격 — 새 자리 %s"), *GetNameSafe(Roamer), *Roamer->GetHomeLocation().ToCompactString());
+		}
+	}
+	// ⭐ 전투 중 다른 팀이 때려도 **먼저 때린 팀 우선** · 귀환 중에는 **돌아서지 않는다** (사용자 2026-09-24). 추적 중엔 먼저 때린 사람과 싸운다 (F12.6-06).
+	if (State != EERWildlifeAIState::Idle && State != EERWildlifeAIState::Tracking)
 	{
 		return;
 	}
@@ -101,7 +113,7 @@ void AERWildlifeAIController::NotifyDamaged(AActor* Attacker)
 void AERWildlifeAIController::EnterCombat(int32 TeamId, bool bPropagateToPack, const TCHAR* Reason)
 {
 	AERWildlifeCharacter* Me = GetWildlife();
-	if (bStopped || !Me || Me->IsDead() || State != EERWildlifeAIState::Idle)
+	if (bStopped || !Me || Me->IsDead() || (State != EERWildlifeAIState::Idle && State != EERWildlifeAIState::Tracking))
 	{
 		return;
 	}
@@ -183,6 +195,10 @@ void AERWildlifeAIController::SetState(EERWildlifeAIState NewState, const TCHAR*
 	MoveTarget.Reset();
 	State = NewState;
 
+	// 연출 상태 (F12.6-01) — 클라가 발견음 · 전투 끝을 튼다. 몸 전환(아래) **전에** — 재우기 직전 마지막 전송에 실린다.
+	// 추적은 연출상 "전투" (다가오는 몸짓 · 발견음 자리 = 위클라인 추적 시작음) — 추적 → 전투는 같은 값이라 사건 없음
+	Me->SetPresState((NewState == EERWildlifeAIState::Combat || NewState == EERWildlifeAIState::Tracking) ? EERWildlifePresState::Combat
+		: NewState == EERWildlifeAIState::Return ? EERWildlifePresState::Return : EERWildlifePresState::Idle);
 	const bool bActive = NewState != EERWildlifeAIState::Idle;
 	Me->SetBodyActive(bActive);   // ⭐ 도먼시 · CMC/메시 틱 · 복제 빈도 — 한 곳
 	if (UPathFollowingComponent* PF = GetPathFollowingComponent())
@@ -196,7 +212,17 @@ void AERWildlifeAIController::SetState(EERWildlifeAIState NewState, const TCHAR*
 		AggroTeam = INDEX_NONE;
 		break;
 	case EERWildlifeAIState::Combat:
+		TrackTarget.Reset();   // 한 번이라도 전투가 되면 추적은 끝
+		// 돌아다니는 종 (위클라인) — 전투가 시작된 지점이 새 자리 (사용자 2026-10-01). 어그로 한계 · 귀환이 여기 기준
+		if (Me->GetData() && Me->GetData()->bRoams && (Old == EERWildlifeAIState::Idle || Old == EERWildlifeAIState::Tracking))
+		{
+			Me->MoveHomeHere();
+			UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s 돌아다니는 종 — 전투 시작 지점이 새 자리 %s"), *GetNameSafe(Me), *Me->GetHomeLocation().ToCompactString());
+		}
 		GetWorldTimerManager().SetTimer(ThinkTimer, this, &AERWildlifeAIController::Think, S.ThinkInterval, true);
+		break;
+	case EERWildlifeAIState::Tracking:
+		GetWorldTimerManager().SetTimer(ThinkTimer, this, &AERWildlifeAIController::ThinkTracking, S.ThinkInterval, true);
 		break;
 	case EERWildlifeAIState::Return:
 	{
@@ -207,11 +233,14 @@ void AERWildlifeAIController::SetState(EERWildlifeAIState NewState, const TCHAR*
 		ReturnRequestId = GetCurrentMoveRequestID();
 		if (R != EPathFollowingRequestResult::RequestSuccessful)
 		{
-			// 이미 자리에 있거나 길이 없다 — 바로 도착 처리.
+			// 이미 자리에 있거나 길이 없다 — 바로 도착 처리. 아래 공통 로그를 건너뛰므로 왜 귀환했는지 여기서 남긴다 (2026-10-01 이유 없는 "귀환 즉시 완료" 반복)
+			UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s %s → 귀환 (%s)"), *Me->GetName(), StateName(Old), Reason);
 			Heal();
 			SetState(EERWildlifeAIState::Idle, TEXT("귀환 즉시 완료"));
 			return;
 		}
+		// 귀환 중에도 움직이며 쓰는 스킬 (위클라인 유해 물질) — Think 가 귀환이면 그것만 한다
+		GetWorldTimerManager().SetTimer(ThinkTimer, this, &AERWildlifeAIController::Think, S.ThinkInterval, true);
 		break;
 	}
 	}
@@ -278,9 +307,31 @@ APawn* AERWildlifeAIController::PickTarget() const
 void AERWildlifeAIController::Think()
 {
 	AERWildlifeCharacter* Me = GetWildlife();
-	if (bStopped || !Me || Me->IsDead() || State != EERWildlifeAIState::Combat)
+	if (bStopped || !Me || Me->IsDead())
 	{
 		return;
+	}
+	TryWhileMovingSkills();   // 위클라인 유해 물질 — 전투 · 귀환 둘 다
+	if (State != EERWildlifeAIState::Combat)
+	{
+		return;
+	}
+	// 돌아다니는 종 (위클라인) — 통제 돌진처럼 **맞힌 뒤 날아가는** 동안은 한계를 보지 않고, 착지하면 그 자리가 새 기준 (2026-10-01 로그 21:30:39 돌진 9.9m 직후 귀환)
+	if (Me->GetData() && Me->GetData()->bRoams)
+	{
+		const UCharacterMovementComponent* CMC = Me->GetCharacterMovement();
+		const bool bRootMoving = CMC && CMC->HasRootMotionSources();
+		if (bRootMoving)
+		{
+			bWasRootMoving = true;
+			return;   // 이동 중엔 판단도 쉰다 (스킬 · 추격은 착지 뒤)
+		}
+		if (bWasRootMoving)
+		{
+			bWasRootMoving = false;
+			Me->MoveHomeHere();
+			UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s 이동 스킬 착지 — 새 자리 %s"), *GetNameSafe(Me), *Me->GetHomeLocation().ToCompactString());
+		}
 	}
 	// ⭐ 어그로 한계 — 자기 자리 기준 10m (사용자 2026-09-24).
 	const float LeashUU = UERWildlifeSettings::Get().LeashMeters * 100.f;
@@ -300,6 +351,29 @@ void AERWildlifeAIController::Think()
 	const UAbilitySystemComponent* ASC = Me->GetAbilitySystemComponent();
 	const float RangeUU = ASC ? ASC->GetNumericAttribute(UERAttributeSet::GetAttackRangeAttribute()) * 100.f : 100.f;
 	const float Dist = ERTargeting::SingleTargetDistance(Me, ERTargeting::GetTargetingLocation(Me), Target, /*bIgnoreZ=*/true);
+
+	// 스킬 시전 · 돌진 중에는 쫓지 않는다 — 쫓으면 길찾기 이동 방향으로 몸이 돌아간다 (2026-09-30 PIE: 돌진을 피하자 멧돼지가 돌진하며 회전)
+	if (const UAbilitySystemComponent* MyASC = Me->GetAbilitySystemComponent())
+	{
+		for (const FGameplayAbilitySpec& Spec : MyASC->GetActivatableAbilities())
+		{
+			if (Spec.IsActive() && !Spec.DynamicAbilityTags.HasTagExact(ERTags::Ability_Slot_Attack))
+			{
+				if (MoveTarget.IsValid())
+				{
+					StopMovement();
+					MoveTarget.Reset();
+				}
+				return;
+			}
+		}
+	}
+
+	// 스킬이 평타보다 먼저 (F12.6-03 K1) — 쿨이 돌면 쓴다 (GAS 쿨다운이 거른다 · 사용자 2026-09-30)
+	if (TrySkill(Target, Dist))
+	{
+		return;
+	}
 
 	if (Dist <= RangeUU)
 	{
@@ -325,6 +399,210 @@ void AERWildlifeAIController::Think()
 	}
 }
 
+bool AERWildlifeAIController::TriggerSpec(const FGameplayAbilitySpec& Spec, AActor* Target)
+{
+	AERWildlifeCharacter* Me = GetWildlife();
+	UAbilitySystemComponent* ASC = Me ? Me->GetAbilitySystemComponent() : nullptr;
+	if (!ASC)
+	{
+		return false;
+	}
+	// ⭐ 플레이어와 같은 경로 — 조준 데이터를 실어 서버에서 발동 (AERPlayerController::ServerActivateSkill 과 같다). 쿨다운 · CC 면 거부된다.
+	AActor* AimActor = Target ? Target : Me;
+	const FHitResult Hit(AimActor, nullptr, AimActor->GetActorLocation(), FVector::UpVector);
+	FGameplayEventData Payload;
+	Payload.EventTag = ERTags::Event_Skill_Aim;
+	Payload.Instigator = Me;
+	Payload.TargetData = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(Hit);
+	return ASC->TriggerAbilityFromGameplayEvent(Spec.Handle, ASC->AbilityActorInfo.Get(), ERTags::Event_Skill_Aim, &Payload, *ASC);
+}
+
+bool AERWildlifeAIController::TrySkill(AActor* Target, float DistUU)
+{
+	AERWildlifeCharacter* Me = GetWildlife();
+	UAbilitySystemComponent* ASC = Me ? Me->GetAbilitySystemComponent() : nullptr;
+	if (!ASC)
+	{
+		return false;
+	}
+	// 무엇이든 시전 중이면 새로 시작하지 않는다 — 아래 평타 경로가 "기다림" 을 맡는다
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.IsActive())
+		{
+			return false;
+		}
+	}
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		const UERSkillData* Skill = Cast<UERSkillData>(Spec.SourceObject.Get());
+		if (Skill && Skill->AIUse == EERAIUse::None && !Spec.DynamicAbilityTags.HasTagExact(ERTags::Ability_Slot_Attack))
+		{
+			// 동물에 붙인 스킬인데 AI 가 쓰지 않는다 — DA AIUse 를 빠뜨린 실수 (2026-10-01 위클라인 통제 한 번도 안 나옴). 스킬당 한 번
+			static TSet<const UObject*> WarnedNone;
+			if (!WarnedNone.Contains(Skill))
+			{
+				WarnedNone.Add(Skill);
+				UE_LOG(LogEternalReturn, Warning, TEXT("[야생AI] %s 스킬 %s — AIUse None 이라 AI 가 쓰지 않는다 (DA AIUse 를 본다)"), *GetNameSafe(Me), *Skill->GetName());
+			}
+		}
+		if (!Skill || Skill->AIUse != EERAIUse::InRange || Spec.Level <= 0)
+		{
+			continue;
+		}
+		const float RangeUU = (Skill->AIUseRange > 0.f ? Skill->AIUseRange : Skill->Shape.RangeMax) * 100.f;
+		// 최소 거리 — 판정 모양의 RangeMin 을 그대로 (위클라인 통제 "2m 이상 떨어진 적에게" · F12.6-06)
+		if (DistUU > RangeUU || DistUU < Skill->Shape.RangeMin * 100.f)
+		{
+			continue;
+		}
+		if (MoveTarget.IsValid())
+		{
+			StopMovement();   // 돌진 · 자기 이동 스킬이 길찾기와 싸우지 않게
+			MoveTarget.Reset();
+		}
+		if (TriggerSpec(Spec, Target))
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s 스킬 %s — 거리 %.1fm ≤ %.1fm"), *GetNameSafe(Me), *Skill->GetName(), DistUU / 100.f, RangeUU / 100.f);
+			return true;
+		}
+		// 쿨다운 · CC — 다음 스킬 또는 평타
+	}
+	return false;
+}
+
+void AERWildlifeAIController::NotifyDealtHit()
+{
+	AERWildlifeCharacter* Me = GetWildlife();
+	if (bStopped || State != EERWildlifeAIState::Combat || !Me || !Me->GetData() || !Me->GetData()->bRoams)
+	{
+		return;
+	}
+	Me->MoveHomeHere();
+	UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s 적중 — 새 자리 %s"), *GetNameSafe(Me), *Me->GetHomeLocation().ToCompactString());
+}
+
+void AERWildlifeAIController::NotifySteppedOnHazard(AActor* Victim)
+{
+	if (bStopped || (State != EERWildlifeAIState::Idle && State != EERWildlifeAIState::Tracking))
+	{
+		return;   // 이미 전투 · 귀환 — 먼저 때린 팀 우선 · 귀환 중엔 돌아서지 않는다 (§6.5)
+	}
+	const int32 Team = ERTeamStatics::GetTeamId(Victim);
+	if (Team == INDEX_NONE)
+	{
+		return;
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s 유해 물질을 %s 가 밟음 → 팀 %d 로 전투"), *GetNameSafe(GetPawn()), *GetNameSafe(Victim), Team);
+	EnterCombat(Team, /*bPropagateToPack=*/true, TEXT("유해 물질 밟음"));
+}
+
+void AERWildlifeAIController::StartTrackingNearest(float Meters)
+{
+	const AERWildlifeCharacter* Me = GetWildlife();
+	const AERGameState* GS = GetWorld() ? GetWorld()->GetGameState<AERGameState>() : nullptr;
+	if (!Me || !GS || State != EERWildlifeAIState::Idle || Meters <= 0.f)
+	{
+		return;
+	}
+	APawn* Nearest = nullptr;
+	float BestSq = FMath::Square(Meters * 100.f);
+	for (const APlayerState* PS : GS->PlayerArray)
+	{
+		APawn* Candidate = PS ? PS->GetPawn() : nullptr;
+		const UAbilitySystemComponent* ASC = Candidate ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Candidate) : nullptr;
+		if (!ASC || ASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) <= 0.f)
+		{
+			continue;
+		}
+		const float DistSq = FVector::DistSquared2D(Candidate->GetActorLocation(), Me->GetActorLocation());
+		if (DistSq <= BestSq)
+		{
+			BestSq = DistSq;
+			Nearest = Candidate;
+		}
+	}
+	if (!Nearest)
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s 생성 — %.0fm 안 실험체 없음 · 추적 안 함 (⏸ 순찰은 F13)"), *Me->GetName(), Meters);
+		return;
+	}
+	TrackTarget = Nearest;
+	TrackRadiusUU = Meters * 100.f;
+	UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s 실험 대상 추적 — %s (%.1fm · 반경 %.0fm)"), *Me->GetName(), *Nearest->GetName(), FMath::Sqrt(BestSq) / 100.f, Meters);
+	SetState(EERWildlifeAIState::Tracking, TEXT("실험 대상 추적"));
+}
+
+void AERWildlifeAIController::ThinkTracking()
+{
+	AERWildlifeCharacter* Me = GetWildlife();
+	if (bStopped || !Me || Me->IsDead() || State != EERWildlifeAIState::Tracking)
+	{
+		return;
+	}
+	TryWhileMovingSkills();
+	// ⚠ 방금 흘린 독이 바로 펄스를 돌아 밟은 사람이 있으면 그 안에서 전투로 바뀐다 (TrackTarget 도 비워진다) — 이어 가면 "반경 밖" 으로 대기가 된다 (2026-10-01 로그 21:20:39)
+	if (State != EERWildlifeAIState::Tracking)
+	{
+		return;
+	}
+	APawn* Target = TrackTarget.Get();
+	const UAbilitySystemComponent* TASC = Target ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target) : nullptr;
+	if (!TASC || TASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) <= 0.f
+		|| FVector::DistSquared2D(Target->GetActorLocation(), Me->GetActorLocation()) > FMath::Square(TrackRadiusUU))
+	{
+		TrackTarget.Reset();
+		SetState(EERWildlifeAIState::Idle, TEXT("추적 대상이 반경 밖 (⏸ 순찰은 F13)"));
+		return;
+	}
+	// 다가가기만 — 붙으면 멈춘다 (공격 안 함 · 먼저 때리거나 독을 밟아야 전투)
+	if (MoveTarget.Get() != Target || GetMoveStatus() != EPathFollowingStatus::Moving)
+	{
+		MoveToActor(Target, /*AcceptanceRadius=*/150.f, /*bStopOnOverlap=*/true, /*bUsePathfinding=*/true, /*bCanStrafe=*/false, nullptr, /*bAllowPartialPath=*/true);
+		MoveTarget = Target;
+	}
+}
+
+void AERWildlifeAIController::TryWhileMovingSkills()
+{
+	AERWildlifeCharacter* Me = GetWildlife();
+	UAbilitySystemComponent* ASC = Me ? Me->GetAbilitySystemComponent() : nullptr;
+	if (!ASC || Me->GetVelocity().SizeSquared2D() < FMath::Square(10.f))
+	{
+		return;   // 서 있으면 안 흘린다
+	}
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		const UERSkillData* Skill = Cast<UERSkillData>(Spec.SourceObject.Get());
+		if (Skill && Skill->AIUse == EERAIUse::WhileMoving && Spec.Level > 0 && !Spec.IsActive())
+		{
+			if (TriggerSpec(Spec, nullptr))   // 자기 자리 · 쿨이면 거부 (조용히)
+			{
+				UE_LOG(LogEternalReturn, Verbose, TEXT("[야생AI] %s 움직이며 %s"), *Me->GetName(), *Skill->GetName());
+			}
+		}
+	}
+}
+
+void AERWildlifeAIController::NotifyAllyDied()
+{
+	AERWildlifeCharacter* Me = GetWildlife();
+	UAbilitySystemComponent* ASC = Me ? Me->GetAbilitySystemComponent() : nullptr;
+	if (bStopped || !ASC || Me->IsDead())
+	{
+		return;
+	}
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		const UERSkillData* Skill = Cast<UERSkillData>(Spec.SourceObject.Get());
+		if (Skill && Skill->AIUse == EERAIUse::OnAllyDeath && Spec.Level > 0)
+		{
+			const bool bOk = TriggerSpec(Spec, nullptr);
+			UE_LOG(LogEternalReturn, Log, TEXT("[야생AI] %s 짝이 죽음 → 스킬 %s %s"), *GetNameSafe(Me), *Skill->GetName(), bOk ? TEXT("발동") : TEXT("거부 (쿨 · CC)"));
+		}
+	}
+}
+
 void AERWildlifeAIController::TryAttack(AActor* Target)
 {
 	AERWildlifeCharacter* Me = GetWildlife();
@@ -332,6 +610,14 @@ void AERWildlifeAIController::TryAttack(AActor* Target)
 	if (!ASC)
 	{
 		return;
+	}
+	// 스킬 시전 중이면 평타를 겹쳐 치지 않는다 (F12.6-03 PIE: 선딜 1초 중에 평타가 나갔다 — 평타는 State.Casting 에 안 막힌다)
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.IsActive() && !Spec.DynamicAbilityTags.HasTagExact(ERTags::Ability_Slot_Attack))
+		{
+			return;
+		}
 	}
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
@@ -343,13 +629,7 @@ void AERWildlifeAIController::TryAttack(AActor* Target)
 		{
 			return;   // 앞 공격이 아직 끝나지 않았다 (선후딜)
 		}
-		// ⭐ 플레이어와 같은 경로 — 조준 데이터를 실어 서버에서 발동 (AERPlayerController::ServerActivateSkill 과 같다). 쿨다운 중이면 거부된다.
-		const FHitResult Hit(Target, nullptr, Target->GetActorLocation(), FVector::UpVector);
-		FGameplayEventData Payload;
-		Payload.EventTag = ERTags::Event_Skill_Aim;
-		Payload.Instigator = Me;
-		Payload.TargetData = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(Hit);
-		ASC->TriggerAbilityFromGameplayEvent(Spec.Handle, ASC->AbilityActorInfo.Get(), ERTags::Event_Skill_Aim, &Payload, *ASC);
+		TriggerSpec(Spec, Target);
 		return;
 	}
 	if (!bWarnedNoAttack)

@@ -164,6 +164,9 @@ public:
 	/** 모드(저격) 중인가 — 조각이 어빌리티를 활성으로 붙들고 있다. PC 가 "모드 중 재입력 = 사격" 판단에 쓴다. */
 	bool IsModeActive() const { return bFragmentKeepActive; }
 
+	/** 이번 시전이 선딜 중 CC 로 끊겼나 — 한 번 읽으면 지운다 (EndAbility 조각 훅이 두 번 불려도 한 번만). 좌절 조각 (F12.6-03). */
+	bool ConsumeCastInterruptedByCC() { const bool b = bCastInterruptedByCC; bCastInterruptedByCC = false; return b; }
+
 protected:
 	/** [4] 연출 훅. 서버·클라 양쪽에서 불린다 (ServerInitiated). 로직 금지 — 몽타주·이펙트·Print 만 (CLAUDE.md §7). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "ER|Skill", DisplayName = "OnSkillExecuted")
@@ -209,6 +212,7 @@ private:
 	UFUNCTION() void OnCastInterruptedByMove(FGameplayEventData Payload);
 	UFUNCTION() void OnRecoveryFinished();
 	UFUNCTION() void OnRecoveryCancelledByMove(FGameplayEventData Payload);
+	UFUNCTION() void OnRecoveryInterruptedByCC();
 
 	void ExecuteAndRecover();
 
@@ -216,7 +220,7 @@ private:
 	 * 발동 애니 (F12.5-01 · Argument 39) — 키 = 자기 슬롯 태그, 애니는 시전자의 연출 컴포넌트가 고른다. **판정 흐름과 무관** (Argument 36).
 	 * 서버(복제 원천) + 소유 클라 — 엔진은 복제된 몽타주를 소유자에게는 재생하지 않는다 (`AbilitySystemComponent_Abilities.cpp:3145` · 예측 전제).
 	 */
-	void PlaySkillAnim(const UERSkillData& Skill);
+	void PlaySkillAnim(const UERSkillData& Skill, bool bExecutePhase = false);
 
 	/** [3] 발동 요청의 TargetData 에서 조준점을 읽고 사거리 [RangeMin, RangeMax] 로 클램프한다. 없으면 시전자 정면. */
 	void ResolveAim(const FGameplayEventData* TriggerEventData, const UERSkillData& Skill);
@@ -226,6 +230,8 @@ private:
 
 	// [3] 확정된 조준. 매 발동마다 ResolveAim 이 덮어쓴다.
 	FVector AimPoint = FVector::ZeroVector;
+	/** PlayerCircles — 시전 시작 때 저장한 근처 플레이어 자리 (판정 순간 각 자리에 원). 서버만. */
+	TArray<FVector> CircleAimPoints;
 	FVector AimDirection = FVector::ForwardVector;
 	TWeakObjectPtr<AActor> AimActor;
 
@@ -246,6 +252,10 @@ private:
 	FERSkillContext ExecCtx;
 	/** 조각이 활성 유지를 요청한 상태 (서버: ExecCtx.bKeepActive · 클라: KeepsAbilityActive 조각 존재). EndAbility 가 내린다. */
 	bool bFragmentKeepActive = false;
+	/** 선딜 중 CC 취소 표시 — OnCastInterruptedByCC 가 세우고 ActivateAbility 가 지운다. */
+	bool bCastInterruptedByCC = false;
+	/** 선딜 CC 감시 태스크 — 선딜이 끝나면 멈춘다 (E33). */
+	TWeakObjectPtr<class UAbilityTask_WaitGameplayTagAdded> CastCCTask;
 	/** 조각 훅 일괄 호출. Skill 이 null 이거나 조각이 없으면 아무 일도 없다 — 옛 필드 경로와 공존 (01 단계). */
 	void RunFragmentsExecute(FERSkillContext& Ctx);
 	void RunFragmentsTargets(FERSkillContext& Ctx, const TArray<AActor*>& Targets);

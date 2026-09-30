@@ -12,6 +12,7 @@
 #include "Combat/ERTargeting.h"
 #include "Core/ERTeamStatics.h"
 #include "Core/ERPlayerState.h"
+#include "GameFramework/GameStateBase.h"
 #include "TimerManager.h"
 #include "Abilities/GameplayAbilityTargetTypes.h"
 #include "DrawDebugHelpers.h"
@@ -88,6 +89,7 @@ namespace
 #include "Abilities/Tasks/AbilityTask_WaitGameplayTag.h"
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERSkillData.h"
+#include "Wildlife/ERWildlifeAIController.h"
 
 UERGameplayAbility::UERGameplayAbility()
 {
@@ -129,6 +131,7 @@ void UERGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 {
 	// ⚠ Super 를 부르지 않는다 — Super 는 BP 의 K2_ActivateAbility 로 넘기는 분기뿐이다 (GameplayAbility.cpp:786-800).
 	//   BP 가 ActivateAbility 를 오버라이드했다면 여기 자체가 안 불린다.
+	bCastInterruptedByCC = false;
 
 	const UERSkillData* Skill = GetSkillData(Handle, ActorInfo);
 	if (!Skill)
@@ -142,6 +145,27 @@ void UERGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 
 	// [3] 조준 확정 — 발동 요청에 실려 온 좌표를 서버가 클램프. 클라 인스턴스도 같은 데이터를 받아 같은 값을 갖는다(연출용).
 	ResolveAim(TriggerEventData, *Skill);
+
+	// PlayerCircles — 지금 근처에 있는 실험체 자리를 **팀 상관없이 전부** 저장 (판정 순간 그 자리마다 원 · F12.6-05 VF 방출)
+	CircleAimPoints.Reset();
+	if (Skill->Shape.Shape == ESkillTargeting::PlayerCircles && HasAuthority(&ActivationInfo))
+	{
+		const AActor* Me = GetAvatarActorFromActorInfo();
+		const AGameStateBase* GS = Me ? Me->GetWorld()->GetGameState() : nullptr;
+		const float MaxSq = FMath::Square(GetRangeMax(*Skill) * 100.f);
+		for (const APlayerState* PS : GS ? GS->PlayerArray : TArray<TObjectPtr<APlayerState>>())
+		{
+			const APawn* P = PS ? PS->GetPawn() : nullptr;
+			const UAbilitySystemComponent* PASC = P ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(P) : nullptr;
+			if (PASC && PASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 0.f
+				&& FVector::DistSquared2D(P->GetActorLocation(), Me->GetActorLocation()) <= MaxSq)
+			{
+				CircleAimPoints.Add(ERTargeting::GetTargetingLocation(P));
+			}
+		}
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 원 %d개 자리 저장 (반경 %.1fm 안 실험체 전원)"),
+			*GetNameSafe(Me), *GetNameSafe(Skill), CircleAimPoints.Num(), GetRangeMax(*Skill));
+	}
 
 	// 리캐스트 — 윈도우가 열려 있었으면 이번 발동이 그것을 **소비**한다. 쿨다운은 새로 안 건다 (Argument 19 ③A, 자체 결정값).
 	//   ⚠ 여기서 지우면 안 된다 — CommitAbility → CheckCooldown 이 태그를 못 봐 "쿨다운 중" 으로 실패한다
@@ -192,6 +216,15 @@ void UERGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 
 	if (Skill->CastTime > 0.f)
 	{
+		// 조각 OnCastStart — 충전 중 자기 효과 (F12.6-06 「격리」). 서버만
+		if (HasAuthority(&ActivationInfo))
+		{
+			FERSkillContext CastCtx = MakeContext(Skill, 1.f);
+			for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
+			{
+				if (F) { F->OnCastStart(CastCtx); }
+			}
+		}
 		BeginCast(*Skill);       // [2] -> OnCastFinished -> ExecuteAndRecover
 	}
 	else
@@ -200,7 +233,7 @@ void UERGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	}
 }
 
-void UERGameplayAbility::PlaySkillAnim(const UERSkillData& Skill)
+void UERGameplayAbility::PlaySkillAnim(const UERSkillData& Skill, bool bExecutePhase)
 {
 	// 서버 = 복제 원천 · 소유 클라 = 엔진이 복제 재생을 안 해 주니 직접 (ServerInitiated 라 RTT/2 늦다 — 예측 안 함, CLAUDE.md §8).
 	if (!HasAuthority(&CurrentActivationInfo) && !IsLocallyControlled())
@@ -231,7 +264,24 @@ void UERGameplayAbility::PlaySkillAnim(const UERSkillData& Skill)
 			Key = *RecastKey;
 		}
 	}
-	Pres->PlayAbilityAnim(this, CurrentActivationInfo, Key, AttackSpeed, Skill.CastTime + Skill.RecoveryTime);
+	// 판정 순간의 두 번째 애니 (F12.6-04 멧돼지 차징 → 돌진) — `<슬롯>.Execute` 줄이 있을 때만. 없으면 시작 애니가 끝까지 (지금까지와 같다)
+	if (bExecutePhase)
+	{
+		static const TMap<FGameplayTag, FGameplayTag> ExecuteKeys = {
+			{ ERTags::Ability_Slot_Q, ERTags::Ability_Slot_Q_Execute }, { ERTags::Ability_Slot_W, ERTags::Ability_Slot_W_Execute },
+			{ ERTags::Ability_Slot_E, ERTags::Ability_Slot_E_Execute }, { ERTags::Ability_Slot_R, ERTags::Ability_Slot_R_Execute },
+			{ ERTags::Ability_Slot_D, ERTags::Ability_Slot_D_Execute },
+		};
+		const FGameplayTag* ExecKey = ExecuteKeys.Find(Slot);
+		if (!ExecKey || !Pres->HasKey(*ExecKey))
+		{
+			return;
+		}
+		Pres->PlayAbilityAnim(this, CurrentActivationInfo, *ExecKey, 0.f, Skill.RecoveryTime);
+		return;
+	}
+	// 선딜 있는 스킬은 애니의 "ER 타격 지점" 마커가 CastTime 에 오게 재생 속도를 맞춘다 (Argument 52 T2 · 마커 없으면 1배속)
+	Pres->PlayAbilityAnim(this, CurrentActivationInfo, Key, AttackSpeed, Skill.CastTime + Skill.RecoveryTime, Skill.CastTime);
 }
 
 void UERGameplayAbility::BeginCast(const UERSkillData& Skill)
@@ -256,6 +306,7 @@ void UERGameplayAbility::BeginCast(const UERSkillData& Skill)
 		this, ERTags::State_Block_Skill, /*OptionalExternalTarget=*/nullptr, /*OnlyTriggerOnce=*/true);
 	WaitCC->Added.AddDynamic(this, &UERGameplayAbility::OnCastInterruptedByCC);
 	WaitCC->ReadyForActivation();
+	CastCCTask = WaitCC;   // 선딜이 끝나면 멈춘다 (OnCastFinished) — 안 멈추면 판정 · 후딜 중 CC 도 "선딜 취소" 로 잡힌다 (E33)
 
 	// 이동 취소형 — 서버가 이동 명령을 수락하면 PC 가 Event.Input.Move 를 보낸다 (ERPlayerController::ServerSetDestination).
 	if (Skill.bMoveCancelsCast)
@@ -273,12 +324,20 @@ void UERGameplayAbility::BeginCast(const UERSkillData& Skill)
 
 void UERGameplayAbility::OnCastFinished()
 {
+	// ⭐ 선딜 CC 감시는 여기까지 (E33). 판정 중 자기에게 거는 기절(좌절)이 "선딜 취소" 로 잡혀 쿨다운을 다시 걸고 벌칙이 두 번 걸렸다.
+	//   판정 뒤 CC 는 후딜 감시(BeginRecovery)가 모션만 끊는다.
+	if (UAbilityTask_WaitGameplayTagAdded* Task = CastCCTask.Get())
+	{
+		Task->EndTask();
+	}
+	CastCCTask.Reset();
 	RemovePhaseEffect();
 	ExecuteAndRecover();
 }
 
 void UERGameplayAbility::OnCastInterruptedByCC()
 {
+	bCastInterruptedByCC = true;   // 좌절 조각이 EndAbility 에서 읽는다 (F12.6-03)
 	CancelCast(TEXT("CC"));
 }
 
@@ -361,6 +420,21 @@ void UERGameplayAbility::ExecuteAndRecover()
 
 	// 연출 훅은 양쪽.
 	K2_OnSkillExecuted();
+	// 판정 순간 (서버 + 소유 클라 — 시작 애니와 같은 규칙):
+	//   ① 선딜을 맞추느라 바꾼 재생 속도를 1배속으로 — 후딜은 원래 속도 (Argument 52 T2 개선)
+	//   ② `<슬롯>.Execute` 줄이 있으면 두 번째 애니
+	if (const UERSkillData* ExecAnimSkill = GetSkillData(CurrentSpecHandle, CurrentActorInfo); ExecAnimSkill && ExecAnimSkill->CastTime > 0.f
+		&& (HasAuthority(&CurrentActivationInfo) || IsLocallyControlled()))
+	{
+		if (AActor* Avatar = GetAvatarActorFromActorInfo())
+		{
+			if (UERPresentationComponent* Pres = Avatar->FindComponentByClass<UERPresentationComponent>())
+			{
+				Pres->RestoreSkillAnimRate(this);
+			}
+		}
+		PlaySkillAnim(*ExecAnimSkill, /*bExecutePhase=*/true);
+	}
 
 	const UERSkillData* Skill = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
 
@@ -412,6 +486,19 @@ void UERGameplayAbility::BeginRecovery(const UERSkillData& Skill)
 		this, ERTags::Event_Input_Move, nullptr, /*OnlyTriggerOnce=*/true);
 	WaitMove->EventReceived.AddDynamic(this, &UERGameplayAbility::OnRecoveryCancelledByMove);
 	WaitMove->ReadyForActivation();
+
+	// 후딜 중 CC — 모션만 끊는다 (스킬은 이미 발동 · 쿨다운 다시 안 건다). 선딜 감시가 여기까지 이어지던 동작을 나눈 것 (E33).
+	UAbilityTask_WaitGameplayTagAdded* WaitCC = UAbilityTask_WaitGameplayTagAdded::WaitGameplayTagAdd(
+		this, ERTags::State_Block_Skill, /*OptionalExternalTarget=*/nullptr, /*OnlyTriggerOnce=*/true);
+	WaitCC->Added.AddDynamic(this, &UERGameplayAbility::OnRecoveryInterruptedByCC);
+	WaitCC->ReadyForActivation();
+}
+
+void UERGameplayAbility::OnRecoveryInterruptedByCC()
+{
+	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 후딜 중 CC — 모션만 끊음"),
+		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(GetSkillData(CurrentSpecHandle, CurrentActorInfo)));
+	EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/true);
 }
 
 void UERGameplayAbility::OnRecoveryFinished()
@@ -531,6 +618,14 @@ FTargetQuery UERGameplayAbility::MakeTargetQuery(const UERSkillData& SkillRef) c
 	Q.Direction = AimDirection;
 	// GroundCircle 만 조준점이 중심이다. 나머지는 시전자가 원점.
 	Q.Origin = (Q.Shape == ESkillTargeting::GroundCircle) ? AimPoint : ERTargeting::GetTargetingLocation(Avatar);
+	// 자기 원(SelfRadius · DualRadius)을 조준 방향 앞으로 띄운다 — 곰 강타 "앞발이 내려친 자리" (F12.6-04 · 사용자 2026-09-30)
+	if (Skill->Shape.ForwardOffset > 0.f && (Q.Shape == ESkillTargeting::SelfRadius || Q.Shape == ESkillTargeting::DualRadius))
+	{
+		const FVector Fwd = AimDirection.GetSafeNormal2D().IsNearlyZero()
+			? (Avatar ? Avatar->GetActorForwardVector().GetSafeNormal2D() : FVector::ForwardVector)
+			: AimDirection.GetSafeNormal2D();
+		Q.Origin += Fwd * Skill->Shape.ForwardOffset * 100.f;
+	}
 	Q.DesignatedTarget = AimActor.Get();
 
 	// ⭐ 조준 보조 — SingleTarget 인데 커서 아래 액터가 유효한 대상이 아니면(바닥 · 자기 자신 · 아군),
@@ -578,8 +673,39 @@ void UERGameplayAbility::ExecuteSkill()
 
 	const FTargetQuery Q = MakeTargetQuery(*Skill);
 
-	const FTargetResult Result = ERTargeting::Query(Avatar->GetWorld(), Q);
-	DrawSkillQuery(Avatar->GetWorld(), Q, Result, GetNameSafe(Skill));   // ER.Skill.DebugDraw 1
+	FTargetResult Result;
+	if (Q.Shape == ESkillTargeting::Projectile && Skill->Shape.ProjectileCount > 1)
+	{
+		// 여러 발 — 조준 방향을 가운데로 부채처럼 (위클라인 트리플렛 코드 · F12.6-06). 합친다 (같은 액터는 한 번)
+		const int32 N = Skill->Shape.ProjectileCount;
+		for (int32 i = 0; i < N; ++i)
+		{
+			FTargetQuery P = Q;
+			const float Yaw = (i - (N - 1) * 0.5f) * Skill->Shape.SpreadAngleDeg;
+			P.Direction = Q.Direction.GetSafeNormal2D().RotateAngleAxis(Yaw, FVector::UpVector);
+			const FTargetResult One = ERTargeting::Query(Avatar->GetWorld(), P);
+			for (AActor* A : One.HitActors) { if (A) { Result.HitActors.AddUnique(A); } }
+			DrawSkillQuery(Avatar->GetWorld(), P, One, GetNameSafe(Skill));
+		}
+	}
+	else if (Q.Shape == ESkillTargeting::PlayerCircles)
+	{
+		// 저장한 자리마다 지면 원 → 합친다 (같은 액터는 한 번)
+		for (const FVector& P : CircleAimPoints)
+		{
+			FTargetQuery C = Q;
+			C.Shape = ESkillTargeting::GroundCircle;
+			C.Origin = P;
+			const FTargetResult One = ERTargeting::Query(Avatar->GetWorld(), C);
+			for (AActor* A : One.HitActors) { if (A) { Result.HitActors.AddUnique(A); } }
+			DrawSkillQuery(Avatar->GetWorld(), C, One, GetNameSafe(Skill));
+		}
+	}
+	else
+	{
+		Result = ERTargeting::Query(Avatar->GetWorld(), Q);
+		DrawSkillQuery(Avatar->GetWorld(), Q, Result, GetNameSafe(Skill));   // ER.Skill.DebugDraw 1
+	}
 
 	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 판정 %s: 적중 %d (중앙 %d)"),
 		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(Skill),
@@ -609,6 +735,17 @@ void UERGameplayAbility::ExecuteSkill()
 		if (HasAuthority(&CurrentActivationInfo))
 		{
 			SendPresCues(*Skill, Avatar, Targets, /*bWithAttack=*/ExecOverride == nullptr);
+			// 야생동물이 누굴 맞혔다 — 돌아다니는 종(위클라인)은 그 자리가 새 기준 (F12.6-06 · 사용자 2026-10-01)
+			if (!Targets.IsEmpty())
+			{
+				if (const APawn* Pawn = Cast<APawn>(Avatar))
+				{
+					if (AERWildlifeAIController* AI = Cast<AERWildlifeAIController>(Pawn->GetController()))
+					{
+						AI->NotifyDealtHit();
+					}
+				}
+			}
 		}
 	}
 

@@ -24,6 +24,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0.01"))
 	float Duration = 0.3f;
 
+	/**
+	 * 띄우는 높이 (m). 0 = 수평으로만 민다. >0 이면 포물선 (엔진 JumpForce) — 멧돼지 돌진 "띄우며 멀리 넉백" · Distance 0 이면 제자리 에어본 (F12.6-04).
+	 * 에어본 CC(행동 막기)는 함께 거는 적중 효과(GE_CC_Airborne)가 맡는다 — 이 칸은 몸만 띄운다. `[자체]`
+	 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	float Height = 0.f;
+
+	/** 시전자에게서 **멀어지는 방향**으로 민다 (주변을 밀어내는 폭발 — 위클라인 「격리」 · F12.6-06). 끄면 시전자가 바라보는 방향 (지금까지와 같다). */
+	UPROPERTY(EditDefaultsOnly)
+	bool bAwayFromCaster = false;
+
 	/** 벽 충돌 시 대상에게 실행할 데이터 (피해 · 적중 효과 조각만 쓴다). */
 	UPROPERTY(EditDefaultsOnly)
 	TObjectPtr<UERSkillData> WallImpactSkill;

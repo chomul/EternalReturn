@@ -318,7 +318,16 @@ FTargetResult ERTargeting::QueryGroundCircle(const UWorld* World, const FTargetQ
 {
 	// 계산은 SelfRadius 와 같다. Origin 이 시전자가 아니라 지정 좌표라는 것만 다르고,
 	// 그 차이는 호출자가 Origin 을 채우면서 이미 반영된다.
-	return QuerySelfRadius(World, Q);
+	// ⭐ 반경은 **RadiusOuter** (FERSkillShape "GroundCircle 반경") — RangeMax 는 시전 사거리(조준점을 당기는 거리)다.
+	//   전에는 RangeMax 를 반경으로 써서 오메가 VF 방출(사거리 8 · 반경 2.5)이 **8m 원**으로 판정됐다 — 디버그 그리기는 RadiusOuter 라
+	//   보이는 원과 실제 판정이 달랐다 (E35 · 2026-09-30). RadiusOuter 가 0 이면 옛 동작(RangeMax).
+	FTargetQuery Circle = Q;
+	if (Q.RadiusOuter > 0.f)
+	{
+		Circle.RangeMax = Q.RadiusOuter;
+		Circle.RangeMin = 0.f;
+	}
+	return QuerySelfRadius(World, Circle);
 }
 
 FTargetResult ERTargeting::QueryProjectile(const UWorld* World, const FTargetQuery& Q)

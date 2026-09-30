@@ -63,6 +63,28 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "AI", meta = (ClampMin = "1"))
 	float BossNetUpdateFrequency = 30.f;
 
+	// ── 경계 · 수면 (F12.6-02 · Argument 51 B1 — **연출만** · 원작 수치 (미확인) → 전부 `[자체]`) ──
+
+	/** 가장 가까운 실험체가 이 안(m)이면 경계. 원거리 평타(5~6m)보다 조금 밖 `[자체]`. */
+	UPROPERTY(config, EditAnywhere, Category = "경계 · 수면", meta = (ClampMin = "0"))
+	float BewareMeters = 6.f;
+
+	/** 경계를 푸는 거리(m) — 경계보다 조금 멀게 (경계선에서 깜빡이지 않게) `[자체]`. */
+	UPROPERTY(config, EditAnywhere, Category = "경계 · 수면", meta = (ClampMin = "0"))
+	float BewareExitMeters = 7.f;
+
+	/** 이 안(m)에 아무도 없으면 잠들 준비 · 들어오면 깬다 `[자체]` — 20m 는 너무 길다 → 10m (사용자 2026-09-30). 경계 풂(7m)보다 커야 한다. */
+	UPROPERTY(config, EditAnywhere, Category = "경계 · 수면", meta = (ClampMin = "0"))
+	float SleepMeters = 10.f;
+
+	/** 아무도 없는 채로 이만큼(초) 지나면 잔다 `[자체]`. */
+	UPROPERTY(config, EditAnywhere, Category = "경계 · 수면", meta = (ClampMin = "0"))
+	float SleepDelaySeconds = 10.f;
+
+	/** 근처 실험체를 재는 주기(초) — 서브시스템 타이머 하나 (Argument 51 P2) `[자체]`. */
+	UPROPERTY(config, EditAnywhere, Category = "경계 · 수면", meta = (ClampMin = "0.1"))
+	float SenseInterval = 0.5f;
+
 	/** 이름으로 종 정의 애셋 로드. 없으면 Error 로그 + nullptr. */
 	static const UERWildlifeData* FindData(FName Name);
 };

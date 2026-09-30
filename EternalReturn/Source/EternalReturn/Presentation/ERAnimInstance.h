@@ -41,6 +41,16 @@ public:
 	/** [게임 스레드] 사망 — 쓰러지는 애니 (`Pres.Anim.Death`). bSkipToEnd = 늦게 relevant 된 클라: 쓰러지는 과정 없이 **누운 채로** (마지막 프레임부터). */
 	void SetDead(UAnimSequenceBase* Anim, bool bSkipToEnd) { PendingDeathAnim = Anim; bPendingDeathSkipToEnd = bSkipToEnd; bPendingDead = true; }
 
+	/** [게임 스레드] 쉬는 자세 (F12.6-02 야생동물 경계 · 잠) + 애니 6개. null 이면 그 단계가 없는 종 — 상태머신이 bHas* 로 건너뛴다. */
+	void SetRest(bool bInBeware, bool bInSleep, bool bSkipIntro, UAnimSequenceBase* BewareStart, UAnimSequenceBase* BewareLoop, UAnimSequenceBase* BewareEnd,
+		UAnimSequenceBase* SleepStart, UAnimSequenceBase* SleepLoop, UAnimSequenceBase* Wake)
+	{
+		bPendingBeware = bInBeware; bPendingSleep = bInSleep; bPendingRestSkipIntro = bSkipIntro;
+		PendingRestAnims[0] = BewareStart; PendingRestAnims[1] = BewareLoop; PendingRestAnims[2] = BewareEnd;
+		PendingRestAnims[3] = SleepStart; PendingRestAnims[4] = SleepLoop; PendingRestAnims[5] = Wake;
+		bPendingRest = true;
+	}
+
 protected:
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 	virtual void NativeThreadSafeUpdateAnimation(float DeltaSeconds) override;
@@ -76,6 +86,52 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "상태")
 	float DeathStartPosition = 0.f;
 
+	/**
+	 * 쉬는 자세 (F12.6-02 · 야생동물) — 상태머신: 대기 ↔ 경계(시작 → 반복 → 끝) · 대기 ↔ 잠(시작 → 반복 → 깸). 움직이면 이동이 이긴다.
+	 * ⭐ 전이 조건은 **변수 하나씩** — 조합은 여기서 미리 (Fast Path · F12.5 채집 bShowGather 와 같은 이유). 애니가 없는 단계는 건너뛰게 계산돼 있다
+	 *   (들개 · 늑대 · 곰은 경계 시작 · 끝이 없다 · 늦게 받으면 시작 없이 반복부터).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bBeware = false;
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bSleep = false;
+	/** 대기 → 경계 시작 */
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bBewareIntro = false;
+	/** 대기 → 경계 반복 (시작 애니 없음 · 늦게 받음) */
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bBewareDirect = false;
+	/** 경계 시작 · 반복 → 경계 끝 */
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bBewareOutro = false;
+	/** 경계 시작 · 반복 → 대기 (끝 애니 없음) */
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bBewareQuit = false;
+	/** 대기 → 잠 시작 */
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bSleepIntro = false;
+	/** 대기 → 잠 반복 (시작 애니 없음 · 늦게 받음 — 이미 자고 있던 곰) */
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bSleepDirect = false;
+	/** 잠 시작 · 반복 → 깸 */
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bSleepOutro = false;
+	/** 잠 시작 · 반복 → 대기 (깸 애니 없음) */
+	UPROPERTY(BlueprintReadOnly, Category = "쉬는 자세")
+	bool bSleepQuit = false;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "쉬는 자세")
+	TObjectPtr<UAnimSequenceBase> BewareStartAnim;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "쉬는 자세")
+	TObjectPtr<UAnimSequenceBase> BewareLoopAnim;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "쉬는 자세")
+	TObjectPtr<UAnimSequenceBase> BewareEndAnim;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "쉬는 자세")
+	TObjectPtr<UAnimSequenceBase> SleepStartAnim;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "쉬는 자세")
+	TObjectPtr<UAnimSequenceBase> SleepLoopAnim;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "쉬는 자세")
+	TObjectPtr<UAnimSequenceBase> WakeAnim;
+
 	/** 이 속도(cm/s) 를 넘으면 움직이는 것으로 본다 [자체] — 도착 직전 미세 속도에서 뛰기가 깜빡이지 않게. */
 	UPROPERTY(EditDefaultsOnly, Category = "이동", meta = (ClampMin = "0"))
 	float MoveThreshold = 5.f;
@@ -106,4 +162,12 @@ private:
 	bool bPendingDeathSkipToEnd = false;
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimSequenceBase> PendingDeathAnim;
+
+	/** SetRest 가 쓴 값 — 게임 스레드 업데이트에서 옮긴다. */
+	bool bPendingRest = false;
+	bool bPendingBeware = false;
+	bool bPendingSleep = false;
+	bool bPendingRestSkipIntro = false;
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> PendingRestAnims[6];
 };

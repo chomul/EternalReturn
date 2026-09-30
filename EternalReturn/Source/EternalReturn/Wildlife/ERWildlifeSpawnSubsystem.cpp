@@ -2,7 +2,10 @@
 
 #include "Wildlife/ERWildlifeSpawnSubsystem.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Components/CapsuleComponent.h"
+#include "GAS/ERAttributeSet.h"
 #include "Core/ERGameState.h"
 #include "Core/ERPlayerState.h"
 #include "Engine/World.h"
@@ -73,9 +76,63 @@ void UERWildlifeSpawnSubsystem::Deinitialize()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(PollTimer);
+		World->GetTimerManager().ClearTimer(SenseTimer);
 	}
 	Slots.Reset();
+	SensedAnimals.Reset();
 	Super::Deinitialize();
+}
+
+void UERWildlifeSpawnSubsystem::RegisterAnimal(AERWildlifeCharacter* Animal)
+{
+	UWorld* World = GetWorld();
+	if (!Animal || !World || World->GetNetMode() == NM_Client)
+	{
+		return;
+	}
+	SensedAnimals.AddUnique(Animal);
+	if (!SenseTimer.IsValid())
+	{
+		World->GetTimerManager().SetTimer(SenseTimer, this, &UERWildlifeSpawnSubsystem::Sense, UERWildlifeSettings::Get().SenseInterval, true);
+	}
+}
+
+void UERWildlifeSpawnSubsystem::UnregisterAnimal(AERWildlifeCharacter* Animal)
+{
+	SensedAnimals.Remove(Animal);
+}
+
+void UERWildlifeSpawnSubsystem::Sense()
+{
+	UWorld* World = GetWorld();
+	const AGameStateBase* GS = World ? World->GetGameState() : nullptr;
+	if (!GS)
+	{
+		return;
+	}
+	// 살아 있는 실험체 위치 — 한 번만 모은다 (≤24)
+	TArray<FVector, TInlineAllocator<24>> Players;
+	for (const APlayerState* PS : GS->PlayerArray)
+	{
+		const APawn* Pawn = PS ? PS->GetPawn() : nullptr;
+		const UAbilitySystemComponent* ASC = Pawn ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Pawn) : nullptr;
+		if (ASC && ASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 0.f)
+		{
+			Players.Add(Pawn->GetActorLocation());
+		}
+	}
+	const double Now = World->GetTimeSeconds();
+	SensedAnimals.RemoveAll([](const TWeakObjectPtr<AERWildlifeCharacter>& W) { return !W.IsValid(); });
+	for (const TWeakObjectPtr<AERWildlifeCharacter>& W : SensedAnimals)
+	{
+		AERWildlifeCharacter* Animal = W.Get();
+		float BestSq = TNumericLimits<float>::Max();
+		for (const FVector& P : Players)
+		{
+			BestSq = FMath::Min(BestSq, static_cast<float>(FVector::DistSquared2D(P, Animal->GetActorLocation())));
+		}
+		Animal->SenseNearby(Players.IsEmpty() ? TNumericLimits<float>::Max() : FMath::Sqrt(BestSq) / 100.f, Now);
+	}
 }
 
 bool UERWildlifeSpawnSubsystem::IsFirstSpawnDue(const FSlot& Slot, const AERGameState& GS) const

@@ -38,6 +38,10 @@ public:
 	/** 섬 최고 실험체 레벨 (PlayerArray 순회). 없으면 1. */
 	int32 GetIslandMaxPlayerLevel() const;
 
+	/** [서버] 경계 · 수면 판정 대상 등록 (F12.6-02) — 야생동물 BeginPlay · EndPlay. 디버그 스폰도 들어온다. 첫 등록에 타이머를 켠다. */
+	void RegisterAnimal(AERWildlifeCharacter* Animal);
+	void UnregisterAnimal(AERWildlifeCharacter* Animal);
+
 private:
 	/** 스폰 자리의 한 마리분. */
 	struct FSlot
@@ -57,6 +61,11 @@ private:
 	void OnAnimalKilled(int32 SlotIndex);
 	bool IsFirstSpawnDue(const FSlot& Slot, const AERGameState& GS) const;
 
+	/** 경계 · 수면 — 살아 있는 실험체 위치(≤24) × 등록된 동물 거리 비교. 틱 · 물리 쿼리 없음 (Argument 51 P2). */
+	void Sense();
+
 	TArray<FSlot> Slots;
 	FTimerHandle PollTimer;
+	TArray<TWeakObjectPtr<AERWildlifeCharacter>> SensedAnimals;
+	FTimerHandle SenseTimer;
 };

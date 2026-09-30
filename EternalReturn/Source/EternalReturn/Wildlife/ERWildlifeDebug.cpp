@@ -9,7 +9,9 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "GameplayEffect.h"
 #include "GAS/ERAttributeSet.h"
+#include "GAS/ERCCLibrary.h"
 #include "HAL/IConsoleManager.h"
 #include "Core/ERTeamStatics.h"
 #include "Wildlife/ERWildlifeAIController.h"
@@ -20,6 +22,33 @@
 
 namespace
 {
+
+// ER.Wild.CC <GE 경로 _C> [초] — 살아 있는 야생동물 전부에 CC (F12.6-03 시전 중 CC → 좌절 테스트). ERCC::ApplyCC 경로 그대로 (저항 · 면역 포함).
+void WildCCCmd(const TArray<FString>& Args, UWorld* World)
+{
+	if (!World || World->GetNetMode() == NM_Client || Args.Num() < 1)
+	{
+		UE_LOG(LogEternalReturn, Error, TEXT("[야생동물디버그] 사용법 (서버 창): ER.Wild.CC <GE 경로(_C)> [초=1]"));
+		return;
+	}
+	UClass* GE = StaticLoadClass(UGameplayEffect::StaticClass(), nullptr, *Args[0]);
+	if (!GE)
+	{
+		UE_LOG(LogEternalReturn, Error, TEXT("[야생동물디버그] GE 클래스를 못 찾았다: %s (경로가 _C 로 끝나는지)"), *Args[0]);
+		return;
+	}
+	const float Seconds = Args.Num() >= 2 ? FCString::Atof(*Args[1]) : 1.f;
+	int32 N = 0;
+	for (TActorIterator<AERWildlifeCharacter> It(World); It; ++It)
+	{
+		UAbilitySystemComponent* ASC = It->IsDead() ? nullptr : It->GetAbilitySystemComponent();
+		if (ASC && ERCC::ApplyCC(ASC, ASC, GE, Seconds))
+		{
+			++N;
+		}
+	}
+	UE_LOG(LogEternalReturn, Warning, TEXT("[야생동물디버그] %d마리에 %s %.1f초"), N, *GE->GetName(), Seconds);
+}
 
 // ER.Wild.Spawn <이름> [레벨] — 서버 창의 첫 플레이어 폰 앞 3m 에 스폰. 이름 = DA_Wild_<이름>. 예: ER.Wild.Spawn Bear · ER.Wild.Spawn MutantBear 3
 void WildSpawnCmd(const TArray<FString>& Args, UWorld* World)
@@ -270,6 +299,9 @@ static FAutoConsoleCommandWithWorldAndArgs GERWildHPCmd(
 static FAutoConsoleCommandWithWorldAndArgs GERWildSpawnCmd(
 	TEXT("ER.Wild.Spawn"), TEXT("[임시] 야생동물 스폰 (서버 창). ER.Wild.Spawn <이름> [레벨] (DA_Wild_<이름>)"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&WildSpawnCmd));
+static FAutoConsoleCommandWithWorldAndArgs GERWildCCCmd(
+	TEXT("ER.Wild.CC"), TEXT("[임시] 살아 있는 야생동물 전부에 CC GE (서버 창) — 시전 중 끊기 · 좌절 테스트. ER.Wild.CC <GE 경로(_C)> [초=1]"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&WildCCCmd));
 static FAutoConsoleCommandWithWorldAndArgs GERWildShowCmd(
 	TEXT("ER.Wild.Show"), TEXT("[임시] 야생동물 전부의 스탯 · 태그"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&WildShowCmd));

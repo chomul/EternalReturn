@@ -41,7 +41,7 @@ public:
 	 * 근거: Docs/4_Argument/13_강제이동_구현방식.md (방안 B)
 	 */
 	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_ForcedMove(const FVector& StartLocation, const FVector& TargetLocation, float Duration);
+	void Multicast_ForcedMove(const FVector& StartLocation, const FVector& TargetLocation, float Duration, float HeightUU, bool bPassThroughPawns);
 
 	/** 강제 이동 중단(벽 충돌)을 전파한다. 서버가 판정하고 각 머신이 소스를 뗀다. */
 	UFUNCTION(NetMulticast, Reliable)

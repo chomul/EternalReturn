@@ -22,6 +22,15 @@ struct FStreamableHandle;
 
 #include "ERPresentationComponent.generated.h"
 
+/** 대기 중 쉬는 자세 (F12.6-02 야생동물 경계 · 잠) — 상태라 AnimBP 상태머신이 튼다. */
+UENUM()
+enum class EERRestPose : uint8
+{
+	None,
+	Beware,
+	Sleep,
+};
+
 /**
  * 시전자 쪽 연출 해석기 (F12.5-01 · Argument 39). 실험체 · 야생동물이 하나씩 든다. **복제하지 않는다** — 각 머신이 같은 입력(스킨 · 무기)으로 같은 답을 낸다.
  *
@@ -49,7 +58,13 @@ public:
 	void SetWeapon(EERWeaponType InWeapon);
 
 	/** 어빌리티 발동 애니. 서버(복제 원천)와 소유 클라가 부른다. AttackSpeed > 0 이면 평타 — 재생 속도 = max(1, 길이 × 공속). */
-	void PlayAbilityAnim(UGameplayAbility* Ability, const FGameplayAbilityActivationInfo& ActivationInfo, FGameplayTag Key, float AttackSpeed, float ExpectedSeconds);
+	void PlayAbilityAnim(UGameplayAbility* Ability, const FGameplayAbilityActivationInfo& ActivationInfo, FGameplayTag Key, float AttackSpeed, float ExpectedSeconds, float CastTime = 0.f);
+
+	/**
+	 * 판정 순간 — 선딜 구간을 맞추느라 바꾼 재생 속도를 1배속으로 (Argument 52 T2 개선: 후딜은 원래 속도). 어빌리티가 판정 때 부른다.
+	 * 서버는 복제 원천(다른 클라로) · 소유 클라는 자기 것. 속도를 안 바꿨으면 아무것도 안 한다.
+	 */
+	void RestoreSkillAnimRate(UGameplayAbility* Ability);
 
 	/**
 	 * 이동이 수락됐다 — 액션 모션(평타 · 스킬)을 끊는다. 역기획서 §5.1 "후딜 중 이동 = 애니메이션 캔슬".
@@ -70,6 +85,15 @@ public:
 	 * @param bSkipToEnd 늦게 relevant 된 클라 — 쓰러지는 과정 없이 누운 채로 (OnRep 이 BeginPlay 보다 먼저 불린 경우 · DataChannel.cpp:3331 → 3345)
 	 */
 	void SetDead(bool bSkipToEnd);
+
+	/**
+	 * 복제 상태가 바뀐 사건 하나 — 몽타주(있으면) + 소리(있으면)를 **이 머신에서** 튼다 (F12.6-01 야생동물 등장 · 발견 · 전투 끝).
+	 * 키가 없거나 동작표에 줄이 없으면 건너뛴다. 데디 서버는 아무것도 안 한다. 틀었는지 로그용 문자열을 돌려준다.
+	 */
+	FString PlayEventPres(FGameplayTag AnimKey, FGameplayTag SfxKey);
+
+	/** 쉬는 자세 (F12.6-02) — AnimBP 에 자세 · 애니 6개를 넘긴다. bSkipIntro = 늦게 받음: 시작 동작 없이 반복부터. 같은 값이면 무시. */
+	void SetRestPose(EERRestPose Pose, bool bSkipIntro);
 
 	/**
 	 * 연출 큐 (F12.5-05 · Argument 49) — 액터(IGameplayCueInterface)가 넘긴다. 클라에서만 온다 (데디 서버는 GAS 가 막는다).
@@ -153,6 +177,8 @@ private:
 	/** 상태 포즈 원천 — 컴포넌트가 들고 있다가 PushStateToAnim 이 넘긴다 (AnimInstance 가 바뀌어도 잃지 않게). */
 	bool bDead = false;
 	bool bDeathSkipToEnd = false;
+	EERRestPose RestPose = EERRestPose::None;
+	bool bRestSkipIntro = false;
 
 	/** 지금 붙어 있는 무기 레이어 — 바뀔 때 이것을 Unlink 한다. */
 	UPROPERTY()

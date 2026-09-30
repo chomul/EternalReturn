@@ -30,7 +30,7 @@ void UERSkillFragment_SelfBuff::OnExecute(FERSkillContext& Ctx) const
 			continue;
 		}
 		const float Duration = UERSkillData::LevelValue(SE.Duration, Level);
-		const float Magnitude = UERSkillData::LevelValue(SE.Magnitude, Level);
+		const float Magnitude = UERSkillData::LevelValueSigned(SE.Magnitude, Level);   // 음수 허용
 		if (Duration > 0.f)   { Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_CCDuration, Duration); }
 		if (Magnitude != 0.f) { Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_OnHitMagnitude, Magnitude); }
 		if (SE.Charges > 0)

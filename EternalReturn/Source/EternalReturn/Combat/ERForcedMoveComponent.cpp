@@ -23,7 +23,7 @@ ACharacter* UERForcedMoveComponent::GetCharacter() const
 }
 
 void UERForcedMoveComponent::Multicast_ForcedMove_Implementation(
-	const FVector& StartLocation, const FVector& TargetLocation, float Duration)
+	const FVector& StartLocation, const FVector& TargetLocation, float Duration, float HeightUU, bool bPassThroughPawns)
 {
 	// ⚠ 서버는 ApplyForcedMove 에서 이미 붙였다. 여기서 또 붙이면 두 번 들어간다.
 	//   (Multicast 는 서버에서도 실행된다)
@@ -32,7 +32,7 @@ void UERForcedMoveComponent::Multicast_ForcedMove_Implementation(
 		return;
 	}
 
-	ERForcedMove::AddForcedMoveSource(GetCharacter(), StartLocation, TargetLocation, Duration);
+	ERForcedMove::AddForcedMoveSource(GetCharacter(), StartLocation, TargetLocation, Duration, HeightUU, bPassThroughPawns);
 }
 
 void UERForcedMoveComponent::Multicast_StopForcedMove_Implementation()
@@ -79,8 +79,9 @@ void UERForcedMoveComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	Multicast_StopForcedMove();
 	SetComponentTickEnabled(false);
 
-	UE_LOG(LogEternalReturn, Verbose, TEXT("[강제이동] %s 가 벽에 부딪혔다 — %s"),
-		*GetNameSafe(Character), *GetNameSafe(Hit.GetActor()));
+	// Log 로 올림 (E34 — Verbose 라 "캐릭터를 벽으로 잡음" 이 안 보였다)
+	UE_LOG(LogEternalReturn, Log, TEXT("[강제이동] %s 가 벽에 부딪혔다 — %s (%s)"),
+		*GetNameSafe(Character), *GetNameSafe(Hit.GetActor()), *GetNameSafe(Hit.GetComponent()));
 
 	// 추가 피해·기절은 **구독하는 쪽**이 정한다 (스킬마다 다르다).
 	OnForcedMoveWallImpact.Broadcast(Character, Hit);

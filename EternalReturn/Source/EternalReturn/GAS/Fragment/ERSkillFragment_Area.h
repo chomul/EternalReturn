@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GAS/Fragment/ERSkillFragment.h"
+#include "GAS/ERSkillData.h"
 #include "ERSkillFragment_Area.generated.h"
 
 /**
@@ -28,6 +29,20 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", ClampMax = "1"))
 	float DamageDecay = 0.f;
+
+	/**
+	 * 야생동물 · 보스 장판이 누군가를 맞히면 **그 사람의 팀으로 전투 진입** (F12.6-06 위클라인 유해 물질 "밟으면 어그로").
+	 * 이미 전투 중이면 무시 (먼저 때린 팀 우선 · 역기획서 §6.5).
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	bool bAggroOnHit = false;
+
+	/**
+	 * 시전자가 장판 **안에 있는 동안** 시전자에게 거는 효과 (F12.6-06 신경 가스: 위클라인 공속 +20% · 이속 +40%).
+	 * 펄스마다 TickInterval × 1.5 초로 다시 건다 → 나가면 곧 풀린다. Duration 칸은 무시.
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<FERSelfEffect> CasterEffectsInside;
 
 	virtual void OnExecute(FERSkillContext& Ctx) const override;
 	virtual FString GetDebugName() const override { return TEXT("장판"); }
