@@ -23,7 +23,7 @@ ACharacter* UERForcedMoveComponent::GetCharacter() const
 }
 
 void UERForcedMoveComponent::Multicast_ForcedMove_Implementation(
-	const FVector& StartLocation, const FVector& TargetLocation, float Duration, float HeightUU, bool bPassThroughPawns)
+	const FVector& StartLocation, const FVector& TargetLocation, float Duration, float HeightUU, bool bPassThroughPawns, bool bThroughWalls)
 {
 	// ⚠ 서버는 ApplyForcedMove 에서 이미 붙였다. 여기서 또 붙이면 두 번 들어간다.
 	//   (Multicast 는 서버에서도 실행된다)
@@ -32,7 +32,7 @@ void UERForcedMoveComponent::Multicast_ForcedMove_Implementation(
 		return;
 	}
 
-	ERForcedMove::AddForcedMoveSource(GetCharacter(), StartLocation, TargetLocation, Duration, HeightUU, bPassThroughPawns);
+	ERForcedMove::AddForcedMoveSource(GetCharacter(), StartLocation, TargetLocation, Duration, HeightUU, bPassThroughPawns, bThroughWalls);
 }
 
 void UERForcedMoveComponent::Multicast_StopForcedMove_Implementation()

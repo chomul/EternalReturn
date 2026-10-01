@@ -38,8 +38,29 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 	}
 
 	// ⭐ 계수만 넘긴다. 곱하는 건 ERDamageExecution 이다 (Docs/4_Argument/5). Scale = 장판 감쇠.
-	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_Base,          UERSkillData::LevelValue(BaseDamage, Level) * Scale);
-	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_APRatio,       UERSkillData::LevelValue(APRatio, Level) * Scale);
+	// 거리 보간 (F19-01 카티야 Q) — 날아간 비율이 있고 "끝 값" 을 넣은 칸만
+	float Base = UERSkillData::LevelValue(BaseDamage, Level);
+	float AP = UERSkillData::LevelValue(APRatio, Level);
+	// 발마다 다른 값 (카티야 R) — n 번째 발
+	if (Ctx.ShotIndex >= 0 && ShotValues.IsValidIndex(Ctx.ShotIndex))
+	{
+		const FERShotDamage& Shot = ShotValues[Ctx.ShotIndex];
+		if (!Shot.BaseDamage.IsEmpty()) { Base = UERSkillData::LevelValue(Shot.BaseDamage, Level); }
+		if (!Shot.APRatio.IsEmpty())    { AP = UERSkillData::LevelValue(Shot.APRatio, Level); }
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s %d번째 발 — 기본 %.0f · 계수 %.2f"), *GetNameSafe(Ctx.Skill), Ctx.ShotIndex + 1, Base, AP);
+	}
+	if (Ctx.TravelRatio >= 0.f && (!BaseDamageFar.IsEmpty() || !APRatioFar.IsEmpty()))
+	{
+		const float T = FMath::Clamp(Ctx.TravelRatio, 0.f, 1.f);
+		const float Base0 = Base;
+		const float AP0 = AP;
+		if (!BaseDamageFar.IsEmpty()) { Base = FMath::Lerp(Base, UERSkillData::LevelValue(BaseDamageFar, Level), T); }
+		if (!APRatioFar.IsEmpty())    { AP = FMath::Lerp(AP, UERSkillData::LevelValue(APRatioFar, Level), T); }
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 거리 비율 %.2f — 기본 %.1f → %.1f · 계수 %.2f → %.2f"),
+			*GetNameSafe(Ctx.Skill), T, Base0, Base, AP0, AP);
+	}
+	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_Base,          Base * Scale);
+	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_APRatio,       AP * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_BonusAPRatio,  UERSkillData::LevelValue(BonusAPRatio, Level) * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_SkillAmpRatio, UERSkillData::LevelValue(SkillAmpRatio, Level) * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_MaxHPRatio,    UERSkillData::LevelValue(MaxHPRatio, Level) * Scale);
@@ -101,7 +122,7 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 
 	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 피해 %d명 (기본 %.0f · %s%s%s)"),
 		*GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), Targets.Num(),
-		UERSkillData::LevelValue(BaseDamage, Level) * Scale,
+		Base * Scale,   // 실제로 넘긴 값 (거리 보간 뒤 — 2026-10-01 로그가 보간 전 40 을 찍었다)
 		DamageType == ESkillDamageType::Fixed ? TEXT("고정") : DamageType == ESkillDamageType::BasicAttack ? TEXT("평타") : TEXT("스킬"),
 		bAoE ? TEXT(" · 광역") : TEXT(""), Ctx.bEnhancement ? TEXT(" · 강화") : TEXT(""));
 

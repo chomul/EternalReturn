@@ -50,15 +50,16 @@ namespace ERForcedMove
 	 * [서버] 자기 이동 (돌진 · 도약 · 백스텝, F07-06). ApplyForcedMove 와 **같은 몸통**이고
 	 * 딱 하나 — **이동 방해 면역(State.CCImmune)을 검사하지 않는다.** 매그너스 R 중에도 자기 돌진은 된다.
 	 * 방향 · 거리 · 시간의 의미는 ApplyForcedMove 와 같다. 벽 감시도 같이 켜진다.
+	 * WallCrossExtraUU > 0 — 길이 벽에 막혔으면 [거리, 거리 + 여분] 안에서 캡슐이 들어가고 바닥이 있는 첫 자리로 **벽을 넘는다** (카티야 E · 사용자 2026-10-01). 없으면 보통처럼 벽에서 멈춤.
 	 */
-	bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns = false);
+	bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns = false, float WallCrossExtraUU = 0.f);
 
 	/**
 	 * [모든 머신] 실제로 RootMotionSource 를 붙인다. **직접 부르지 않는다** —
 	 * ApplyForcedMove 가 서버에서, Multicast RPC 가 각 클라에서 부른다.
 	 */
 	void AddForcedMoveSource(ACharacter* Target, const FVector& StartLocation,
-		const FVector& TargetLocation, float Duration, float HeightUU = 0.f, bool bPassThroughPawns = false);
+		const FVector& TargetLocation, float Duration, float HeightUU = 0.f, bool bPassThroughPawns = false, bool bThroughWalls = false);
 
 	/**
 	 * [모든 머신] 강제 이동을 중단한다. 벽에 부딪혔을 때 서버가 부르고 Multicast 로 전파한다.

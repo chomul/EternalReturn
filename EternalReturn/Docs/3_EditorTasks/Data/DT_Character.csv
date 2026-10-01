@@ -1,0 +1,7 @@
+﻿---,MaxHP,HPRegen,AttackPower,Defense,MoveSpeed,MaxHPPerLevel,HPRegenPerLevel,AttackPowerPerLevel,DefensePerLevel,MaxVP,VPRegen,Weapons,Source
+Katja,890,1.2,36,52,3.5,80,0.09,4.7,2.7,0,0,SniperRifle:BasicAttack:2.0:3.6,스탯 Characters/01 §2 (12.2) · 숙련 검색 요약 2026-10-01
+Magnus,1030,1.7,44,49,3.6,95,0.085,4.4,3.2,0,0,Bat:BasicAttack:4.2:4.5|Hammer:Skill:4.5:0.8,스탯 Characters/02 §2 (재생 성장 문서 +0.85 는 Lv20 값으로 역산 0.085) · 숙련 검색 요약 2026-10-01
+Jackie,940,1.28,36,50,3.5,95,0.077,4.7,3,0,0,Dagger:BasicAttack:2.4:0|TwoHandSword:BasicAttack:2.2:0|Axe:BasicAttack:2.1:0|DualSword:BasicAttack:2.2:0,스탯 Characters/03 §2 · 증폭 §4 (12.2) · 쌍검 증폭 [자체] · 공속 (미확인) 0
+Daniel,920,1.53,32,51,3.55,90,0.077,4.7,2.8,0,0,Dagger:BasicAttack:2.4:0,스탯 Characters/04 §2 · 증폭 [자체] (재키 단검 값) · 공속 (미확인) 0
+Sissela,920,0.6,33,50,3.5,69,0.03,4.3,2.4,0,0,Shuriken:Skill:4.0:2.0|Throw:Skill:4.8:3.5,스탯 Characters/05 §2 · 암기 증폭 4.0 [확인 ERAttributeTypes] · 공속 · 투척 검색 요약 2026-10-01
+Leni,970,1.02,35,53,3.55,81,0.06,4.1,3,0,0,Pistol:Skill:4.4:0,스탯 Characters/06 §2 (방어 성장 12.2 3) · 증폭 4.4 [확인 ERAttributeTypes] · 공속 (미확인) 0

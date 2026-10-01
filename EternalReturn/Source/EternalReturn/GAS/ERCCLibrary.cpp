@@ -151,7 +151,7 @@ bool ApplyCC(
 		return false;
 	}
 
-	UE_LOG(LogEternalReturn, Verbose, TEXT("[CC] %s 를 %s 에게 %.2f초 부여했다."),
+	UE_LOG(LogEternalReturn, Log, TEXT("[CC] %s 를 %s 에게 %.2f초 부여했다."),   // Log — 적중 효과 검증 근거 (2026-10-01 카티야 E 둔화가 로그에 안 보였다)
 		*CCEffect->GetName(), *GetNameSafe(TargetASC->GetOwnerActor()), DurationSeconds);
 
 	return true;

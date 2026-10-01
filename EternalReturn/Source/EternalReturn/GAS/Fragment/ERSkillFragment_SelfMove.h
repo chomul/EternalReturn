@@ -35,6 +35,13 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	bool bPushThroughPawns = false;
 
+	/**
+	 * **벽 넘기** 여분 (m) — 길이 벽에 막혔으면 Distance ~ Distance + 이 값 안의 설 자리로 벽을 넘는다. 자리가 없으면 벽에서 멈춤.
+	 * 카티야 E "도약 거리 + 조금 더 · 뒤에 공간이 있으면 벽을 넘는다" (사용자 2026-10-01). 0 = 끔 (지금까지와 같다). TowardAim · AwayFromAim 만.
+	 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	float WallCrossExtra = 0.f;
+
 	virtual bool CanExecute(const FERSkillContext& Ctx, FString& OutReason) const override;
 	virtual void OnExecute(FERSkillContext& Ctx) const override;
 	virtual FString GetDebugName() const override { return TEXT("자기 이동"); }

@@ -10,6 +10,22 @@
 
 void UERSkillFragment_SelfBuff::OnExecute(FERSkillContext& Ctx) const
 {
+	if (!bOnlyOnHit)
+	{
+		ApplyEffects(Ctx);
+	}
+}
+
+void UERSkillFragment_SelfBuff::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
+{
+	if (bOnlyOnHit && !Targets.IsEmpty())
+	{
+		ApplyEffects(Ctx);   // 여러 명 맞아도 한 번
+	}
+}
+
+void UERSkillFragment_SelfBuff::ApplyEffects(FERSkillContext& Ctx) const
+{
 	UERGameplayAbility* A = Ctx.Ability;
 	if (!A || !Ctx.ASC || !Ctx.bAuthority || Effects.IsEmpty())
 	{

@@ -135,9 +135,15 @@ void AERWildlifeCharacter::BeginPlay()
 	{
 		AttributeSet->OnOutOfHealth.AddWeakLambda(this, [this](AActor* Killer) { HandleOutOfHealth(Killer); });
 		// 맞으면 깨운다 — 체력 변화가 클라로 가야 한다. 전투 진입 · 재우기는 AI 가 (F12-04).
-		AttributeSet->OnDamageTaken.AddWeakLambda(this, [this](AActor* Attacker, float)
+		AttributeSet->OnDamageTaken.AddWeakLambda(this, [this](AActor* Attacker, float Damage)
 		{
 			FlushNetDormancy();
+			// 야생동물을 때려도 무기 숙련도 (원작 "야생 동물 사냥" — 사용자 자료 2026-10-01). 실험체 피해와 같은 입구 — 분기는 OnDamageDealt 가 (야생동물 배율)
+			//   지금까지 이 줄이 없어 `야생동물 피해` 무숙이 0 이었다 (F10 체크리스트 05 대조)
+			if (AERPlayerState* AttackerPS = Cast<AERPlayerState>(Attacker); AttackerPS && AttackerPS->GetGrowth())
+			{
+				AttackerPS->GetGrowth()->OnDamageDealt(this, Damage);
+			}
 			if (AERWildlifeAIController* AI = GetController<AERWildlifeAIController>())
 			{
 				AI->NotifyDamaged(Attacker);

@@ -25,8 +25,15 @@
 
 ## 규칙
 
-**어빌리티 안에서 `EndAbility` 뒤에도 살아야 하는 타이머는 `this` 에 묶지 않는다** (`SetTimer(Handle, this, &Fn, …)` ✘ · `CreateLambda` + `TWeakObjectPtr` ✔).
+**어빌리티 안에서 `EndAbility` 뒤에도 살아야 하는 타이머는 `this` 에 묶지 않는다** (`SetTimer(Handle, this, &Fn, …)` ✘ · `CreateWeakLambda(this, …)` ✘ · `CreateLambda` + `TWeakObjectPtr` ✔).
 반대로 어빌리티와 같이 죽어야 하는 타이머(선딜 · 후딜)는 지금처럼 `this` 에 묶는 게 맞다 — 취소 시 자동 정리.
+
+## 재발 (2026-10-02 · F19-01 카티야 R)
+
+- 증상: `스캔 3명` 인데 **1발만** — 2 · 3발 줄 없음 (로그 18:42 · 18:43)
+- 원인: 순차 사격 타이머를 `FTimerDelegate::CreateWeakLambda(this, …)` 로 — **WeakLambda 도 this 에 묶인다** (`ClearAllTimersForObject(this)` 대상). R 은 후딜 0 이라 1발째 직후 `EndAbility` → 2 · 3발 타이머 삭제
+- 해결: `CreateLambda([WeakThis …])` + `WeakThis.Get()` (이 문서 해결과 같다) · `ERGameplayAbility.cpp` `FireSequentialShots` · 빌드 에러 0
+- ⚠ 규칙 보강: **`CreateWeakLambda(this, …)` 도 ✘** — 이름에 Weak 가 있어도 객체에 묶인다
 
 ## 관련
 

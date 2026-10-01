@@ -26,7 +26,9 @@ namespace
 	 * 넉백과 자기 이동의 공통 몸통 — 검증, 소스 추가, Multicast, 벽 감시.
 	 * 면역 검사만 밖에 있다: ApplyForcedMove 는 하고, ApplySelfMove 는 안 한다 (F07-06).
 	 */
-	bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU, bool bPassThroughPawns, const TCHAR* Label);
+	bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU, bool bPassThroughPawns, const TCHAR* Label, bool bThroughWalls = false);
+	/** 벽 넘기 착지점 (카티야 E) — 길이 벽에 막혔을 때만 [Dist, Dist + Extra] 를 25cm 씩 보며 캡슐이 들어가고 바닥이 있는 첫 거리. */
+	bool FindWallCrossLanding(const ACharacter* Target, const FVector& Dir, float DistUU, float ExtraUU, float& OutDistUU, FString& OutWall);
 }
 
 bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU)
@@ -57,16 +59,74 @@ bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float Distanc
 	return StartMove(Target, Direction, DistanceUU, Duration, HeightUU, false, TEXT("강제이동"));
 }
 
-bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns)
+bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns, float WallCrossExtraUU)
 {
 	// 면역 검사 없음 — 자기가 시작하는 이동은 "방해" 가 아니다.
+	if (Target && WallCrossExtraUU > 0.f)
+	{
+		float LandDist = 0.f;
+		FString Wall;
+		if (FindWallCrossLanding(Target, Direction.GetSafeNormal2D(), DistanceUU, WallCrossExtraUU, LandDist, Wall))
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[자기이동] %s 벽 넘기 — %s 너머 %.0fcm (목표 %.0f · 여분 %.0f)"),
+				*GetNameSafe(Target), *Wall, LandDist, DistanceUU, WallCrossExtraUU);
+			return StartMove(Target, Direction, LandDist, Duration, 0.f, bPassThroughPawns, TEXT("자기이동"), /*bThroughWalls=*/true);
+		}
+		if (!Wall.IsEmpty())
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[자기이동] %s 벽 넘기 실패 — %s 너머 %.0fcm 안에 설 자리 없음 → 벽에서 멈춤"),
+				*GetNameSafe(Target), *Wall, DistanceUU + WallCrossExtraUU);
+		}
+	}
 	return StartMove(Target, Direction, DistanceUU, Duration, 0.f, bPassThroughPawns, TEXT("자기이동"));
 }
 
 namespace
 {
 
-bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU, bool bPassThroughPawns, const TCHAR* Label)
+bool FindWallCrossLanding(const ACharacter* Target, const FVector& Dir, float DistUU, float ExtraUU, float& OutDistUU, FString& OutWall)
+{
+	const UCapsuleComponent* Cap = Target ? Target->GetCapsuleComponent() : nullptr;
+	UWorld* World = Target ? Target->GetWorld() : nullptr;
+	if (!Cap || !World || Dir.IsNearlyZero() || DistUU <= 0.f)
+	{
+		return false;
+	}
+	// 캡슐을 조금 줄여 바닥에서 띄운다 — 발밑 바닥 · 낮은 턱은 벽이 아니다 [자체]
+	const float R = Cap->GetScaledCapsuleRadius() * 0.9f;
+	const float H = Cap->GetScaledCapsuleHalfHeight() * 0.8f;
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(R, H);
+	const FVector S = Target->GetActorLocation();
+	FCollisionObjectQueryParams Walls;   // E34 와 같은 기준 — 캐릭터(Pawn)는 벽이 아니다
+	Walls.AddObjectTypesToQuery(ECC_WorldStatic);
+	Walls.AddObjectTypesToQuery(ECC_WorldDynamic);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ERWallCross), /*bTraceComplex=*/false, Target);
+
+	FHitResult Hit;
+	if (!World->SweepSingleByObjectType(Hit, S, S + Dir * DistUU, FQuat::Identity, Walls, Shape, Params))
+	{
+		return false;   // 길이 열려 있다 — 보통 이동
+	}
+	OutWall = GetNameSafe(Hit.GetActor());
+	const float FloorProbe = Cap->GetScaledCapsuleHalfHeight() + 100.f;
+	for (float D = DistUU; D <= DistUU + ExtraUU + KINDA_SMALL_NUMBER; D += 25.f)
+	{
+		const FVector P = S + Dir * D;
+		if (World->OverlapAnyTestByObjectType(P, FQuat::Identity, Walls, Shape, Params))
+		{
+			continue;   // 벽 속
+		}
+		FHitResult Floor;
+		if (World->LineTraceSingleByObjectType(Floor, P, P - FVector(0.f, 0.f, FloorProbe), Walls, Params))
+		{
+			OutDistUU = D;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU, bool bPassThroughPawns, const TCHAR* Label, bool bThroughWalls)
 {
 	if (!Target)
 	{
@@ -110,15 +170,18 @@ bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, f
 	// ⭐ 서버 자신에게 먼저 붙이고, 폰이 클라들에게 Multicast 로 뿌린다.
 	//   ⚠ 각 머신이 **같은 StartLocation/TargetLocation** 을 써야 결과가 같다.
 	//     방향·거리를 보내고 각자 계산하게 하면 위치가 미세하게 달라 어긋난다.
-	AddForcedMoveSource(Target, StartLocation, TargetLocation, Duration, HeightUU, bPassThroughPawns);
+	AddForcedMoveSource(Target, StartLocation, TargetLocation, Duration, HeightUU, bPassThroughPawns, bThroughWalls);
 
 	if (UERForcedMoveComponent* Receiver = Target->FindComponentByClass<UERForcedMoveComponent>())
 	{
-		Receiver->Multicast_ForcedMove(StartLocation, TargetLocation, Duration, HeightUU, bPassThroughPawns);
+		Receiver->Multicast_ForcedMove(StartLocation, TargetLocation, Duration, HeightUU, bPassThroughPawns, bThroughWalls);
 
 		// ⭐ 벽 감시를 켠다. 넉백이 끝나거나 벽에 닿으면 스스로 꺼진다.
 		//   역기획서 §3.5 — "이동 중 매 틱 지오메트리 트레이스"
-		Receiver->StartWatch();
+		if (!bThroughWalls)   // 벽 넘기는 벽을 지나가는 게 목적 — 벽 감시를 켜지 않는다
+		{
+			Receiver->StartWatch();
+		}
 	}
 	else
 	{
@@ -138,7 +201,7 @@ bool StartMove(ACharacter* Target, const FVector& Direction, float DistanceUU, f
 } // namespace
 
 void AddForcedMoveSource(ACharacter* Target, const FVector& StartLocation,
-	const FVector& TargetLocation, float Duration, float HeightUU, bool bPassThroughPawns)
+	const FVector& TargetLocation, float Duration, float HeightUU, bool bPassThroughPawns, bool bThroughWalls)
 {
 	UCharacterMovementComponent* CMC = Target ? Target->GetCharacterMovement() : nullptr;
 	if (!CMC)
@@ -165,6 +228,29 @@ void AddForcedMoveSource(ACharacter* Target, const FVector& StartLocation,
 				if (UCapsuleComponent* C = WeakCapsule.Get())
 				{
 					C->SetCollisionResponseToChannel(ECC_Pawn, Original);
+				}
+			}), Duration, false);
+		}
+	}
+
+	// 벽 넘기 (카티야 E) — 이동 시간 동안 캡슐이 벽(WorldStatic · WorldDynamic)을 무시. 착지점은 서버가 이미 "설 자리" 로 골랐다.
+	//   위치는 루트 모션이 끝까지 쥐고 있어 바닥을 무시해도 떨어지지 않는다. 밀어내며 돌진과 같은 방식 — 모든 머신이 같은 시간에 바꿨다 되돌린다
+	if (bThroughWalls)
+	{
+		if (UCapsuleComponent* Capsule = Target->GetCapsuleComponent())
+		{
+			const ECollisionResponse OrigStatic = Capsule->GetCollisionResponseToChannel(ECC_WorldStatic);
+			const ECollisionResponse OrigDynamic = Capsule->GetCollisionResponseToChannel(ECC_WorldDynamic);
+			Capsule->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Ignore);
+			Capsule->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
+			TWeakObjectPtr<UCapsuleComponent> WeakCapsule(Capsule);
+			FTimerHandle Unused;
+			Target->GetWorldTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([WeakCapsule, OrigStatic, OrigDynamic]()
+			{
+				if (UCapsuleComponent* C = WeakCapsule.Get())
+				{
+					C->SetCollisionResponseToChannel(ECC_WorldStatic, OrigStatic);
+					C->SetCollisionResponseToChannel(ECC_WorldDynamic, OrigDynamic);
 				}
 			}), Duration, false);
 		}

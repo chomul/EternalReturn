@@ -53,6 +53,14 @@ private:
 	 */
 	void OnSkillSlotPressed(FGameplayTag SlotTag);
 
+	/** 스킬 키 누름 — 미리보기 시작 (평타는 바로 발동). 떼면 발동 (Argument 56 C2 "누르는 동안 범위 표시 → 떼면 시전"). */
+	void OnSkillSlotStarted(FGameplayTag SlotTag);
+	void OnSkillSlotCompleted(FGameplayTag SlotTag);
+	/** 미리보기 중인 슬롯 (로컬) — 없으면 빈 태그. 우클릭(이동)이 취소한다. */
+	FGameplayTag PreviewSlot;
+	/** 미리보기 그리기 (PlayerTick) */
+	void DrawSkillPreview();
+
 	/**
 	 * [클라 -> 서버] 슬롯 스킬 발동 요청 + 조준 (F07-05).
 	 *

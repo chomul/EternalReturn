@@ -14,6 +14,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERGameplayAbility.h"
+#include "GAS/ERSkillData.h"
 #include "NavigationSystem.h"
 #include "Presentation/ERPresentationComponent.h"
 
@@ -97,8 +98,11 @@ void AERPlayerController::SetupInputComponent()
 			continue;
 		}
 
+		// 누르면 미리보기 · 떼면 발동 (Argument 56 C2). 평타는 Started 에서 바로 (OnSkillSlotStarted 가 가른다)
 		EnhancedInput->BindAction(Pair.Value, ETriggerEvent::Started,
-			this, &AERPlayerController::OnSkillSlotPressed, Pair.Key);
+			this, &AERPlayerController::OnSkillSlotStarted, Pair.Key);
+		EnhancedInput->BindAction(Pair.Value, ETriggerEvent::Completed,
+			this, &AERPlayerController::OnSkillSlotCompleted, Pair.Key);
 
 		UE_LOG(LogEternalReturn, Log, TEXT("[입력] 슬롯 바인딩: %s -> %s"),
 			*Pair.Key.ToString(), *GetNameSafe(Pair.Value));
@@ -130,6 +134,51 @@ namespace
 			}
 		}
 		return SlotTag;
+	}
+}
+
+void AERPlayerController::OnSkillSlotStarted(FGameplayTag SlotTag)
+{
+	if (SlotTag.MatchesTagExact(ERTags::Ability_Slot_Attack))
+	{
+		OnSkillSlotPressed(SlotTag);   // 평타는 지금처럼 바로
+		return;
+	}
+	PreviewSlot = SlotTag;
+}
+
+void AERPlayerController::OnSkillSlotCompleted(FGameplayTag SlotTag)
+{
+	if (PreviewSlot != SlotTag)
+	{
+		return;   // 우클릭으로 취소했거나 평타
+	}
+	PreviewSlot = FGameplayTag();
+	OnSkillSlotPressed(SlotTag);   // 발동 — 떼는 순간의 커서로 (경로는 그대로: 선판정 → 조준 실어 서버)
+}
+
+void AERPlayerController::DrawSkillPreview()
+{
+	const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPawn());
+	if (!ASC)
+	{
+		return;
+	}
+	const FGameplayTag Slot = ResolveModeSlot(*ASC, PreviewSlot);
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (!Spec.DynamicAbilityTags.HasTagExact(Slot))
+		{
+			continue;
+		}
+		const UERGameplayAbility* Ability = Cast<UERGameplayAbility>(Spec.GetPrimaryInstance());
+		const UERSkillData* Skill = Cast<UERSkillData>(Spec.SourceObject.Get());
+		FHitResult Hit;
+		if (Ability && Skill && GetHitResultUnderCursor(ECC_Visibility, /*bTraceComplex=*/false, Hit))
+		{
+			Ability->DrawPreview(*Skill, Hit.ImpactPoint);
+		}
+		return;
 	}
 }
 
@@ -275,6 +324,12 @@ void AERPlayerController::ServerActivateSkill_Implementation(FGameplayTag SlotTa
 void AERPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
+
+	// 스킬 키를 누르고 있는 동안 범위 미리보기 (Argument 56 C2 · D1) — 로컬만
+	if (PreviewSlot.IsValid() && IsLocalController())
+	{
+		DrawSkillPreview();
+	}
 
 	// ⭐ Tick 을 쓰는 이유: 가장자리 스크롤은 마우스 **위치**에 반응하므로
 	//   키 입력 이벤트로는 표현되지 않는다. 매 프레임 평가가 실제로 필요한 경우다
@@ -440,6 +495,14 @@ bool AERPlayerController::ResolveNavigableDestination(const FVector& ClickPoint,
 
 void AERPlayerController::OnMoveToCursor()
 {
+	// 미리보기 중 우클릭 = 취소 (이동도 안 한다) `[자체]` — 원작 미확인 (Argument 56)
+	if (PreviewSlot.IsValid())
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[입력] %s 미리보기 취소 (우클릭)"), *PreviewSlot.ToString());
+		PreviewSlot = FGameplayTag();
+		return;
+	}
+
 	// ── 이중 게이트 ① 입력 레이어 ──────────────────────────
 	//
 	// ⚠ **이건 방어선이 아니다.** 못 갈 명령을 서버에 안 보내서 반응을 자연스럽게

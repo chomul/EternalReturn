@@ -77,6 +77,12 @@ namespace
 			return Q.bIncludeInstigator;
 		}
 
+		// 실험체만 (카티야 R) — 팀 없는 액터(야생동물)는 대상이 아니다. 투사체 스윕도 이 함수라 야생동물을 **지나친다**
+		if (Q.bPlayersOnly && ERTeamStatics::GetTeamId(Candidate) == INDEX_NONE)
+		{
+			return false;
+		}
+
 		switch (Q.TeamFilter)
 		{
 		case ETargetTeamFilter::All:
@@ -274,6 +280,7 @@ FTargetResult ERTargeting::Query(const UWorld* World, const FTargetQuery& Q)
 	case ESkillTargeting::GroundCircle: return QueryGroundCircle(World, Q);
 	case ESkillTargeting::Cone:         return QueryCone(World, Q);
 	case ESkillTargeting::DualRadius:   return QueryDualRadius(World, Q);
+	case ESkillTargeting::Trapezoid:    return QueryTrapezoid(World, Q);
 	}
 	return FTargetResult();
 }
@@ -328,6 +335,33 @@ FTargetResult ERTargeting::QueryGroundCircle(const UWorld* World, const FTargetQ
 		Circle.RangeMin = 0.f;
 	}
 	return QuerySelfRadius(World, Circle);
+}
+
+TArray<AActor*> ERTargeting::SweepSegment(const UWorld* World, const FVector& From, const FVector& To, float RadiusUU, const FTargetQuery& Q)
+{
+	TArray<AActor*> Actors;
+	if (!World || From.Equals(To))
+	{
+		return Actors;
+	}
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ERTargetingSegment), /*bTraceComplex=*/false);
+	if (Q.Instigator)
+	{
+		Params.AddIgnoredActor(Q.Instigator);
+	}
+	// QueryProjectile 과 같은 채널 · 같은 구 스윕 — 다른 점은 구간이 짧고 매 틱이라는 것뿐
+	TArray<FHitResult> Hits;
+	World->SweepMultiByChannel(Hits, From, To, FQuat::Identity,
+		ERCollisionChannel::SkillTarget, FCollisionShape::MakeSphere(FMath::Max(RadiusUU, 1.f)), Params);
+	for (const FHitResult& Hit : Hits)   // 스윕 결과는 가까운 순
+	{
+		AActor* Actor = Hit.GetActor();
+		if (PassesFilter(Actor, Q))
+		{
+			Actors.AddUnique(Actor);
+		}
+	}
+	return Actors;
 }
 
 FTargetResult ERTargeting::QueryProjectile(const UWorld* World, const FTargetQuery& Q)
@@ -388,6 +422,51 @@ FTargetResult ERTargeting::QueryProjectile(const UWorld* World, const FTargetQue
 	}
 
 	Result.HitActors = MoveTemp(Actors);
+	return Result;
+}
+
+FTargetResult ERTargeting::QueryTrapezoid(const UWorld* World, const FTargetQuery& Q)
+{
+	FTargetResult Result;
+	if (!World || Q.RangeMax <= 0.f)
+	{
+		return Result;
+	}
+	FVector Fwd = Q.Direction;
+	Fwd.Z = 0.f;
+	if (!Fwd.Normalize())
+	{
+		return Result;
+	}
+	const FVector Right(-Fwd.Y, Fwd.X, 0.f);
+	const float LenUU = M(Q.TrapLength > 0.f ? Q.TrapLength : Q.RangeMax);
+	const float NearHalf = M(Q.TrapNearWidth) * 0.5f;
+	const float FarHalf = M(Q.TrapFarWidth) * 0.5f;
+
+	// Origin = 사다리꼴 **가운데** (조준점). 앞뒤로 절반씩 · 폭은 시전자 쪽(−) 좁고 먼 쪽(+) 넓게 직선으로
+	TArray<AActor*> Candidates;
+	OverlapSphere(World, Q.Origin, FMath::Sqrt(LenUU * LenUU * 0.25f + FarHalf * FarHalf), Q, Candidates);
+	TArray<AActor*> Inside;
+	for (AActor* Actor : Candidates)
+	{
+		const FVector D = GetTargetingLocation(Actor) - Q.Origin;
+		const float X = FVector::DotProduct(D, Fwd) + LenUU * 0.5f;   // 0 = 시전자 쪽 변 · LenUU = 먼 쪽 변
+		const float Y = FMath::Abs(FVector::DotProduct(D, Right));
+		if (X < 0.f || X > LenUU || Y > FMath::Lerp(NearHalf, FarHalf, X / LenUU))
+		{
+			continue;
+		}
+		Inside.Add(Actor);
+	}
+	// "가까운 순서대로" = **카티야에게** 가까운 순 (게임 툴팁) — 사다리꼴 가운데가 아니라 시전자 기준으로 잰다
+	const FVector From = Q.Instigator ? GetTargetingLocation(Q.Instigator) : Q.Origin;
+	SortAndMeasure(Inside, From, Q, 0.f, 0.f, &Result.Distances);
+	if (Q.MaxTargets > 0 && Inside.Num() > Q.MaxTargets)
+	{
+		Inside.SetNum(Q.MaxTargets);
+		Result.Distances.SetNum(Q.MaxTargets);
+	}
+	Result.HitActors = MoveTemp(Inside);
 	return Result;
 }
 

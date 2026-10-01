@@ -138,8 +138,30 @@ namespace
 		return V == INDEX_NONE ? EERWeaponType::None : static_cast<EERWeaponType>(V);
 	}
 
+	/** 스킬 키 → 판정 순간 키 (Ability.Slot.Q → Ability.Slot.Q.Execute). 없으면 빈 태그. */
+	FGameplayTag ExecuteKeyOf(const FGameplayTag& SlotKey)
+	{
+		if (SlotKey == ERTags::Ability_Slot_Q) { return ERTags::Ability_Slot_Q_Execute; }
+		if (SlotKey == ERTags::Ability_Slot_W) { return ERTags::Ability_Slot_W_Execute; }
+		if (SlotKey == ERTags::Ability_Slot_E) { return ERTags::Ability_Slot_E_Execute; }
+		if (SlotKey == ERTags::Ability_Slot_R) { return ERTags::Ability_Slot_R_Execute; }
+		return FGameplayTag();
+	}
+
 	FGameplayTag ActionToKey(const FString& ActLower, bool bCommon)
 	{
+		// 여러 단계 스킬 (F19-01 카티야 R Skill04_Start / Loop / Fire / End · Argument 53 L2) — 위클라인과 같은 규칙:
+		//   _start = 선딜 (같은 키의 에디터 몽타주 AM_…_Start 가 있으면 그게 대신 — Start → Loop 섹션 반복) · _fire · _shot = 판정 순간
+		//   _loop · _end 는 넣지 않는다 (loop 은 몽타주 섹션 · end 는 아직 자리 없음 → 규칙 밖)
+		int32 Under = INDEX_NONE;
+		if (ActLower.StartsWith(TEXT("skill")) && ActLower.FindChar(TEXT('_'), Under))
+		{
+			const FGameplayTag SlotKey = ActionToKey(ActLower.Left(Under), bCommon);
+			const FString Phase = ActLower.Mid(Under + 1);
+			if (SlotKey.IsValid() && Phase == TEXT("start")) { return SlotKey; }
+			if (SlotKey.IsValid() && (Phase == TEXT("fire") || Phase == TEXT("shot"))) { return ExecuteKeyOf(SlotKey); }
+			return FGameplayTag();
+		}
 		if (ActLower == TEXT("atk01") || ActLower == TEXT("atk02")) { return ERTags::Ability_Slot_Attack; }
 		if (ActLower == TEXT("weaponskill") || ActLower == TEXT("normalweaponskill")) { return ERTags::Ability_Slot_D; }
 		if (ActLower == TEXT("skill01")) { return ERTags::Ability_Slot_Q; }
@@ -311,7 +333,8 @@ namespace
 		{
 			const FString Name = A.AssetName.ToString();
 			TArray<FString> Tokens;
-			Name.ParseIntoArray(Tokens, TEXT("_"));
+			// 에디터 몽타주 AM_<시퀀스 이름> — 같은 규칙으로 읽고, 같은 키의 시퀀스를 대신한다 (아래 몽타주 우선)
+			(Name.StartsWith(TEXT("AM_")) ? Name.Mid(3) : Name).ParseIntoArray(Tokens, TEXT("_"));
 			FString SkinId;
 			for (int32 i = Tokens.Num() - 1; i >= 1; --i)
 			{
@@ -372,6 +395,21 @@ namespace
 				WeaponGroups.FindOrAdd(Weapon).FindOrAdd({ EERWeaponType::None, Key }).Add(Asset);
 			}
 		}
+
+		// 같은 키에 에디터 몽타주가 있으면 몽타주만 (시퀀스와 번갈아 틀지 않는다 — 야생동물 Fill 과 같은 규칙 · Argument 53 L2)
+		auto PreferMontage = [](FKeyGroups& Groups)
+		{
+			for (TPair<TPair<EERWeaponType, FGameplayTag>, TArray<UObject*>>& G : Groups)
+			{
+				if (G.Value.ContainsByPredicate([](const UObject* O) { return O && O->IsA<UAnimMontage>(); }))
+				{
+					G.Value.RemoveAll([](const UObject* O) { return !O || !O->IsA<UAnimMontage>(); });
+				}
+			}
+		};
+		PreferMontage(BaseGroups);
+		for (TPair<EERWeaponType, FKeyGroups>& W : WeaponGroups) { PreferMontage(W.Value); }
+		for (TPair<FString, FKeyGroups>& S : SkinGroups) { PreferMontage(S.Value); }
 
 		// 2) 기본 표 · 무기 세트
 		UERPresentationData* Base = FindOrCreate<UERPresentationData>(PresRoot / Char, FString::Printf(TEXT("DA_Pres_%s"), *Char), Stats);

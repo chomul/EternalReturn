@@ -36,10 +36,16 @@ struct FERSkillContext
 	const UERSkillData* ShapeOwner = nullptr;
 	/** 평타 강화로 얹힌 실행인가 — 로그 라벨. */
 	bool bEnhancement = false;
+	/** 날아간 거리 ÷ 사거리 (0~1) — 날아가는 투사체 적중일 때만. 그 외 -1 (F19-01 카티야 Q 거리 보간). */
+	float TravelRatio = -1.f;
+	/** 몇 번째 발 (0 부터) — 순차 사격(카티야 R) 적중일 때만. 그 외 -1. 피해 조각 ShotValues 가 읽는다. */
+	int32 ShotIndex = -1;
 
 	// ── 조각이 세팅하는 것 (같은 실행 안의 뒤 조각 · 어빌리티가 읽는다) ──
 	/** 피해 조각이 하나라도 맞혔나 — 리캐스트(적중 시) · 다음 평타 강화가 본다. */
 	bool bHitAnything = false;
+	/** 적중이 **나중에** 온다 (날아가는 투사체 — F19-01). "빗나감" 을 지금 판단하지 않는다. */
+	bool bHitDeferred = false;
 	/** 판정을 건너뛴다 — 장판이 대신 판정한다. OnExecute 에서 세운다. */
 	bool bSkipTargeting = false;
 	/** 어빌리티를 끝내지 말고 활성으로 둔다 — 모드. 세운 조각이 나중에 Ability->EndFromFragment 로 끝낸다. */

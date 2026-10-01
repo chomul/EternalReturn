@@ -81,7 +81,8 @@ void UERSkillFragment_SelfMove::OnExecute(FERSkillContext& Ctx) const
 		return;
 	}
 
-	const bool bStarted = ERForcedMove::ApplySelfMove(Avatar, Direction, DistanceUU, Duration, bPushThroughPawns);
+	const float CrossUU = (Mode == ESkillSelfMove::TowardAim || Mode == ESkillSelfMove::AwayFromAim) ? WallCrossExtra * 100.f : 0.f;
+	const bool bStarted = ERForcedMove::ApplySelfMove(Avatar, Direction, DistanceUU, Duration, bPushThroughPawns, CrossUU);
 	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 자기 이동 %s %.0fcm / %.2f초 -> %s"),
 		*GetNameSafe(Owner), *GetNameSafe(Ctx.Skill), *UEnum::GetValueAsString(Mode), DistanceUU, Duration, bStarted ? TEXT("시작") : TEXT("실패"));
 }

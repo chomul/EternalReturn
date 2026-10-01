@@ -230,6 +230,43 @@ struct FERSkillShape
 	float SpreadAngleDeg = 15.f;
 
 	/**
+	 * 투사체 속도 (m/s). **0 보다 크면 날아가는 투사체 액터**를 쏜다 — 날아가는 동안 피할 수 있고 적중은 도착 때 (F19-01 · Argument 54 P1).
+	 * 0 = 지금처럼 발사 순간 선 판정 (트리플렛 · 저격 D 그대로). 카티야 Q 26 · R 40.
+	 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "Shape == ESkillTargeting::Projectile || Shape == ESkillTargeting::Trapezoid"))
+	float ProjectileSpeed = 0.f;
+
+	/** 쏠 투사체 클래스 — 모습(메시 · 이펙트)만 다른 BP 자식을 고른다. 비우면 C++ 기본 `AERProjectileBase`. */
+	UPROPERTY(EditDefaultsOnly, meta = (EditCondition = "ProjectileSpeed > 0"))
+	TSubclassOf<class AERProjectileBase> ProjectileClass;
+
+	/** Trapezoid (카티야 R 스캔) — 시전자 쪽 · 먼 쪽 변의 전체 폭 (m). */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "Shape == ESkillTargeting::Trapezoid"))
+	float TrapezoidNearWidth = 0.f;
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "Shape == ESkillTargeting::Trapezoid"))
+	float TrapezoidFarWidth = 0.f;
+	/** Trapezoid 길이 (m) — **조준점(커서)이 가운데** · 시전자 쪽이 좁은 변. 0 이면 RangeMax. RangeMax 는 조준점을 당기는 사거리. */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "Shape == ESkillTargeting::Trapezoid"))
+	float TrapezoidLength = 0.f;
+
+	/** 판정 결과 최대 수 (가까운 순). 0 = 제한 없음. 카티야 R = 3. */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	int32 MaxTargets = 0;
+
+	/** 실험체만 (야생동물은 대상도 아니고 투사체도 지나친다) — 카티야 R "적 실험체". */
+	UPROPERTY(EditDefaultsOnly)
+	bool bPlayersOnly = false;
+
+	/**
+	 * Trapezoid + ProjectileSpeed > 0 — 결과 대상마다 **따라가는 탄**을 이 간격(초)으로 순서대로 (카티야 R "가까운 순서대로 한 발씩").
+	 * 간격 `[자체]` (원작 미확인). 쏘기 전에 대상이 ShotCancelDistance(m) 보다 멀면 그 대상은 건너뛴다 (원작 30m).
+	 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "Shape == ESkillTargeting::Trapezoid"))
+	float ShotInterval = 0.15f;
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "Shape == ESkillTargeting::Trapezoid"))
+	float ShotCancelDistance = 30.f;
+
+	/**
 	 * SingleTarget 조준 보조 (m). 커서 아래에 유효한 대상이 없으면 조준점 반경 안에서 **가장 가까운 대상**을 대신 잡는다.
 	 * 0 = 끔 (캡슐을 정확히 찍어야 함). 평타 · 단일 대상 스킬의 조작감용 — 판정 자체가 아니라 **대상 선택**만 돕는다.
 	 * ⚠ 자체 결정값. 원작의 클릭 허용 오차는 (미확인).

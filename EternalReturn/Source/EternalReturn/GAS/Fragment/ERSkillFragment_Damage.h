@@ -7,6 +7,19 @@
 #include "GAS/ERSkillData.h"
 #include "ERSkillFragment_Damage.generated.h"
 
+/** 순차 사격의 한 발 값 (카티야 R 1 · 2 · 3발) — 레벨별 배열. 비운 칸은 조각의 기본값을 쓴다. */
+USTRUCT(BlueprintType)
+struct FERShotDamage
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> BaseDamage;
+
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> APRatio;
+};
+
 /**
  * 판정 대상에게 피해. 계수만 넘기고 곱하는 건 ERDamageExecution (Docs/4_Argument/5).
  * 형상(광역) 태그는 Ctx.ShapeOwner 의 Shape 를 따른다 — 평타 강화는 평타의 형상, 리캐스트·2차는 그 데이터의 형상.
@@ -26,6 +39,21 @@ public:
 
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> APRatio;
+
+	/**
+	 * **사거리 끝** 값 — 날아가는 투사체가 날아간 거리 비율(0~1)로 BaseDamage → 이 값 **직선 보간** (카티야 Q 40 → 60 · 사용자 2026-10-01 "직선 비례").
+	 * 비우면 보간 없음. 즉시 판정 · 장판엔 영향 없음 (날아간 거리가 없다).
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> BaseDamageFar;
+
+	/** 사거리 끝 공격력 계수 — APRatio → 이 값 (카티야 Q 0.7 → 1.05). 기본 · 계수를 **각각** 보간 (역기획서 §3 Q). */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> APRatioFar;
+
+	/** **발마다 다른 값** — 순차 사격(카티야 R)의 n 번째 발이면 [n] 을 쓴다. 사격할수록 세진다 (게임 툴팁 · 사용자 2026-10-01). 비우면 안 씀. */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<FERShotDamage> ShotValues;
 
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> BonusAPRatio;

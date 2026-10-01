@@ -26,6 +26,11 @@ enum class ESkillTargeting : uint8
 	 * 시전 시작 때 시전자 RangeMax 안의 살아 있는 실험체 위치를 **전부 저장** → 판정 순간 각 자리에 반경 RadiusOuter 원. 선딜 동안 그 자리를 벗어나면 안 맞는다.
 	 */
 	PlayerCircles,
+	/**
+	 * **조준점(커서) 중심 역사다리꼴** — 방향 = 시전자 → 조준점 · 시전자 쪽 변 TrapNearWidth · 먼 쪽 변 TrapFarWidth · 길이 TrapLength (카티야 R 스캔 · 사용자 2026-10-01 "커서 기준으로 사다리꼴").
+	 * 조준점은 RangeMax 로 당겨진다. 결과는 시전자에게 가까운 순 · MaxTargets 로 자른다.
+	 */
+	Trapezoid,
 };
 
 /** 누구를 걸러낼 것인가. */
@@ -96,6 +101,23 @@ struct FTargetQuery
 	/** 관통 여부. false 면 가장 가까운 하나만. */
 	UPROPERTY()
 	bool bPenetrate = false;
+
+	/** Trapezoid — 가까운 쪽 · 먼 쪽 **전체 폭** (m). */
+	UPROPERTY()
+	float TrapNearWidth = 0.f;
+	UPROPERTY()
+	float TrapFarWidth = 0.f;
+	/** Trapezoid 길이 (m) — 조준점을 가운데로 앞뒤 절반씩 */
+	UPROPERTY()
+	float TrapLength = 0.f;
+
+	/** 결과 최대 수 (가까운 순으로 자른다). 0 = 제한 없음. 카티야 R = 3. */
+	UPROPERTY()
+	int32 MaxTargets = 0;
+
+	/** 실험체(팀 있는 액터)만 — 야생동물은 대상도 아니고 막지도 않는다 (카티야 R "적 실험체" · 야생동물 관통). */
+	UPROPERTY()
+	bool bPlayersOnly = false;
 
 	/**
 	 * ⭐ Z를 무시하고 수평(XY) 거리로만 판정할 것인가. 기본 true.

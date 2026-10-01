@@ -19,6 +19,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
 	float Duration = 0.f;
 
+	/**
+	 * 강화 내용(피해 · 적중 조각)을 **다른 스킬 DA** 에서 — 레벨은 그 스킬의 지금 레벨 (카티야 Q · E → P 잿빛 사신 · F19-01).
+	 * 비우면 이 스킬 자신 (지금까지와 같다 — 재키 W). 그 스킬을 아직 안 배웠으면 강화를 걸지 않는다.
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	TObjectPtr<const UERSkillData> BuffSkill;
+
 	virtual void OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const override;
 	virtual FString GetDebugName() const override { return TEXT("다음 평타 강화"); }
 };

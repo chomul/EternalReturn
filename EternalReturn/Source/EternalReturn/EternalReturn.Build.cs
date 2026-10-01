@@ -16,6 +16,10 @@ public class EternalReturn : ModuleRules
         if (Target.bBuildEditor)
         {
             PrivateDependencyModuleNames.Add("AssetRegistry");
+            // 스킬 DA JSON 임포트 (ER.Skill.ImportJson · Argument 55 J1) — 엔진 기본 모듈
+            PrivateDependencyModuleNames.Add("Json");
+            // 스킬 임포트가 바꾼 DA 를 바로 저장 (새 DA 를 저장 안 하고 PIE 하면 클라로 못 보낸다 — 2026-10-01 두 번)
+            PrivateDependencyModuleNames.Add("UnrealEd");
         }
     }
 }

@@ -9,6 +9,8 @@
 #include "GAS/ERCooldownEffect.h"
 #include "GAS/ERCostEffect.h"
 #include "GAS/ERSkillPhaseEffect.h"
+#include "Combat/ERProjectileBase.h"
+#include "Combat/ERProjectile_Homing.h"
 #include "Combat/ERTargeting.h"
 #include "Core/ERTeamStatics.h"
 #include "Core/ERPlayerState.h"
@@ -27,32 +29,43 @@ namespace
 {
 	constexpr float DebugDrawSeconds = 1.5f;
 
-	void DrawSkillQuery(const UWorld* World, const FTargetQuery& Q, const FTargetResult& Result, const FString& Label)
+	/** 판정 모양 테두리 — 판정 디버그(시전 뒤)와 시전 전 미리보기가 **같은 그림** (Argument 56 D1). Life 0 = 한 프레임. */
+	void DrawShape(const UWorld* World, const FTargetQuery& Q, FColor Color, float Life)
 	{
-		if (!World || CVarSkillDebugDraw.GetValueOnGameThread() == 0)
-		{
-			return;
-		}
+		const FColor Faint(Color.R, Color.G, Color.B, 80);
 		const FVector Up(0.f, 0.f, 20.f);
 		const FVector O = Q.Origin + Up;
 		const float RangeUU = Q.RangeMax * 100.f;
 		switch (Q.Shape)
 		{
 		case ESkillTargeting::SingleTarget:
-			if (Q.DesignatedTarget) { DrawDebugLine(World, O, Q.DesignatedTarget->GetActorLocation(), FColor::Green, false, DebugDrawSeconds, 0, 2.f); }
-			DrawDebugCircle(World, O, RangeUU, 32, FColor(0, 255, 0, 80), false, DebugDrawSeconds, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
+			if (Q.DesignatedTarget) { DrawDebugLine(World, O, Q.DesignatedTarget->GetActorLocation(), Color, false, Life, 0, 2.f); }
+			DrawDebugCircle(World, O, RangeUU, 32, Faint, false, Life, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
 			break;
 		case ESkillTargeting::SelfRadius:
 		case ESkillTargeting::GroundCircle:
 		case ESkillTargeting::DualRadius:
-			DrawDebugCircle(World, O, (Q.Shape == ESkillTargeting::GroundCircle ? Q.RadiusOuter : Q.RangeMax) * 100.f, 32, FColor::Green, false, DebugDrawSeconds, 0, 2.f, FVector::RightVector, FVector::ForwardVector, false);
-			if (Q.RadiusInner > 0.f) { DrawDebugCircle(World, O, Q.RadiusInner * 100.f, 32, FColor::Yellow, false, DebugDrawSeconds, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false); }
+			DrawDebugCircle(World, O, (Q.Shape == ESkillTargeting::GroundCircle ? Q.RadiusOuter : Q.RangeMax) * 100.f, 32, Color, false, Life, 0, 2.f, FVector::RightVector, FVector::ForwardVector, false);
+			if (Q.RadiusInner > 0.f) { DrawDebugCircle(World, O, Q.RadiusInner * 100.f, 32, FColor::Yellow, false, Life, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false); }
 			break;
 		case ESkillTargeting::Projectile:
 		{
 			const FVector End = O + Q.Direction.GetSafeNormal2D() * RangeUU;
-			DrawDebugLine(World, O, End, FColor::Green, false, DebugDrawSeconds, 0, 3.f);
-			DrawDebugCircle(World, End, Q.ProjectileRadius * 100.f, 16, FColor::Green, false, DebugDrawSeconds, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
+			DrawDebugLine(World, O, End, Color, false, Life, 0, 3.f);
+			DrawDebugCircle(World, End, Q.ProjectileRadius * 100.f, 16, Color, false, Life, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
+			break;
+		}
+		case ESkillTargeting::Trapezoid:
+		{
+			const FVector F = Q.Direction.GetSafeNormal2D();
+			const FVector Rt(-F.Y, F.X, 0.f);
+			const float Half = (Q.TrapLength > 0.f ? Q.TrapLength : Q.RangeMax) * 50.f;   // 조준점이 가운데
+			const FVector N1 = O - F * Half + Rt * Q.TrapNearWidth * 50.f, N2 = O - F * Half - Rt * Q.TrapNearWidth * 50.f;
+			const FVector F1 = O + F * Half + Rt * Q.TrapFarWidth * 50.f, F2 = O + F * Half - Rt * Q.TrapFarWidth * 50.f;
+			DrawDebugLine(World, N1, N2, Color, false, Life, 0, 2.f);
+			DrawDebugLine(World, N1, F1, Color, false, Life, 0, 2.f);
+			DrawDebugLine(World, N2, F2, Color, false, Life, 0, 2.f);
+			DrawDebugLine(World, F1, F2, Color, false, Life, 0, 2.f);
 			break;
 		}
 		case ESkillTargeting::Cone:
@@ -60,14 +73,24 @@ namespace
 			const FVector F = Q.Direction.GetSafeNormal2D();
 			const FVector L = F.RotateAngleAxis(-Q.AngleDeg * 0.5f, FVector::UpVector);
 			const FVector R = F.RotateAngleAxis(+Q.AngleDeg * 0.5f, FVector::UpVector);
-			DrawDebugLine(World, O, O + L * RangeUU, FColor::Green, false, DebugDrawSeconds, 0, 2.f);
-			DrawDebugLine(World, O, O + R * RangeUU, FColor::Green, false, DebugDrawSeconds, 0, 2.f);
-			DrawDebugCircle(World, O, RangeUU, 32, FColor(0, 255, 0, 80), false, DebugDrawSeconds, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
+			DrawDebugLine(World, O, O + L * RangeUU, Color, false, Life, 0, 2.f);
+			DrawDebugLine(World, O, O + R * RangeUU, Color, false, Life, 0, 2.f);
+			DrawDebugCircle(World, O, RangeUU, 32, Faint, false, Life, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
 			break;
 		}
 		default:
 			break;
 		}
+	}
+
+	void DrawSkillQuery(const UWorld* World, const FTargetQuery& Q, const FTargetResult& Result, const FString& Label)
+	{
+		if (!World || CVarSkillDebugDraw.GetValueOnGameThread() == 0)
+		{
+			return;
+		}
+		DrawShape(World, Q, FColor::Green, DebugDrawSeconds);
+		const FVector O = Q.Origin + FVector(0.f, 0.f, 20.f);
 		for (const AActor* Hit : Result.HitActors)
 		{
 			if (Hit) { DrawDebugSphere(World, Hit->GetActorLocation(), 45.f, 12, FColor::Red, false, DebugDrawSeconds, 0, 2.f); }
@@ -599,7 +622,7 @@ const UERSkillData* UERGameplayAbility::GetExecSkill() const
 }
 
 
-FTargetQuery UERGameplayAbility::MakeTargetQuery(const UERSkillData& SkillRef) const
+FTargetQuery UERGameplayAbility::BuildQuery(const UERSkillData& SkillRef, const FVector& InAimPoint, const FVector& InAimDirection) const
 {
 	const UERSkillData* Skill = &SkillRef;
 	AActor* Avatar = GetAvatarActorFromActorInfo();
@@ -614,18 +637,31 @@ FTargetQuery UERGameplayAbility::MakeTargetQuery(const UERSkillData& SkillRef) c
 	Q.AngleDeg = Skill->Shape.AngleDeg;
 	Q.ProjectileRadius = Skill->Shape.ProjectileRadius;
 	Q.bPenetrate = Skill->Shape.bPenetrate;
+	Q.TrapNearWidth = Skill->Shape.TrapezoidNearWidth;
+	Q.TrapFarWidth = Skill->Shape.TrapezoidFarWidth;
+	Q.TrapLength = Skill->Shape.TrapezoidLength;
+	Q.MaxTargets = Skill->Shape.MaxTargets;
+	Q.bPlayersOnly = Skill->Shape.bPlayersOnly;
 	Q.Instigator = Avatar;
-	Q.Direction = AimDirection;
+	Q.Direction = InAimDirection;
 	// GroundCircle 만 조준점이 중심이다. 나머지는 시전자가 원점.
-	Q.Origin = (Q.Shape == ESkillTargeting::GroundCircle) ? AimPoint : ERTargeting::GetTargetingLocation(Avatar);
+	Q.Origin = (Q.Shape == ESkillTargeting::GroundCircle || Q.Shape == ESkillTargeting::Trapezoid) ? InAimPoint : ERTargeting::GetTargetingLocation(Avatar);   // 사다리꼴도 커서 기준 (카티야 R)
 	// 자기 원(SelfRadius · DualRadius)을 조준 방향 앞으로 띄운다 — 곰 강타 "앞발이 내려친 자리" (F12.6-04 · 사용자 2026-09-30)
 	if (Skill->Shape.ForwardOffset > 0.f && (Q.Shape == ESkillTargeting::SelfRadius || Q.Shape == ESkillTargeting::DualRadius))
 	{
-		const FVector Fwd = AimDirection.GetSafeNormal2D().IsNearlyZero()
+		const FVector Fwd = InAimDirection.GetSafeNormal2D().IsNearlyZero()
 			? (Avatar ? Avatar->GetActorForwardVector().GetSafeNormal2D() : FVector::ForwardVector)
-			: AimDirection.GetSafeNormal2D();
+			: InAimDirection.GetSafeNormal2D();
 		Q.Origin += Fwd * Skill->Shape.ForwardOffset * 100.f;
 	}
+	return Q;
+}
+
+FTargetQuery UERGameplayAbility::MakeTargetQuery(const UERSkillData& SkillRef) const
+{
+	const UERSkillData* Skill = &SkillRef;
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	FTargetQuery Q = BuildQuery(SkillRef, AimPoint, AimDirection);
 	Q.DesignatedTarget = AimActor.Get();
 
 	// ⭐ 조준 보조 — SingleTarget 인데 커서 아래 액터가 유효한 대상이 아니면(바닥 · 자기 자신 · 아군),
@@ -672,6 +708,19 @@ void UERGameplayAbility::ExecuteSkill()
 	}
 
 	const FTargetQuery Q = MakeTargetQuery(*Skill);
+
+	// ⭐ 날아가는 투사체 (F19-01 · Argument 54 P1) — 여기서는 쏘기만. 적중 조각은 도착 때 투사체가 ApplyProjectileHit 로 돌린다
+	if (Q.Shape == ESkillTargeting::Projectile && Skill->Shape.ProjectileSpeed > 0.f)
+	{
+		SpawnProjectiles(*Skill, Q);
+		return;
+	}
+	// 스캔 → 대상마다 따라가는 탄 (카티야 R)
+	if (Q.Shape == ESkillTargeting::Trapezoid && Skill->Shape.ProjectileSpeed > 0.f)
+	{
+		FireSequentialShots(*Skill, Q);
+		return;
+	}
 
 	FTargetResult Result;
 	if (Q.Shape == ESkillTargeting::Projectile && Skill->Shape.ProjectileCount > 1)
@@ -752,13 +801,14 @@ void UERGameplayAbility::ExecuteSkill()
 	OnTargetsResolved(Result);
 }
 
-void UERGameplayAbility::SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack) const
+void UERGameplayAbility::SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack, int32 ShotNumber) const
 {
 	FGameplayCueParameters Base;
 	Base.Instigator = Avatar;                       // 소리는 시전자의 무기 · 스킨에서 찾는다
 	Base.EffectCauser = Avatar;
 	Base.SourceObject = &Skill;
 	Base.AggregatedSourceTags.AddTag(Skill.SlotTag);   // 평타 / 스킬 구분 (키 Pres.Sfx.Attack · SkillCast …)
+	Base.RawMagnitude = static_cast<float>(ShotNumber);   // 순차 사격의 몇 번째 발 (카티야 R) — 2 이상이면 받는 쪽이 판정 순간 애니를 다시 튼다. 그 외 0
 
 	if (bWithAttack)
 	{
@@ -785,7 +835,7 @@ void UERGameplayAbility::SendPresCues(const UERSkillData& Skill, AActor* Avatar,
 	}
 }
 
-void UERGameplayAbility::ApplyOnTargets(const UERSkillData* Data, const TArray<AActor*>& Targets, float Scale, int32 LevelOverride, const UERSkillData* ShapeOwner, bool bEnhancement)
+void UERGameplayAbility::ApplyOnTargets(const UERSkillData* Data, const TArray<AActor*>& Targets, float Scale, int32 LevelOverride, const UERSkillData* ShapeOwner, bool bEnhancement, float TravelRatio, int32 ShotIndex)
 {
 	if (!Data || Targets.IsEmpty() || !HasAuthority(&CurrentActivationInfo))
 	{
@@ -795,12 +845,183 @@ void UERGameplayAbility::ApplyOnTargets(const UERSkillData* Data, const TArray<A
 	if (LevelOverride > 0) { Ctx.Level = LevelOverride; }
 	Ctx.ShapeOwner = ShapeOwner;
 	Ctx.bEnhancement = bEnhancement;
+	Ctx.TravelRatio = TravelRatio;
+	Ctx.ShotIndex = ShotIndex;
 	Ctx.Targets = Targets;
 	Ctx.bHitAnything = true;
 	// ⚠ 대상 효과 조각(피해 · 적중 효과)만 — 리캐스트 · 강화 · 2차 판정은 "시전 결과" 라 여기서 돌면 안 된다 (평타 강화 무한 루프).
 	for (const TObjectPtr<UERSkillFragment>& F : Data->Fragments)
 	{
 		if (F && F->IsHitEffect()) { F->OnTargetsResolved(Ctx, Targets); }
+	}
+}
+
+void UERGameplayAbility::DrawPreview(const UERSkillData& SkillRef, const FVector& CursorPoint) const
+{
+	const AActor* Avatar = GetAvatarActorFromActorInfo();
+	const UWorld* World = Avatar ? Avatar->GetWorld() : nullptr;
+	if (!World)
+	{
+		return;
+	}
+	// ResolveAim 과 같은 클램프 — 미리보기 위치 = 실제 판정 위치
+	const FVector Origin = ERTargeting::GetTargetingLocation(Avatar);
+	FVector ToAim = CursorPoint - Origin;
+	ToAim.Z = 0.f;
+	const float Dist = ToAim.Size();
+	const FVector Dir = Dist > KINDA_SMALL_NUMBER ? ToAim / Dist : Avatar->GetActorForwardVector().GetSafeNormal2D();
+	const float MaxUU = GetRangeMax(SkillRef) * 100.f;
+	FVector Aim = Origin + Dir * FMath::Clamp(Dist, SkillRef.Shape.RangeMin * 100.f, MaxUU);
+	Aim.Z = Origin.Z;
+	const FTargetQuery Q = BuildQuery(SkillRef, Aim, Dir);
+	DrawShape(World, Q, FColor::Cyan, 0.f);
+	// 조준점을 당기는 모양(지면 원 · 사다리꼴)은 사거리 원도 — 커서가 밖이면 이 원 끝으로 붙는다
+	if (Q.Shape == ESkillTargeting::GroundCircle || Q.Shape == ESkillTargeting::Trapezoid)
+	{
+		DrawDebugCircle(World, Origin + FVector(0.f, 0.f, 20.f), MaxUU, 48, FColor(255, 255, 255, 120), false, 0.f, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
+	}
+}
+
+void UERGameplayAbility::SpawnProjectiles(const UERSkillData& SkillRef, const FTargetQuery& Q)
+{
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	UWorld* World = Avatar ? Avatar->GetWorld() : nullptr;
+	if (!World || !HasAuthority(&CurrentActivationInfo))
+	{
+		return;
+	}
+	UClass* Cls = SkillRef.Shape.ProjectileClass ? SkillRef.Shape.ProjectileClass.Get() : AERProjectileBase::StaticClass();
+	FVector Aim = Q.Direction.GetSafeNormal2D();
+	if (Aim.IsNearlyZero())
+	{
+		Aim = Avatar->GetActorForwardVector().GetSafeNormal2D();
+	}
+	const int32 N = FMath::Max(1, SkillRef.Shape.ProjectileCount);
+	for (int32 i = 0; i < N; ++i)
+	{
+		const float Yaw = (i - (N - 1) * 0.5f) * SkillRef.Shape.SpreadAngleDeg;   // 여러 발이면 부채처럼 (즉시 판정과 같은 규칙)
+		FERProjectileLaunch L;
+		// 판정 원점(Q.Origin)은 바닥 높이다 — 모습이 바닥에 붙어 날았다 (2026-10-01 로그 `높이 2`). 높이만 몸 가운데로 (판정 스윕은 캡슐 전체라 영향 없음)
+		L.Start = FVector(Q.Origin.X, Q.Origin.Y, Avatar->GetActorLocation().Z);
+		L.Direction = Aim.RotateAngleAxis(Yaw, FVector::UpVector);
+		L.SpeedUU = SkillRef.Shape.ProjectileSpeed * 100.f;
+		L.RangeUU = Q.RangeMax * 100.f;
+		L.RadiusUU = FMath::Max(Q.ProjectileRadius * 100.f, 1.f);
+		const FTransform T(FVector(L.Direction).Rotation(), FVector(L.Start));
+		AERProjectileBase* P = World->SpawnActorDeferred<AERProjectileBase>(Cls, T, Avatar, Cast<APawn>(Avatar), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (!P)
+		{
+			continue;
+		}
+		P->InitLaunch(this, &SkillRef, GetAbilityLevel(), Q, L);
+		P->FinishSpawning(T);
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 투사체 %d발 발사 (%.0f m/s · 사거리 %.1fm) — 적중은 도착 때"),
+		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(&SkillRef), N, SkillRef.Shape.ProjectileSpeed, Q.RangeMax);
+
+	// 적중과 무관한 조각(다음 평타 강화 등)은 지금 — 적중 조각은 빈 대상이라 아무것도 안 한다. "빗나감" 벌칙은 보류 (bHitDeferred)
+	ExecCtx.Targets.Reset();
+	ExecCtx.bHitAnything = false;
+	ExecCtx.bHitDeferred = true;
+	RunFragmentsTargets(ExecCtx, {});
+	SendPresCues(SkillRef, Avatar, {}, /*bWithAttack=*/ExecOverride == nullptr);   // 시전음은 발사 때 · 타격음은 도착 때
+}
+
+void UERGameplayAbility::FireSequentialShots(const UERSkillData& SkillRef, const FTargetQuery& Q)
+{
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	UWorld* World = Avatar ? Avatar->GetWorld() : nullptr;
+	if (!World || !HasAuthority(&CurrentActivationInfo))
+	{
+		return;
+	}
+	const FTargetResult Scan = ERTargeting::Query(World, Q);
+	DrawSkillQuery(World, Q, Scan, GetNameSafe(&SkillRef));   // ER.Skill.DebugDraw 1
+	FString Names;
+	for (const AActor* A : Scan.HitActors) { Names += TEXT(" ") + GetNameSafe(A); }
+	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 스캔 %d명 (최대 %d · 가까운 순):%s"),
+		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(&SkillRef), Scan.HitActors.Num(), Q.MaxTargets, *Names);
+
+	const int32 Lv = GetAbilityLevel();
+	// 인식된 사람 수만큼 (최대 MaxTargets) **한 명에 한 발씩** · 가까운 순 — 발마다 Fire 애니 · 사격음 (사용자 2026-10-02 "shot 애니가 인식된 사람 수만큼 한 명씩")
+	for (int32 i = 0; i < Scan.HitActors.Num(); ++i)
+	{
+		TWeakObjectPtr<AActor> WeakTarget(Scan.HitActors[i].Get());
+		const UERSkillData* SkillPtr = &SkillRef;
+		const float Delay = i * SkillRef.Shape.ShotInterval;
+		if (Delay <= 0.f)
+		{
+			FireShotAt(SkillRef, WeakTarget.Get(), i, Lv);
+			continue;
+		}
+		// ⚠ 객체에 묶지 않는 람다 — EndAbility 가 `ClearAllTimersForObject(this)` 로 **this 에 묶인 타이머를 지운다** (GameplayAbility.cpp:707 · E19).
+		//   R 은 1발째 직후 끝나서 CreateWeakLambda(this) 로 묶었던 2 · 3발이 사라졌다 (2026-10-02 로그 `스캔 3명` → 1발). 인스턴스는 남으니 약참조로 부른다
+		TWeakObjectPtr<UERGameplayAbility> WeakThis(this);
+		FTimerHandle Unused;
+		World->GetTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([WeakThis, SkillPtr, WeakTarget, i, Lv]()
+		{
+			if (UERGameplayAbility* Self = WeakThis.Get())
+			{
+				Self->FireShotAt(*SkillPtr, WeakTarget.Get(), i, Lv);
+			}
+		}), Delay, false);
+	}
+
+	// 적중과 무관한 조각 · 시전음 (SpawnProjectiles 와 같다)
+	ExecCtx.Targets.Reset();
+	ExecCtx.bHitAnything = false;
+	ExecCtx.bHitDeferred = true;
+	RunFragmentsTargets(ExecCtx, {});   // 시전음 · Fire 애니는 발마다 (FireShotAt)
+}
+
+void UERGameplayAbility::FireShotAt(const UERSkillData& SkillRef, AActor* Target, int32 ShotIndex, int32 Lv)
+{
+	AActor* Avatar = GetAvatarActorFromActorInfo();
+	UWorld* World = Avatar ? Avatar->GetWorld() : nullptr;
+	if (!World || !Target)
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s %d번째 발 — 대상이 사라졌다 · 건너뜀"), *GetNameSafe(&SkillRef), ShotIndex + 1);
+		return;
+	}
+	const float Dist = FVector::Dist2D(Avatar->GetActorLocation(), Target->GetActorLocation());
+	if (SkillRef.Shape.ShotCancelDistance > 0.f && Dist > SkillRef.Shape.ShotCancelDistance * 100.f)
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s %d번째 발 — %s 가 %.1fm (> %.0fm) · 건너뜀"),
+			*GetNameSafe(&SkillRef), ShotIndex + 1, *GetNameSafe(Target), Dist / 100.f, SkillRef.Shape.ShotCancelDistance);
+		return;
+	}
+	const FTargetQuery Filter = MakeTargetQuery(SkillRef);   // 팀 · 시전자 · 실험체만 — 투사체 스윕이 쓴다
+	FERProjectileLaunch L;
+	L.Start = Avatar->GetActorLocation();
+	L.Direction = (Target->GetActorLocation() - Avatar->GetActorLocation()).GetSafeNormal();
+	L.SpeedUU = SkillRef.Shape.ProjectileSpeed * 100.f;
+	L.RangeUU = 0.f;   // 따라가는 탄은 사거리 대신 시간 (AERProjectile_Homing)
+	L.RadiusUU = FMath::Max(SkillRef.Shape.ProjectileRadius * 100.f, 1.f);
+	L.HomingTarget = Target;
+	UClass* Cls = SkillRef.Shape.ProjectileClass ? SkillRef.Shape.ProjectileClass.Get() : AERProjectile_Homing::StaticClass();
+	const FTransform T(FVector(L.Direction).Rotation(), FVector(L.Start));
+	AERProjectileBase* P = World->SpawnActorDeferred<AERProjectileBase>(Cls, T, Avatar, Cast<APawn>(Avatar), ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!P)
+	{
+		return;
+	}
+	P->InitLaunch(this, &SkillRef, Lv, Filter, L, ShotIndex);
+	P->FinishSpawning(T);
+	// 발마다 공격 큐 — 모든 머신(시전자 본인 포함)이 사격음 · 2발째부터 Fire 애니를 튼다 (몽타주 복제는 본인 클라엔 안 간다 → 큐로)
+	SendPresCues(SkillRef, Avatar, {}, /*bWithAttack=*/true, /*ShotNumber=*/ShotIndex + 1);
+	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s %d번째 발 → %s (%.1fm)"), *GetNameSafe(&SkillRef), ShotIndex + 1, *GetNameSafe(Target), Dist / 100.f);
+}
+
+void UERGameplayAbility::ApplyProjectileHit(const UERSkillData* Data, AActor* Target, int32 InLevel, float TravelRatio, int32 ShotIndex)
+{
+	if (!Data || !Target)
+	{
+		return;
+	}
+	ApplyOnTargets(Data, { Target }, 1.f, InLevel, nullptr, false, TravelRatio, ShotIndex);
+	if (HasAuthority(&CurrentActivationInfo))
+	{
+		SendPresCues(*Data, GetAvatarActorFromActorInfo(), { Target }, /*bWithAttack=*/false);
 	}
 }
 

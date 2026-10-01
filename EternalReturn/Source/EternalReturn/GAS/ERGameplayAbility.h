@@ -90,7 +90,7 @@ public:
 	 * LevelOverride < 0 이면 이 어빌리티 레벨. ShapeOwner 는 광역 태그 기준 (null = Data). 서버.
 	 */
 	void ApplyOnTargets(const UERSkillData* Data, const TArray<AActor*>& Targets, float Scale = 1.f, int32 LevelOverride = -1,
-		const UERSkillData* ShapeOwner = nullptr, bool bEnhancement = false);
+		const UERSkillData* ShapeOwner = nullptr, bool bEnhancement = false, float TravelRatio = -1.f, int32 ShotIndex = -1);
 	/** 이번 실행의 문맥 (조각 훅 · 상태 객체가 만든다). */
 	FERSkillContext MakeContext(const UERSkillData* Skill, float Scale) const;
 	FGameplayTag GetRecastTag() const { return RecastTag; }
@@ -106,6 +106,10 @@ public:
 	{
 		ApplyGameplayEffectSpecToOwner(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, Spec);
 	}
+	/** [소유 클라] 시전 전 범위 미리보기 — 커서를 ResolveAim 과 같게 당겨 판정과 같은 모양을 한 프레임 그린다 (Argument 56 C2 · D1). */
+	void DrawPreview(const UERSkillData& Skill, const FVector& CursorPoint) const;
+	/** [서버] 투사체 도착 — 적중 조각 + 타격음 큐 (F19-01 · Argument 54). 시전음은 발사 때 이미 냈다. */
+	void ApplyProjectileHit(const UERSkillData* Data, AActor* Target, int32 Level, float TravelRatio, int32 ShotIndex = -1);
 	/** ER.Skill.DebugDraw 1 — 머리 위 글자 1.5초 (모드 조각 등). */
 	static void DebugDrawText(const AActor* Avatar, const FString& Text, FColor Color = FColor::Cyan);
 
@@ -131,14 +135,24 @@ protected:
 	 */
 	virtual void ExecuteSkill();
 
+	/** [서버] 날아가는 투사체를 쏜다 (ProjectileSpeed > 0 · 발 수 · 퍼짐) · 시전음 · 적중과 무관한 조각 (F19-01 · Argument 54). */
+	void SpawnProjectiles(const UERSkillData& Skill, const FTargetQuery& Q);
+
+	/** [서버] 스캔(Trapezoid) → 대상마다 따라가는 탄을 ShotInterval 간격으로 (카티야 R). 시전음 · 적중과 무관한 조각은 지금. */
+	void FireSequentialShots(const UERSkillData& Skill, const FTargetQuery& Q);
+	/** [서버] 한 발 — 대상이 ShotCancelDistance 밖이거나 사라졌으면 건너뛴다. */
+	void FireShotAt(const UERSkillData& Skill, AActor* Target, int32 ShotIndex, int32 Level);
+
 	/** [서버] 연출 큐 (F12.5-05 · Argument 49 W2) — 판정 순간에 시전자 `GameplayCue.Pres.Attack` · 맞은 대상마다 `GameplayCue.Pres.Hit`. */
-	void SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack) const;
+	void SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack, int32 ShotNumber = 0) const;
 
 	/**
 	 * 디자이너 필드 + 조준 → 판정 질의 (조준 보조 포함). 판정(ExecuteSkill)과 발동 전 대상 확인이 **같은 질의**를 쓴다 —
 	 * 다르면 "확인은 통과했는데 판정은 빗나감" 이 생긴다.
 	 */
 	FTargetQuery MakeTargetQuery(const UERSkillData& Skill) const;
+	/** 조준점 · 방향만 받아 판정 질의 (지정 대상 · 조준 보조 없음) — MakeTargetQuery 와 시전 전 미리보기가 같이 쓴다. */
+	FTargetQuery BuildQuery(const UERSkillData& Skill, const FVector& InAimPoint, const FVector& InAimDirection) const;
 
 	/**
 	 * 판정 결과의 어빌리티 고유 후처리. 기본은 아무것도 안 한다 — 대상 효과는 조각(ExecuteSkill 이 먼저 돌린다).

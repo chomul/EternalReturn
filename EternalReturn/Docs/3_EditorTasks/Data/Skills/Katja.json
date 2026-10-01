@@ -1,0 +1,144 @@
+{
+  "_설명": "ER.Skill.ImportJson Katja — 값은 엔진 텍스트 형식 (에디터 칸 복사 · 붙여넣기). 애셋은 @이름. 근거 Docs/0_GameDesign/Characters/01_카티야.md §3 (12.2). 단계가 생길 때마다 스킬을 더한다 (F19-01 K3 Q 먼저). · \"Character\" 의 Skills 에서 같은 슬롯을 바꿔 끼운다. · CastTime \"@Marker(애니)\" = 그 애니의 ER 타격 지점 노티파이 시각 (사용자가 찍는다).",
+  "Folder": "/Game/ERCharacter/CharData/Skill/Katja",
+  "Character": "DA_Char_Katja",
+  "Skills": [
+    {
+      "Asset": "DA_Skill_Katja_P",
+      "_메모": "P 잿빛 사신 — Q · E 를 쓰고 5초 안 다음 평타에 추가 스킬 피해 50/75/100 (+AP 30/45/60%). 레벨은 포인트로 (1 시작 · 최대 3 — 사용자 2026-09-18 \"P 도 포인트로 찍는다\"). 시체 탐색 +4 크레딧은 F15. 이 DA 는 강화 내용만 담는다 — 거는 건 Q · E 의 '다음 평타 강화' 조각 (BuffSkill = 이 DA)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.P\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 3,
+        "InitialLevel": 1,
+        "Cooldowns": "(0,0,0)",
+        "CastTime": 0
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(50,75,100)",
+            "APRatio": "(0.3,0.45,0.6)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Katja_Q",
+      "_메모": "Q 조준 사격 — 비관통 26 m/s · 11m · 거리 직선 비례 40→60 · 0.7→1.05 · 맞히면 공속 +20~40% 4초 · 쿨 7→3. CastTime 0.25 [자체] (K8 마커로). 반경 0.3 [자체]. SlotTag · AbilityClass 는 복제한 값 유지 (안 적음)",
+      "Props": {
+        "MaxLevel": 5,
+        "Cooldowns": "(7,6,5,4,3)",
+        "CastTime": "@Marker(Katja_Snipe_Skill01)",
+        "Shape": "(Shape=Projectile,TeamFilter=Enemy,RangeMax=11,ProjectileRadius=0.3,bPenetrate=False,ProjectileCount=1,ProjectileSpeed=26,ProjectileClass=@BP_Proj_Katja_Q)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(40,80,120,160,200)",
+            "APRatio": "(0.7)",
+            "BaseDamageFar": "(60,120,180,240,300)",
+            "APRatioFar": "(1.05)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "bOnlyOnHit": true,
+            "Effects": "((Effect=@GE_AttackSpeedUp,Duration=(4),Magnitude=(1.2,1.25,1.3,1.35,1.4)))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_NextAttackBuff",
+          "Props": {
+            "Duration": 5,
+            "BuffSkill": "@DA_Skill_Katja_P"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Katja_E",
+      "_메모": "E 접근 금지 — 전방 4.5m 발사 + 뒤로 4m / 0.3초 (벽 너머 +1.5m 안에 자리 있으면 넘기 · 사용자 2026-10-01) · 50~150 (+AP 100%) · 맞으면 둔화 50~70% 1초 · 자신 이속 +40% 2초 (**적중 시** — 게임 툴팁 2026-10-01) · 쿨 12→8. 투사체 속도 30 · 반경 0.3 · CastTime 0 은 [자체] (원작 미확인). 모습은 Q 투사체 BP 재사용",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.E\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(12,11,10,9,8)",
+        "CastTime": "@Marker(Katja_Snipe_Skill03)",
+        "Shape": "(Shape=Projectile,TeamFilter=Enemy,RangeMax=4.5,ProjectileRadius=0.3,bPenetrate=False,ProjectileCount=1,ProjectileSpeed=30,ProjectileClass=@BP_Proj_Katja_Q)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfMove",
+          "Props": {
+            "Mode": "AwayFromAim",
+            "Distance": 4,
+            "Duration": 0.3,
+            "WallCrossExtra": 1.5
+          }
+        },
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "Effects": "((Effect=@GE_Wild_MoveSpeedUp,Duration=(2),Magnitude=(1.4)))",
+            "bOnlyOnHit": true
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(50,75,100,125,150)",
+            "APRatio": "(1.0)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(1)",
+            "SlowPercent": "(0.5,0.55,0.6,0.65,0.7)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_NextAttackBuff",
+          "Props": {
+            "Duration": 5,
+            "BuffSkill": "@DA_Skill_Katja_P"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Katja_R",
+      "_메모": "R 정밀 조준 — 채널 0.8초 (CC 로 끊김) · **커서 중심** 역사다리꼴 스캔 (사용자 2026-10-01 \"커서 기준\") · 커서는 최대 23m · 길이 8 · 카티야 쪽 폭 4 → 먼 쪽 8 [자체] (치수는 JSON TrapezoidLength · NearWidth · FarWidth) · 적 실험체 최대 3명 · **인식된 사람 수만큼(최대 3) 한 명에 한 발씩** · 발마다 Fire 애니 (사용자 2026-10-02) · 간격 = Fire 애니 길이 (@Length · 사용자가 애니 속도로 조절 2026-10-02) · 따라가는 탄 40 m/s · 반경 0.5 · 경로상 다른 적 실험체가 대신 맞음 · 야생동물 통과 · 쏘기 전 30m 밖이면 건너뜀 · 1/2/3발 300·350·400 / 450·500·700 / 600·650·1000 (+AP 150/180/200%) · 쿨 80/70/60 (게임 툴팁 2026-10-01). 모습 BP 가 생기면 ProjectileClass 를 @BP_Proj_Katja_R 로",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.R\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 3,
+        "InitialLevel": 0,
+        "MinCharacterLevel": "(6,11,16)",
+        "Cooldowns": "(80,70,60)",
+        "CastTime": 0.8,
+        "Shape": "(Shape=Trapezoid,TeamFilter=Enemy,RangeMax=23,TrapezoidLength=8,TrapezoidNearWidth=4,TrapezoidFarWidth=8,MaxTargets=3,bPlayersOnly=True,ProjectileRadius=0.5,ProjectileSpeed=40,ProjectileClass=\"/Script/EternalReturn.ERProjectile_Homing\",ShotInterval=@Length(Katja_Snipe_Skill04_Fire),ShotCancelDistance=30)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(300,450,600)",
+            "APRatio": "(1.5)",
+            "ShotValues": "((BaseDamage=(300,450,600),APRatio=(1.5)),(BaseDamage=(350,500,650),APRatio=(1.8)),(BaseDamage=(400,700,1000),APRatio=(2.0)))"
+          }
+        }
+      ]
+    }
+  ]
+}

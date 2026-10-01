@@ -10,7 +10,7 @@
 void UERSkillFragment_FailPenalty::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
 {
 	// 평타 강화 · 2차 판정으로 재진입한 실행은 보지 않는다 — 이 스킬 자체의 판정만
-	if (bOnMiss && Targets.IsEmpty() && !Ctx.bEnhancement)
+	if (bOnMiss && Targets.IsEmpty() && !Ctx.bEnhancement && !Ctx.bHitDeferred)
 	{
 		Apply(Ctx, TEXT("빗나감"));
 	}

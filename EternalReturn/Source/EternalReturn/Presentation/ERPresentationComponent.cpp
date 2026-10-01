@@ -277,6 +277,23 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 		return;   // 시전자가 이미 사라졌다 · 연출 없는 액터
 	}
 	const bool bBasic = Params.AggregatedSourceTags.HasTagExact(ERTags::Ability_Slot_Attack);
+	// 순차 사격 2발째부터 — 시전자 몸에 판정 순간 애니(`<슬롯>.Execute` · 카티야 R Skill04_Fire)를 이 머신에서 다시 (1발째는 어빌리티가 이미 틀었다)
+	if (bAttackCue && Params.RawMagnitude >= 2.f && Instigator == GetOwner())
+	{
+		static const TPair<FGameplayTag, FGameplayTag> ExecKeys[] = {
+			{ ERTags::Ability_Slot_Q, ERTags::Ability_Slot_Q_Execute }, { ERTags::Ability_Slot_W, ERTags::Ability_Slot_W_Execute },
+			{ ERTags::Ability_Slot_E, ERTags::Ability_Slot_E_Execute }, { ERTags::Ability_Slot_R, ERTags::Ability_Slot_R_Execute },
+		};
+		for (const TPair<FGameplayTag, FGameplayTag>& E : ExecKeys)
+		{
+			if (Params.AggregatedSourceTags.HasTagExact(E.Key))
+			{
+				const FString Played = PlayEventPres(E.Value, FGameplayTag());
+				UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s %.0f번째 발 — %s (%s)"), *GetNameSafe(GetOwner()), Params.RawMagnitude, *Played, NetTag(GetOwner()));
+				break;
+			}
+		}
+	}
 	FGameplayTag Key = bAttackCue
 		? (bBasic ? ERTags::Pres_Sfx_Attack : ERTags::Pres_Sfx_SkillCast)
 		: (bBasic ? ERTags::Pres_Sfx_Hit : ERTags::Pres_Sfx_SkillHit);
@@ -590,6 +607,20 @@ void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const 
 						*Anim->GetName(), MarkerSec, CastTime, Raw, WarnMinCastRate, WarnMaxCastRate);
 				}
 			}
+		}
+	}
+
+	else if (AttackSpeed <= 0.f && CastTime <= 0.f)
+	{
+		// 선딜 0 인데 타격 지점 마커가 있다 — 판정(이동 · 발사)이 누르자마자 나가고 애니는 마커까지 걸린다 (2026-10-01 카티야 E "그 전에부터 이동").
+		//   T2 는 선딜이 있을 때만 맞춘다 → 스킬 데이터 CastTime 을 이 마커 시각으로 (1배속)
+		const float MarkerSec = FindHitMarkerSeconds(Anim);
+		static TSet<const UObject*> WarnedNoCast;
+		if (MarkerSec > 0.f && !WarnedNoCast.Contains(Anim))
+		{
+			WarnedNoCast.Add(Anim);
+			UE_LOG(LogEternalReturn, Warning, TEXT("[연출] %s 타격 지점 %.2f초가 있는데 스킬 선딜(CastTime)이 0 — 판정이 애니보다 먼저 나간다. CastTime 을 %.2f 로"),
+				*Anim->GetName(), MarkerSec, MarkerSec);
 		}
 	}
 

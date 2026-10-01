@@ -26,6 +26,12 @@ public:
 	/** Shape 에 따라 아래 함수들로 분기한다. 스킬은 보통 이것만 부르면 된다. */
 	static FTargetResult Query(const UWorld* World, const FTargetQuery& Q);
 
+	/**
+	 * 날아가는 투사체 한 틱 구간 From → To 를 반경으로 쓸어 **필터를 통과한 대상**을 가까운 순으로 (F19-01 · Argument 54).
+	 * 판정 필터(팀 · ASC · 시체 · 무시 목록)는 다른 모양과 **같은 함수** — Q.TeamFilter · Q.Instigator · Q.IgnoredActors 를 쓴다.
+	 */
+	static TArray<AActor*> SweepSegment(const UWorld* World, const FVector& From, const FVector& To, float RadiusUU, const FTargetQuery& Q);
+
 	/** 지정한 액터 하나가 사거리·필터를 통과하는지 */
 	static FTargetResult QuerySingleTarget(const UWorld* World, const FTargetQuery& Q);
 
@@ -43,6 +49,9 @@ public:
 
 	/** ⭐ 이중 반경. 중앙은 InnerHitActors, 외곽은 HitActors 로 나뉜다 (중복 없음) */
 	static FTargetResult QueryDualRadius(const UWorld* World, const FTargetQuery& Q);
+
+	/** 시전자 앞 역사다리꼴 (카티야 R) — 가까운 순 · MaxTargets */
+	static FTargetResult QueryTrapezoid(const UWorld* World, const FTargetQuery& Q);
 
 	/**
 	 * 사거리 하한~상한 사이에서 0.0~1.0 을 돌려준다.
