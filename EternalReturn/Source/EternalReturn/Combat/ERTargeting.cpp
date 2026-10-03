@@ -272,17 +272,25 @@ float ERTargeting::GetDistanceAlpha(float Distance, float RangeMin, float RangeM
 
 FTargetResult ERTargeting::Query(const UWorld* World, const FTargetQuery& Q)
 {
+	FTargetResult R;
 	switch (Q.Shape)
 	{
-	case ESkillTargeting::SingleTarget: return QuerySingleTarget(World, Q);
-	case ESkillTargeting::SelfRadius:   return QuerySelfRadius(World, Q);
-	case ESkillTargeting::Projectile:   return QueryProjectile(World, Q);
-	case ESkillTargeting::GroundCircle: return QueryGroundCircle(World, Q);
-	case ESkillTargeting::Cone:         return QueryCone(World, Q);
-	case ESkillTargeting::DualRadius:   return QueryDualRadius(World, Q);
-	case ESkillTargeting::Trapezoid:    return QueryTrapezoid(World, Q);
+	case ESkillTargeting::SingleTarget: R = QuerySingleTarget(World, Q); break;
+	case ESkillTargeting::SelfRadius:   R = QuerySelfRadius(World, Q); break;
+	case ESkillTargeting::Projectile:   R = QueryProjectile(World, Q); break;
+	case ESkillTargeting::GroundCircle: R = QueryGroundCircle(World, Q); break;
+	case ESkillTargeting::Cone:         R = QueryCone(World, Q); break;
+	case ESkillTargeting::DualRadius:   R = QueryDualRadius(World, Q); break;
+	case ESkillTargeting::Trapezoid:    R = QueryTrapezoid(World, Q); break;
+	default: break;
 	}
-	return FTargetResult();
+	// 대상 수 상한 (S3.1 대상 칸) — 결과는 가까운 순으로 정렬돼 있다
+	if (Q.MaxTargets > 0 && R.HitActors.Num() > Q.MaxTargets)
+	{
+		R.HitActors.SetNum(Q.MaxTargets);
+		if (R.Distances.Num() > Q.MaxTargets) { R.Distances.SetNum(Q.MaxTargets); }
+	}
+	return R;
 }
 
 FTargetResult ERTargeting::QuerySingleTarget(const UWorld* World, const FTargetQuery& Q)

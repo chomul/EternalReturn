@@ -92,6 +92,16 @@ public:
 	 */
 	FString PlayEventPres(FGameplayTag AnimKey, FGameplayTag SfxKey);
 
+	/** 이 키 애니가 Section 섹션을 가진 몽타주면 그것 (스킬 통 몽타주 · K8). 아니면 nullptr. */
+	UAnimMontage* FindSkillMontage(FGameplayTag Key, FName Section) const;
+
+	/**
+	 * 스킬 통 몽타주의 섹션 넘기기 (K8). 서버 = ASC 로 (다른 클라에 섹션 · 위치 복제) · 소유 클라 = 로컬
+	 * (GAS 는 복제 몽타주를 본인에게 적용하지 않는다 — AbilitySystemComponent_Abilities.cpp:3147). 다른 클라는 부르지 않는다 (복제로 받는다).
+	 * 그 몽타주가 재생 중이 아니면 false.
+	 */
+	bool JumpSkillSection(FGameplayTag Key, FName Section);
+
 	/** 쉬는 자세 (F12.6-02) — AnimBP 에 자세 · 애니 6개를 넘긴다. bSkipIntro = 늦게 받음: 시작 동작 없이 반복부터. 같은 값이면 무시. */
 	void SetRestPose(EERRestPose Pose, bool bSkipIntro);
 
@@ -101,8 +111,14 @@ public:
 	 */
 	void HandlePresCue(FGameplayTag CueTag, const FGameplayCueParameters& Params);
 
-	/** 이 키 줄의 소리 중 무작위 하나 (각 클라 로컬 · 복제 안 함). 없으면 nullptr. */
-	USoundBase* PickSound(FGameplayTag Key) const;
+	/**
+	 * 이 키 줄의 소리 하나 (각 클라 로컬 · 복제 안 함). 없으면 nullptr.
+	 * ShotNumber > 0 (순차 사격 몇 번째 발 · 카티야 R) 이면 **그 순서의 소리** (`_Shot` → `_02` → `_03` · 모자라면 마지막) · 0 이면 무작위 (r1 · r2 변형).
+	 */
+	USoundBase* PickSound(FGameplayTag Key, int32 ShotNumber = 0) const;
+
+	/** 모션 소리 노티파이 (Argument 59 N2) — 지금 스킨에 이 소리의 짝이 있으면 그것 · 없으면 그대로. */
+	USoundBase* ResolveSound(USoundBase* Default) const;
 
 	/** 지금 해석 결과에 이 키가 있나 (리캐스트 키 → 슬롯 키 대체 판단). */
 	bool HasKey(FGameplayTag Key) const { return Cache.Contains(Key); }

@@ -22,7 +22,7 @@ float UERBasicAttackAbility::GetRangeMax(const UERSkillData& Skill) const
 	// ⭐ 사거리는 무기(AttackRange 어트리뷰트, m)가 정한다. 0 이면 애셋 값으로.
 	const UAbilitySystemComponent* ASC = CurrentActorInfo ? CurrentActorInfo->AbilitySystemComponent.Get() : nullptr;
 	const float RangeAttr = ASC ? ASC->GetNumericAttribute(UERAttributeSet::GetAttackRangeAttribute()) : 0.f;
-	return RangeAttr > 0.f ? RangeAttr : Skill.Shape.RangeMax;
+	return RangeAttr > 0.f ? RangeAttr : Skill.GetMaxReach();
 }
 
 void UERBasicAttackAbility::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
@@ -52,6 +52,13 @@ void UERBasicAttackAbility::ApplyCooldown(const FGameplayAbilitySpecHandle Handl
 		UE_LOG(LogEternalReturn, Log, TEXT("[평타] %s 간격 %.2f초 (공격 속도 %.2f)"),
 			*GetNameSafe(ActorInfo->OwnerActor.Get()), Interval, AttackSpeed);
 	}
+}
+
+void UERBasicAttackAbility::OnProjectileTargetHit(const UERSkillData& Data, AActor* Target)
+{
+	FTargetResult Result;
+	Result.HitActors.Add(Target);
+	OnTargetsResolved(Result);
 }
 
 void UERBasicAttackAbility::OnTargetsResolved(const FTargetResult& Result)

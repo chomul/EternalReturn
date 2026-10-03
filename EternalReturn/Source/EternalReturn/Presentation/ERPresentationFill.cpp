@@ -208,13 +208,43 @@ namespace
 		if (T.Num() >= 3)
 		{
 			const FString Rest = FString::Join(TArray<FString>(T.GetData() + 2, T.Num() - 2), TEXT("_")).ToLower();
-			const FGameplayTag Key = Rest == TEXT("normalattack") ? ERTags::Pres_Sfx_Attack
-				: (Rest == TEXT("normalattack_hit") || Rest == TEXT("normal_hit")) ? ERTags::Pres_Sfx_Hit : FGameplayTag();
+			// <캐릭터>_<무기>_Shot = 평타 발사음 · Reinforce_Shot / _Hit / _Ready = 다음 평타 강화 (카티야 P · K8 · Docs/3_EditorTasks/Audio/Katja.md)
+			const FGameplayTag Key = (Rest == TEXT("normalattack") || Rest == TEXT("shot")) ? ERTags::Pres_Sfx_Attack
+				: (Rest == TEXT("normalattack_hit") || Rest == TEXT("normal_hit")) ? ERTags::Pres_Sfx_Hit
+				: Rest == TEXT("reinforce_shot") ? ERTags::Pres_Sfx_AttackEnhanced
+				: Rest == TEXT("reinforce_hit") ? ERTags::Pres_Sfx_HitEnhanced
+				: Rest == TEXT("reinforce_ready") ? ERTags::Pres_Sfx_EnhanceReady : FGameplayTag();
 			if (Key.IsValid())
 			{
 				OutWeapon = TokenToWeapon(T[1]);
 				OutKey = Key;
 				return OutWeapon != EERWeaponType::None;
+			}
+		}
+		// 스킬 판정 순간 소리 (F19-01 K8 · Argument 59) — <캐릭터>_<무기>_Skill0N_Shot[_0K] → SkillCast.<슬롯> · _Hit[_0K] → SkillHit.<슬롯>
+		//   _02 · _03 은 이름순으로 뒤에 붙는다 → 순차 사격 발 번호로 고른다 (PickSound). 그 밖 (Aiming · Scan …) 은 모션 소리 — 노티파이 (규칙 밖)
+		if (T.Num() >= 4 && T.Num() <= 5 && (T.Num() == 4 || T[4].IsNumeric()))
+		{
+			const FString Event = T[3].ToLower();
+			const FGameplayTag Slot = ActionToKey(T[2].ToLower(), /*bCommon=*/false);
+			// Aiming = 순차 사격 발 사이 조준 (R 만 · 사용자 2026-10-02 "각 Shot 전에 조준") — 첫 Aiming 은 노티파이로도 쓴다 (Start)
+			struct FSlotSfx { FGameplayTag Slot; FGameplayTag Cast; FGameplayTag Hit; FGameplayTag Aim; };
+			static const FSlotSfx SlotSfx[] = {
+				{ ERTags::Ability_Slot_Q, ERTags::Pres_Sfx_SkillCast_Q, ERTags::Pres_Sfx_SkillHit_Q, FGameplayTag() },
+				{ ERTags::Ability_Slot_W, ERTags::Pres_Sfx_SkillCast_W, ERTags::Pres_Sfx_SkillHit_W, FGameplayTag() },
+				{ ERTags::Ability_Slot_E, ERTags::Pres_Sfx_SkillCast_E, ERTags::Pres_Sfx_SkillHit_E, FGameplayTag() },
+				{ ERTags::Ability_Slot_R, ERTags::Pres_Sfx_SkillCast_R, ERTags::Pres_Sfx_SkillHit_R, ERTags::Pres_Sfx_SkillAim_R },
+			};
+			for (const FSlotSfx& S : SlotSfx)
+			{
+				const FGameplayTag Key = S.Slot != Slot ? FGameplayTag()
+					: Event == TEXT("shot") ? S.Cast : Event == TEXT("hit") ? S.Hit : Event == TEXT("aiming") ? S.Aim : FGameplayTag();
+				if (Key.IsValid())
+				{
+					OutWeapon = TokenToWeapon(T[1]);
+					OutKey = Key;
+					return OutWeapon != EERWeaponType::None;
+				}
 			}
 		}
 		return false;
@@ -405,6 +435,12 @@ namespace
 				{
 					G.Value.RemoveAll([](const UObject* O) { return !O || !O->IsA<UAnimMontage>(); });
 				}
+				// 스킬 통 몽타주 (Execute 섹션 · K8) 가 있으면 그것만 — 단계별 몽타주(AM_…_Start)와 번갈아 틀지 않는다
+				auto IsWhole = [](const UObject* O) { const UAnimMontage* M = Cast<UAnimMontage>(O); return M && M->IsValidSectionName(ERPresSection::Execute); };
+				if (G.Value.ContainsByPredicate(IsWhole))
+				{
+					G.Value.RemoveAll([&IsWhole](const UObject* O) { return !IsWhole(O); });
+				}
 			}
 		};
 		PreferMontage(BaseGroups);
@@ -508,6 +544,15 @@ namespace
 		{
 			TArray<FString> FxFolders;
 			Registry().GetSubPaths(TEXT("/Game/ER/Audio/SFX/Character_FX/") + Char.ToLower(), FxFolders, /*bRecurse=*/false);
+			// 모션 소리 바꿈표의 기준 — S000 소리를 이름으로 (Argument 59 N2)
+			TMap<FName, FAssetData> BaseSounds;
+			for (const FString& FxFolder : FxFolders)
+			{
+				if (AsSkinId(FPaths::GetCleanFilename(FxFolder)) == TEXT("S000"))
+				{
+					for (const FAssetData& A : FindAssets(FxFolder, USoundBase::StaticClass())) { BaseSounds.Add(A.AssetName, A); }
+				}
+			}
 			for (const FString& FxFolder : FxFolders)
 			{
 				const FString SkinId = AsSkinId(FPaths::GetCleanFilename(FxFolder));
@@ -515,7 +560,28 @@ namespace
 				{
 					continue;
 				}
-				const FSoundGroups Groups = GroupSounds(FindAssets(FxFolder, USoundBase::StaticClass()), Stats, *SkinId);
+				const TArray<FAssetData> FolderSounds = FindAssets(FxFolder, USoundBase::StaticClass());
+				// 스킨 폴더 — 같은 파일명의 S000 소리와 짝 → 스킨 DA SoundSwaps (노티파이 소리를 스킨이 바꾼다 · Argument 59 N2). 키 규칙과 무관하게 전부
+				if (SkinId != TEXT("S000"))
+				{
+					if (const TPair<FString, UERSkinData*>* SwapSkin = SkinAssets.FindByPredicate([&SkinId](const TPair<FString, UERSkinData*>& S) { return S.Key == SkinId; }))
+					{
+						UERSkinData* SD = SwapSkin->Value;
+						SD->Modify();
+						if (bForce) { SD->SoundSwaps.Reset(); }
+						int32 Pairs = 0, NoPair = 0;
+						for (const FAssetData& A : FolderSounds)
+						{
+							const FAssetData* BaseA = BaseSounds.Find(A.AssetName);
+							USoundBase* From = BaseA ? Cast<USoundBase>(BaseA->GetAsset()) : nullptr;
+							USoundBase* To = Cast<USoundBase>(A.GetAsset());
+							if (From && To && From != To) { SD->SoundSwaps.Add(From, To); ++Pairs; } else { ++NoPair; }
+						}
+						SD->MarkPackageDirty();
+						UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기] %s 소리 바꿈 %d쌍 (S000 에 같은 이름 없음 %d)"), *SD->GetName(), Pairs, NoPair);
+					}
+				}
+				const FSoundGroups Groups = GroupSounds(FolderSounds, Stats, *SkinId);
 				if (Groups.IsEmpty())
 				{
 					continue;
@@ -672,6 +738,12 @@ namespace
 				if (G.Value.ContainsByPredicate([](const UObject* O) { return O && O->IsA<UAnimMontage>(); }))
 				{
 					G.Value.RemoveAll([](const UObject* O) { return !O || !O->IsA<UAnimMontage>(); });
+				}
+				// 스킬 통 몽타주 (Execute 섹션 · K8) 가 있으면 그것만 — 단계별 몽타주(AM_…_Start)와 번갈아 틀지 않는다
+				auto IsWhole = [](const UObject* O) { const UAnimMontage* M = Cast<UAnimMontage>(O); return M && M->IsValidSectionName(ERPresSection::Execute); };
+				if (G.Value.ContainsByPredicate(IsWhole))
+				{
+					G.Value.RemoveAll([&IsWhole](const UObject* O) { return !IsWhole(O); });
 				}
 			}
 			if (Groups.IsEmpty())

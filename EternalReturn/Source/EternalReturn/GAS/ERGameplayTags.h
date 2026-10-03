@@ -325,10 +325,17 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit_E);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit_R);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit_D);     // 경계 들어갈 때 (<종>WakeUp_Ing — 뜻 (미확인) · 사용자가 들어보고 정한다)
+	// F19-01 K8 — 다음 평타 강화 (카티야 P Reinforce_*) · 순차 사격 발 사이 조준 (카티야 R Aiming_02 · _03). 없으면 평소 키로 떨어진다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_AttackEnhanced);  // 강화를 소비하는 평타의 공격음 (평소 Attack 대신)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_HitEnhanced);     // 강화 평타 타격음 (평소 Hit 대신)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_EnhanceReady);    // 강화가 걸린 순간
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillAim_R);      // R 다음 발 조준 (발 번호로 고른다)
 
 	// 연출 큐 (F12.5-05 · Argument 49) — 네트워크 사건. 무엇을 틀지는 키가 정한다 (큐 ≠ 키)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Attack);   // 시전자 — 공격이 나갔다 (판정 시점)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Hit);      // 대상 — 맞았다 (서버 확정)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Aim);      // 시전자 — 순차 사격 다음 발 조준 시작 (발 번호 · K8)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Ready);    // 시전자 — 다음 평타 강화가 걸렸다 (K8)
 	// 모드 상태 애니 (Argument 42 ⑥ A2) — 모드 칸이 있는 줄에만 쓴다. C++ 가 해석해 AnimInstance 에 넘기고 상태머신이 튼다
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeStart);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeIdle);

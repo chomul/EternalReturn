@@ -450,9 +450,9 @@ bool AERWildlifeAIController::TrySkill(AActor* Target, float DistUU)
 		{
 			continue;
 		}
-		const float RangeUU = (Skill->AIUseRange > 0.f ? Skill->AIUseRange : Skill->Shape.RangeMax) * 100.f;
-		// 최소 거리 — 판정 모양의 RangeMin 을 그대로 (위클라인 통제 "2m 이상 떨어진 적에게" · F12.6-06)
-		if (DistUU > RangeUU || DistUU < Skill->Shape.RangeMin * 100.f)
+		const float RangeUU = (Skill->AIUseRange > 0.f ? Skill->AIUseRange : Skill->GetMaxReach()) * 100.f;
+		// 최소 거리 — 판정 모양의 MinReach 를 그대로 (위클라인 통제 "2m 이상 떨어진 적에게" · F12.6-06)
+		if (DistUU > RangeUU || DistUU < Skill->GetMinReach() * 100.f)
 		{
 			continue;
 		}

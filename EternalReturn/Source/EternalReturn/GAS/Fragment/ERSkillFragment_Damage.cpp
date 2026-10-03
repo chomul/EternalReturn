@@ -76,7 +76,7 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 
 	// ⭐ 형상 태그는 시전 쪽이 붙인다 — Execution 이 형상을 추측하지 않는다 (F03-05 흡혈 치유 감소).
 	const UERSkillData* ShapeOwner = Ctx.ShapeOwner ? Ctx.ShapeOwner : Ctx.Skill;
-	const bool bAoE = ShapeOwner && ShapeOwner->Shape.IsAoE();
+	const bool bAoE = ShapeOwner && ShapeOwner->IsAoE();
 	if (bAoE)
 	{
 		Spec->AddDynamicAssetTag(ERTags::Damage_Shape_AoE);

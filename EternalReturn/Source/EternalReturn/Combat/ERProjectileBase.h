@@ -39,6 +39,10 @@ struct FERProjectileLaunch
 	/** 따라갈 대상 (AERProjectile_Homing) — 비면 직선 */
 	UPROPERTY()
 	TObjectPtr<AActor> HomingTarget = nullptr;
+
+	/** 따라가는 대상만 맞는다 — 길의 다른 적은 지나친다 (원거리 평타 · Argument 60 H1). 서버 판정만 쓴다 */
+	UPROPERTY()
+	bool bOnlyHomingTarget = false;
 };
 
 /**
@@ -59,7 +63,7 @@ public:
 	AERProjectileBase();
 
 	/** [서버] SpawnActorDeferred 뒤 · FinishSpawning 전에 한 번. */
-	virtual void InitLaunch(UERGameplayAbility* InAbility, const UERSkillData* InSkill, int32 InLevel, const FTargetQuery& InFilter, const FERProjectileLaunch& InLaunch, int32 InShotIndex = -1);
+	virtual void InitLaunch(UERGameplayAbility* InAbility, const UERSkillData* InSkill, int32 InLevel, const FTargetQuery& InFilter, const FERProjectileLaunch& InLaunch, int32 InShotIndex = -1, bool bInPierce = false);
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -95,8 +99,12 @@ protected:
 	UPROPERTY()
 	TObjectPtr<const UERSkillData> Skill;
 	int32 Level = 1;
+	/** 측정 — 비행 틱 수 (서버 · 적중 로그에 비행 시간과 같이 · 2026-10-03 비행 시간이 들쭉날쭉) */
+	int32 FlightTicks = 0;
 	/** 몇 번째 발 (순차 사격 · 카티야 R) — 피해 조각 ShotValues. 그 외 -1 */
 	int32 ShotIndex = -1;
+	/** 관통 — 끄면 첫 적중에서 끝 (발사 방식 bPierce) */
+	bool bPierce = false;
 	/** 팀 · 시전자 · 이미 맞은 대상 (IgnoredActors) — 액터 포인터를 들고 있어 UPROPERTY (GC 가 지워진 액터를 null 로) */
 	UPROPERTY()
 	FTargetQuery Filter;

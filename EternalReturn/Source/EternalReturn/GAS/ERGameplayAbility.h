@@ -15,6 +15,9 @@ class UERSkillFragmentState;
 class UERSkillData;
 struct FGameplayEventData;
 struct FTargetResult;
+struct FERShapeContext;
+struct FERProjectileLaunch;
+class AERProjectileBase;
 
 /**
  * 모든 스킬의 베이스.
@@ -108,10 +111,33 @@ public:
 	}
 	/** [소유 클라] 시전 전 범위 미리보기 — 커서를 ResolveAim 과 같게 당겨 판정과 같은 모양을 한 프레임 그린다 (Argument 56 C2 · D1). */
 	void DrawPreview(const UERSkillData& Skill, const FVector& CursorPoint) const;
-	/** [서버] 투사체 도착 — 적중 조각 + 타격음 큐 (F19-01 · Argument 54). 시전음은 발사 때 이미 냈다. */
+	/** [서버] 투사체 도착 — 적중 조각 + 타격음 큐 + OnProjectileTargetHit (F19-01 · Argument 54 · 60). 시전음은 발사 때 이미 냈다. */
 	void ApplyProjectileHit(const UERSkillData* Data, AActor* Target, int32 Level, float TravelRatio, int32 ShotIndex = -1);
 	/** ER.Skill.DebugDraw 1 — 머리 위 글자 1.5초 (모드 조각 등). */
 	static void DebugDrawText(const AActor* Avatar, const FString& Text, FColor Color = FColor::Cyan);
+
+	// ── 발사 방식(UERSkillDelivery)이 부르는 것 (Argument 57 S3.1) ──────────
+	/** 모양 문맥 — 조준 · 대상 칸 · 시전 시작 때 저장한 자리 · 사거리(평타 = 무기 사거리). */
+	FERShapeContext MakeShapeContext(const UERSkillData& Skill, const FVector& InAimPoint, const FVector& InAimDirection, AActor* Designated) const;
+	/** [서버] 즉시 판정의 끝 — 판정 로그 · 적중 조각 · 연출 큐 · OnTargetsResolved. */
+	void ResolveInstantHits(const UERSkillData& Skill, const FTargetQuery& Q, const FTargetResult& Result);
+	/** [서버] 적중이 나중(투사체 도착)인 발사 — 적중과 무관한 조각만 지금("빗나감" 벌칙 보류) · bAttackCue 면 시전음도 지금. */
+	void BeginDeferredHits(const UERSkillData& Skill, bool bAttackCue);
+	/** [서버] 투사체 하나 (Deferred → InitLaunch → Finish). */
+	AERProjectileBase* SpawnProjectile(const UERSkillData& Skill, TSubclassOf<AERProjectileBase> Class, const FERProjectileLaunch& Launch,
+		const FTargetQuery& Filter, int32 Level, int32 ShotIndex, bool bPierce);
+	/** ER.Skill.DebugDraw 1 — 모양 테두리(초록) · 적중(빨강) 1.5초 */
+	void DebugDrawQuery(const UERSkillData& Skill, const FTargetQuery& Q, const FTargetResult& Result) const;
+	/** [서버] 연출 큐 (F12.5-05 · Argument 49 W2) — 판정 순간에 시전자 `GameplayCue.Pres.Attack` · 맞은 대상마다 `GameplayCue.Pres.Hit`. */
+	void SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack, int32 ShotNumber = 0, const FVector& FaceDirection = FVector::ZeroVector) const;
+	/** [서버] 스킬 통 몽타주 섹션 넘기기 (K8 · Fire · Loop · End) — 다른 클라엔 복제 · 소유 클라는 같이 보내는 큐로. 통 몽타주가 아니면 아무것도 안 한다. */
+	void JumpSkillSection(const UERSkillData& Skill, FName Section) const;
+	/** [서버] 시전자 연출 사건 하나 (K8) — `GameplayCue.Pres.Aim` (순차 사격 다음 발 조준 · 발 번호) · `.Ready` (강화 걸림). 무엇을 틀지는 받는 쪽 키. */
+	void SendEventCue(FGameplayTag CueTag, const UERSkillData& Skill, int32 ShotNumber = 0) const;
+	/** 이번 실행이 2차 판정 · 리캐스트 데이터인가 — 시전음은 시전 한 번에 한 번 */
+	bool IsExecutingOther() const { return ExecOverride != nullptr; }
+	/** 서버 인스턴스인가 (발사 방식은 엔진 HasAuthority 에 못 닿는다 — protected) */
+	bool IsExecAuthority() const { return HasAuthority(&CurrentActivationInfo); }
 
 	/**
 	 * 핸들로 찾는 버전. ⭐ **CDO 에서도 동작한다.**
@@ -135,17 +161,6 @@ protected:
 	 */
 	virtual void ExecuteSkill();
 
-	/** [서버] 날아가는 투사체를 쏜다 (ProjectileSpeed > 0 · 발 수 · 퍼짐) · 시전음 · 적중과 무관한 조각 (F19-01 · Argument 54). */
-	void SpawnProjectiles(const UERSkillData& Skill, const FTargetQuery& Q);
-
-	/** [서버] 스캔(Trapezoid) → 대상마다 따라가는 탄을 ShotInterval 간격으로 (카티야 R). 시전음 · 적중과 무관한 조각은 지금. */
-	void FireSequentialShots(const UERSkillData& Skill, const FTargetQuery& Q);
-	/** [서버] 한 발 — 대상이 ShotCancelDistance 밖이거나 사라졌으면 건너뛴다. */
-	void FireShotAt(const UERSkillData& Skill, AActor* Target, int32 ShotIndex, int32 Level);
-
-	/** [서버] 연출 큐 (F12.5-05 · Argument 49 W2) — 판정 순간에 시전자 `GameplayCue.Pres.Attack` · 맞은 대상마다 `GameplayCue.Pres.Hit`. */
-	void SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack, int32 ShotNumber = 0) const;
-
 	/**
 	 * 디자이너 필드 + 조준 → 판정 질의 (조준 보조 포함). 판정(ExecuteSkill)과 발동 전 대상 확인이 **같은 질의**를 쓴다 —
 	 * 다르면 "확인은 통과했는데 판정은 빗나감" 이 생긴다.
@@ -160,13 +175,16 @@ protected:
 	 */
 	virtual void OnTargetsResolved(const FTargetResult& Result);
 
+	/** [서버] 투사체가 대상에 닿았다 — 적중 조각 · 타격음 뒤. 기본 없음 · 평타가 강화 소비를 도착 때 한다 (Argument 60 T1). */
+	virtual void OnProjectileTargetHit(const UERSkillData& Data, AActor* Target) {}
+
 	/** 이번 실행에 쓰는 데이터. 보통 자기 데이터. 리캐스트 조각이 지정한 데이터 · ExecuteOther 중엔 그것. */
 	const UERSkillData* GetExecSkill() const;
 
 	/** 리캐스트 윈도우가 열려 있는가 (자기 슬롯의 Recast.Slot.* 태그). */
 	bool IsRecastWindowOpen() const;
 
-	/** 사거리 상한(m). 기본 = Shape.RangeMax. 평타는 AttackRange 어트리뷰트로 덮는다 (F07-07). ResolveAim 클램프 · 판정 쿼리가 쓴다. */
+	/** 사거리 상한(m). 기본 = 모양 GetMaxReach. 평타는 AttackRange 어트리뷰트로 덮는다 (F07-07). ResolveAim 클램프 · 판정 쿼리가 쓴다. */
 	virtual float GetRangeMax(const UERSkillData& Skill) const;
 
 	/** [3] 서버가 확정한 조준. 시전자 발밑 기준. ExecuteSkill · 파생이 읽는다. */
@@ -244,7 +262,7 @@ private:
 
 	// [3] 확정된 조준. 매 발동마다 ResolveAim 이 덮어쓴다.
 	FVector AimPoint = FVector::ZeroVector;
-	/** PlayerCircles — 시전 시작 때 저장한 근처 플레이어 자리 (판정 순간 각 자리에 원). 서버만. */
+	/** 모양이 시전 시작 때 저장한 자리 (PlayerCircles — 판정 순간 각 자리에 원). 서버만. */
 	TArray<FVector> CircleAimPoints;
 	FVector AimDirection = FVector::ForwardVector;
 	TWeakObjectPtr<AActor> AimActor;

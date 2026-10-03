@@ -10,6 +10,8 @@
 #include "ERSkillData.generated.h"
 
 class UERSkillFragment;
+class UERSkillShapeBase;
+class UERSkillDelivery;
 
 class UAbilitySystemComponent;
 class UERGameplayAbility;
@@ -281,6 +283,31 @@ struct FERSkillShape
 	bool IsAoE() const;
 };
 
+/** 스킬 "누구를" (Argument 57 S3.1) — 모양 · 발사와 따로. 늘지 않는 축이라 구조체. */
+USTRUCT()
+struct FERSkillTargets
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly)
+	ETargetTeamFilter Team = ETargetTeamFilter::Enemy;
+
+	/** 실험체만 — 야생동물 제외 (카티야 R · 사용자 2026-10-01) */
+	UPROPERTY(EditDefaultsOnly)
+	bool bPlayersOnly = false;
+
+	/** 최대 대상 수 (가까운 순). 0 = 제한 없음. 비관통 직선 = 1 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	int32 MaxTargets = 0;
+
+	/**
+	 * 대상 하나 조준 보조 (m) — 커서 아래가 유효한 대상이 아니면 조준점 반경 안 가장 가까운 대상. 0 = 끔.
+	 * ⚠ 자체 결정값. 원작의 클릭 허용 오차는 (미확인).
+	 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	float AimAssistRadius = 0.f;
+};
+
 UCLASS(BlueprintType, Const)
 class ETERNALRETURN_API UERSkillData : public UPrimaryDataAsset
 {
@@ -332,8 +359,41 @@ public:
 	// ⭐ 어빌리티는 계수만 SetByCaller 로 넘긴다. 스탯을 읽어 곱하는 것은 ERDamageExecution 하나뿐이다
 	//   (Docs/4_Argument/5_추가공격력_산출방식.md). 체력 비례 계수(최대/현재/잃은)는 그걸 쓰는 스킬이 생길 때 붙인다.
 
-	UPROPERTY(EditDefaultsOnly, Category = "판정")
+	/** ⚠ 옛 칸 (S3.1 이전) — 읽기 전용 이관 원본. PostLoad 가 Area · Targets · Delivery 로 옮긴다. 쓰지 않는다 · 전부 저장 확인 뒤 삭제 */
+	UPROPERTY()
 	FERSkillShape Shape;
+
+	// ── 어디를 · 누구를 · 어떻게 (Argument 57 S3.1) ───────────────
+	/** 어디를 — 판정 모양 */
+	UPROPERTY(EditDefaultsOnly, Instanced, Category = "판정")
+	TObjectPtr<UERSkillShapeBase> Area;
+
+	/** 누구를 */
+	UPROPERTY(EditDefaultsOnly, Category = "판정")
+	FERSkillTargets Targets;
+
+	/** 어떻게 — 즉시 / 투사체 */
+	UPROPERTY(EditDefaultsOnly, Instanced, Category = "판정")
+	TObjectPtr<UERSkillDelivery> Delivery;
+
+	/** 광역인가 — 흡혈 치유 감소 (F03-05). 단일 = 대상 하나 모양 · MaxTargets 1 · 비관통 한 발 투사체 (옛 규칙과 같은 결과) */
+	bool IsAoE() const;
+	/** 시전자에서 닿는 최대 거리(m) — 조준점 당기기 · AI 사용 거리 · 미리보기. 모양 없으면 0 */
+	float GetMaxReach() const;
+	/** 최소 거리(m) */
+	float GetMinReach() const;
+
+#if WITH_EDITOR
+	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
+#endif
+
+	// ── 이관 (S3.1) — 옛 Shape → Area · Targets · Delivery. 데이터 버전이 낮으면 PostLoad 가 메모리에서 옮긴다 ──
+	virtual void Serialize(FArchive& Ar) override;
+	virtual void PostLoad() override;
+	/** 옛 칸 → 새 칸. 이관 로그 한 줄을 돌려준다. ER.Skill.Resave 가 저장 대상을 고를 때 bShapeMigratedOnLoad 를 본다. */
+	FString MigrateLegacyShape();
+	/** 이번 로드에서 이관했다 (저장 안 됨) */
+	bool bShapeMigratedOnLoad = false;
 
 	/** 레벨별 배열에서 값 하나. 비면 0, 레벨이 배열보다 크면 마지막 값. 레벨은 1부터. Cooldowns · Costs 도 이걸 쓴다. */
 	static float LevelValue(const TArray<float>& Values, int32 Level);
@@ -383,7 +443,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "AI")
 	EERAIUse AIUse = EERAIUse::None;
 
-	/** InRange — 대상이 이 거리(m, 시전자 몸 끝 → 대상 표면 · 평타 사거리와 같은 잼) 안이면 쓴다 `[자체]`. 0 = Shape.RangeMax. */
+	/** InRange — 대상이 이 거리(m, 시전자 몸 끝 → 대상 표면 · 평타 사거리와 같은 잼) 안이면 쓴다 `[자체]`. 0 = 모양 GetMaxReach. */
 	UPROPERTY(EditDefaultsOnly, Category = "AI", meta = (ClampMin = "0", EditCondition = "AIUse == EERAIUse::InRange"))
 	float AIUseRange = 0.f;
 

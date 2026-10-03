@@ -9,8 +9,23 @@
 
 class UAnimInstance;
 class USkeletalMesh;
+class USoundBase;
 
 #include "ERPresentationData.generated.h"
+
+/**
+ * 스킬 몽타주 섹션 이름 (F19-01 K8 · 사용자 2026-10-02 "모든 스킬을 몽타주로 · 한 단계짜리도 통일" · 섹션 이름 Execute).
+ *   스킬 하나 = 몽타주 하나 `AM_<캐릭터|종>_<무기>_<동작>`. 코드가 이 이름으로 넘긴다 — 섹션 이름을 **정확히** 이렇게.
+ *   - `Execute` 가 있으면 **판정 순간**에 그 섹션으로 (멧돼지 돌진 · 순차 사격은 발마다) · 없으면 처음부터 끝까지 (한 단계 스킬)
+ *   - `Loop` = 채널 · 발 사이 조준 (반복) · `End` = 마무리 (Execute → End 연결 · 쏠 사람이 없을 때)
+ *   몽타주가 없으면 예전처럼 시퀀스 + `<슬롯>.Execute` 애니.
+ */
+namespace ERPresSection
+{
+	inline const FName Execute(TEXT("Execute"));
+	inline const FName Loop(TEXT("Loop"));
+	inline const FName End(TEXT("End"));
+}
 
 /**
  * 연출 한 줄 — "이 키(동작)에는 이 애셋들" (F12.5-01 · Argument 39).
@@ -98,4 +113,11 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "연출")
 	TArray<FERPresentationEntry> Overrides;
+
+	/**
+	 * 모션 소리 바꿈 (Argument 59 N2) — 애니 노티파이 `ER 소리` 가 기본 소리(S000)를 들고 있으면 이 스킨에선 짝을 튼다.
+	 * ⚠ 손으로 안 채운다 — `ER.Pres.Fill` 이 Character_FX 의 S000 과 이 스킨 폴더에서 **같은 파일명**을 짝짓는다 (원본 규칙: 스킨 소리 = 같은 이름).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "연출")
+	TMap<TObjectPtr<USoundBase>, TObjectPtr<USoundBase>> SoundSwaps;
 };

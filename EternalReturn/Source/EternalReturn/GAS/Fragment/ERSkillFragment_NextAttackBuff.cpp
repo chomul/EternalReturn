@@ -50,6 +50,7 @@ void UERSkillFragment_NextAttackBuff::OnTargetsResolved(FERSkillContext& Ctx, co
 		// ⭐ 평타가 이걸 읽어 "무슨 스킬의 피해·효과를 얹을지" 를 안다. 레벨은 Spec Level 로 간다.
 		Spec->GetContext().AddSourceObject(Source);
 		A->ApplySpecToSelf(SpecHandle);
+		A->SendEventCue(ERTags::GameplayCue_Pres_Ready, *Ctx.Skill);   // 강화 걸림 소리 (카티야 Reinforce_Ready · K8)
 		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 다음 평타 강화 대기 — %s Lv.%d (%s)"),
 			*GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), *GetNameSafe(Source), SourceLevel,
 			bInfinite ? TEXT("만료 없음") : *FString::Printf(TEXT("%.1f초"), Duration));

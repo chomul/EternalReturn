@@ -12,7 +12,7 @@
  *
  * 베이스와 다른 것 셋:
  *   - 쿨다운 길이 = 1 / AttackSpeed         (SkillData.Cooldowns 무시 · 스킬 가속 무관)
- *   - 사거리     = AttackRange 어트리뷰트  (Shape.RangeMax 무시 · 무기가 정한다, F11)
+ *   - 사거리     = AttackRange 어트리뷰트  (모양 사거리 무시 · 무기가 정한다, F11)
  *   - 적중 시 State.NextAttackBuff 가 있으면 **그 스킬의 피해 · 적중 효과를 얹고 소비**한다 (재키 W 등)
  *
  * 애셋: DA_Attack_<무기> — SlotTag=Ability.Slot.Attack, Shape=SingleTarget, DamageType=BasicAttack, InitialLevel=1, bUsesSkillPoints=false.
@@ -32,4 +32,6 @@ protected:
 	virtual float GetRangeMax(const UERSkillData& Skill) const override;
 	virtual void ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
 	virtual void OnTargetsResolved(const FTargetResult& Result) override;
+	/** 투사체 평타 (원거리 무기) — 도착 때 강화 · 다음 N회 소비 (즉시 판정과 같은 코드 · Argument 60 T1) */
+	virtual void OnProjectileTargetHit(const UERSkillData& Data, AActor* Target) override;
 };

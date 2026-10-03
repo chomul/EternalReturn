@@ -56,7 +56,7 @@ void AERSkillAreaActor::Pulse()
 
 	FTargetQuery Q;
 	Q.Shape = ESkillTargeting::SelfRadius;
-	Q.TeamFilter = Skill->Shape.TeamFilter;
+	Q.TeamFilter = Skill->Targets.Team;
 	Q.RangeMax = Radius;
 	Q.Instigator = A->GetAvatarActorFromActorInfo();
 	Q.Origin = GetActorLocation();

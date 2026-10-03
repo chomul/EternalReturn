@@ -246,7 +246,49 @@ void UERPresentationComponent::Rebuild()
 	PushStateToAnim();
 }
 
-USoundBase* UERPresentationComponent::PickSound(FGameplayTag Key) const
+UAnimMontage* UERPresentationComponent::FindSkillMontage(FGameplayTag Key, FName Section) const
+{
+	UAnimMontage* Montage = Cast<UAnimMontage>(FindFirstAnim(Key));
+	return Montage && Montage->IsValidSectionName(Section) ? Montage : nullptr;
+}
+
+bool UERPresentationComponent::JumpSkillSection(FGameplayTag Key, FName Section)
+{
+	UAnimMontage* Montage = FindSkillMontage(Key, Section);
+	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	UAnimInstance* AnimInst = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	if (!Montage || !ASC || !AnimInst)
+	{
+		return false;
+	}
+	bool bJumped = false;
+	if (GetOwner()->HasAuthority())
+	{
+		// 서버 — ASC 현재 몽타주여야 복제된다 (어빌리티가 ASC->PlayMontage 로 틀었다 · 어빌리티가 끝나도 몽타주는 계속)
+		if (ASC->GetCurrentMontage() == Montage)
+		{
+			ASC->CurrentMontageJumpToSection(Section);
+			bJumped = true;
+		}
+	}
+	else if (AnimInst->Montage_IsPlaying(Montage))
+	{
+		AnimInst->Montage_JumpToSection(Section, Montage);
+		bJumped = true;
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s %s 섹션 %s %s (%s)"), *GetNameSafe(GetOwner()), *Montage->GetName(), *Section.ToString(),
+		bJumped ? TEXT("→") : TEXT("— 몽타주가 재생 중이 아니다 (건너뜀)"), NetTag(GetOwner()));
+	return bJumped;
+}
+
+USoundBase* UERPresentationComponent::ResolveSound(USoundBase* Default) const
+{
+	const TObjectPtr<USoundBase>* Swap = Skin && Default ? Skin->SoundSwaps.Find(Default) : nullptr;
+	return Swap && *Swap ? Swap->Get() : Default;
+}
+
+USoundBase* UERPresentationComponent::PickSound(FGameplayTag Key, int32 ShotNumber) const
 {
 	const FResolved* R = Cache.Find(Key);
 	if (!R)
@@ -258,14 +300,25 @@ USoundBase* UERPresentationComponent::PickSound(FGameplayTag Key) const
 	{
 		if (USoundBase* S = Cast<USoundBase>(A)) { Sounds.Add(S); }
 	}
+	if (Sounds.IsEmpty())
+	{
+		return nullptr;
+	}
+	// 순차 사격 — 발마다 정해진 소리 (Skill04_Shot → _02 → _03 · 이름순으로 들어 있다 · K8)
+	if (ShotNumber > 0)
+	{
+		return Sounds[FMath::Min(ShotNumber, Sounds.Num()) - 1];
+	}
 	// r1 · r2 · r3 중 하나 — 각 클라가 따로 고른다 (의미 없는 변형이라 복제 안 함 · Argument 49)
-	return Sounds.IsEmpty() ? nullptr : Sounds[FMath::RandRange(0, Sounds.Num() - 1)];
+	return Sounds[FMath::RandRange(0, Sounds.Num() - 1)];
 }
 
 void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGameplayCueParameters& Params)
 {
 	const bool bAttackCue = CueTag == ERTags::GameplayCue_Pres_Attack;
-	if (!bAttackCue && CueTag != ERTags::GameplayCue_Pres_Hit)
+	const bool bAimCue = CueTag == ERTags::GameplayCue_Pres_Aim;
+	const bool bReadyCue = CueTag == ERTags::GameplayCue_Pres_Ready;
+	if (!bAttackCue && !bAimCue && !bReadyCue && CueTag != ERTags::GameplayCue_Pres_Hit)
 	{
 		return;
 	}
@@ -277,28 +330,69 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 		return;   // 시전자가 이미 사라졌다 · 연출 없는 액터
 	}
 	const bool bBasic = Params.AggregatedSourceTags.HasTagExact(ERTags::Ability_Slot_Attack);
-	// 순차 사격 2발째부터 — 시전자 몸에 판정 순간 애니(`<슬롯>.Execute` · 카티야 R Skill04_Fire)를 이 머신에서 다시 (1발째는 어빌리티가 이미 틀었다)
-	if (bAttackCue && Params.RawMagnitude >= 2.f && Instigator == GetOwner())
+	// 스킬 통 몽타주 (K8) — 이 사건의 슬롯 키 (Q~R)
+	FGameplayTag EventSlot;
+	const FGameplayTag SkillSlots[] = { ERTags::Ability_Slot_Q, ERTags::Ability_Slot_W, ERTags::Ability_Slot_E, ERTags::Ability_Slot_R };
+	for (const FGameplayTag& S : SkillSlots)
 	{
-		static const TPair<FGameplayTag, FGameplayTag> ExecKeys[] = {
-			{ ERTags::Ability_Slot_Q, ERTags::Ability_Slot_Q_Execute }, { ERTags::Ability_Slot_W, ERTags::Ability_Slot_W_Execute },
-			{ ERTags::Ability_Slot_E, ERTags::Ability_Slot_E_Execute }, { ERTags::Ability_Slot_R, ERTags::Ability_Slot_R_Execute },
-		};
-		for (const TPair<FGameplayTag, FGameplayTag>& E : ExecKeys)
+		if (Params.AggregatedSourceTags.HasTagExact(S)) { EventSlot = S; break; }
+	}
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	const bool bOwnerClient = Instigator == GetOwner() && OwnerPawn && OwnerPawn->IsLocallyControlled() && !GetOwner()->HasAuthority();
+	const bool bSectionMontage = EventSlot.IsValid() && FindSkillMontage(EventSlot, ERPresSection::Execute) != nullptr;
+	if ((bAttackCue && Params.RawMagnitude >= 1.f) || bAimCue)
+	{
+		if (bSectionMontage)
 		{
-			if (Params.AggregatedSourceTags.HasTagExact(E.Key))
+			// 섹션은 서버가 넘기고 복제된다 — 엔진이 본인에게만 안 주니 **소유 클라만** 여기서 (발 = Execute · 조준 N>0 = Loop · 조준 0 = 더 쏠 발 없음 → End)
+			if (bOwnerClient)
 			{
-				const FString Played = PlayEventPres(E.Value, FGameplayTag());
-				UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s %.0f번째 발 — %s (%s)"), *GetNameSafe(GetOwner()), Params.RawMagnitude, *Played, NetTag(GetOwner()));
-				break;
+				const FName Section = bAttackCue ? ERPresSection::Execute : Params.RawMagnitude >= 1.f ? ERPresSection::Loop : ERPresSection::End;
+				JumpSkillSection(EventSlot, Section);
+			}
+		}
+		else if (bAttackCue && Instigator == GetOwner())
+		{
+			// 몽타주가 없으면 — 발마다 판정 순간 애니(`<슬롯>.Execute`)를 이 머신에서 (순차 사격은 어빌리티가 판정 순간에 안 튼다)
+			static const TPair<FGameplayTag, FGameplayTag> ExecKeys[] = {
+				{ ERTags::Ability_Slot_Q, ERTags::Ability_Slot_Q_Execute }, { ERTags::Ability_Slot_W, ERTags::Ability_Slot_W_Execute },
+				{ ERTags::Ability_Slot_E, ERTags::Ability_Slot_E_Execute }, { ERTags::Ability_Slot_R, ERTags::Ability_Slot_R_Execute },
+			};
+			for (const TPair<FGameplayTag, FGameplayTag>& E : ExecKeys)
+			{
+				if (E.Key == EventSlot)
+				{
+					const FString Played = PlayEventPres(E.Value, FGameplayTag());
+					UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s %.0f번째 발 — %s (%s)"), *GetNameSafe(GetOwner()), Params.RawMagnitude, *Played, NetTag(GetOwner()));
+					break;
+				}
 			}
 		}
 	}
-	FGameplayTag Key = bAttackCue
-		? (bBasic ? ERTags::Pres_Sfx_Attack : ERTags::Pres_Sfx_SkillCast)
+	// 순차 사격 — 쏘는 대상 쪽으로 몸 (서버가 이미 돌렸다 · 엔진이 소유 클라 회전은 클라 쪽 값을 쓰니 본인 화면도 같이 · Yaw 만)
+	if (bAttackCue && bOwnerClient && !Params.Normal.IsNearlyZero())
+	{
+		GetOwner()->SetActorRotation(FRotator(0.f, FVector(Params.Normal).Rotation().Yaw, 0.f));
+	}
+	if (bAimCue && Params.RawMagnitude < 1.f)
+	{
+		return;   // 조준 0 = 끝 신호 — 소리 없음
+	}
+	FGameplayTag Key = bAimCue ? ERTags::Pres_Sfx_SkillAim_R
+		: bReadyCue ? ERTags::Pres_Sfx_EnhanceReady
+		: bAttackCue ? (bBasic ? ERTags::Pres_Sfx_Attack : ERTags::Pres_Sfx_SkillCast)
 		: (bBasic ? ERTags::Pres_Sfx_Hit : ERTags::Pres_Sfx_SkillHit);
+	// 강화를 소비하는 평타 — 강화 소리 줄이 있으면 평소 소리 **대신** (카티야 P Reinforce_Shot · _Hit · Docs/3_EditorTasks/Audio/Katja.md)
+	if (bBasic && !bAimCue && !bReadyCue && Params.AggregatedSourceTags.HasTagExact(ERTags::State_NextAttackBuff))
+	{
+		const FGameplayTag Enhanced = bAttackCue ? ERTags::Pres_Sfx_AttackEnhanced : ERTags::Pres_Sfx_HitEnhanced;
+		if (Source->HasKey(Enhanced))
+		{
+			Key = Enhanced;
+		}
+	}
 	// 스킬마다 다른 소리 (F12.6-05 오메가 Q · W · F19 실험체) — `<SkillCast|SkillHit>.<슬롯>` 줄이 있으면 그것 · 없으면 공통 키
-	if (!bBasic)
+	if (!bBasic && !bAimCue && !bReadyCue)
 	{
 		struct FSlotSfx { FGameplayTag Slot; FGameplayTag Cast; FGameplayTag Hit; };
 		static const FSlotSfx SlotSfx[] = {
@@ -318,7 +412,7 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 			}
 		}
 	}
-	USoundBase* Sound = Source->PickSound(Key);
+	USoundBase* Sound = Source->PickSound(Key, FMath::RoundToInt(Params.RawMagnitude));   // 발 번호 (순차 사격) · 그 외 0
 	// 공격음 = 시전자 위치 · 타격음 = 서버가 준 타격 지점 (Argument 49 — 이펙트가 생기면 같은 지점을 쓴다)
 	const FVector Location = Params.Location.IsNearlyZero() ? GetOwner()->GetActorLocation() : FVector(Params.Location);
 	if (Sound)
@@ -415,7 +509,15 @@ FString UERPresentationComponent::PlayEventPres(FGameplayTag AnimKey, FGameplayT
 		const ACharacter* Character = Cast<ACharacter>(GetOwner());
 		UAnimInstance* Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
 		UAnimSequenceBase* Seq = FindFirstAnim(AnimKey);
-		if (Anim && Seq && Anim->PlaySlotAnimationAsDynamicMontage(Seq, AnimSlotName, BlendIn, BlendOut))
+		// 에디터 몽타주(여러 섹션 — R Fire → End)는 그대로 · 시퀀스는 동적 몽타주로 (K8 · Argument 53 L2)
+		if (UAnimMontage* Montage = Cast<UAnimMontage>(Seq))
+		{
+			if (Anim && Anim->Montage_Play(Montage) > 0.f)
+			{
+				Played = Montage->GetName();
+			}
+		}
+		else if (Anim && Seq && Anim->PlaySlotAnimationAsDynamicMontage(Seq, AnimSlotName, BlendIn, BlendOut))
 		{
 			Played = Seq->GetName();
 		}
@@ -527,6 +629,20 @@ namespace
 				return E.GetTriggerTime() / Scale;
 			}
 		}
+		// 에디터 몽타주 (K8 — E `AM_Katja_Snipe_Skill03` = Skill03 → End) — 마커는 안의 시퀀스에 있다 → 몽타주 시각으로 옮긴다
+		if (const UAnimMontage* Montage = Cast<UAnimMontage>(Anim); Montage && !Montage->SlotAnimTracks.IsEmpty())
+		{
+			for (const FAnimSegment& Seg : Montage->SlotAnimTracks[0].AnimTrack.AnimSegments)
+			{
+				const UAnimSequenceBase* Inner = Seg.GetAnimReference();
+				const float InnerSec = Inner && Inner != Anim ? FindHitMarkerSeconds(Inner) : -1.f;
+				if (InnerSec >= Seg.AnimStartTime && InnerSec <= Seg.AnimEndTime)
+				{
+					const float Rate = FMath::IsNearlyZero(Seg.AnimPlayRate) ? 1.f : FMath::Abs(Seg.AnimPlayRate);
+					return Seg.StartPos + (InnerSec - Seg.AnimStartTime) / Rate;
+				}
+			}
+		}
 		return -1.f;
 	}
 }
@@ -624,7 +740,10 @@ void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const 
 		}
 	}
 
-	if (ExpectedSeconds > 0.f && Length / Rate > ExpectedSeconds * LengthWarnRatio)
+	// 여러 섹션 몽타주(채널 Loop · 발마다 Execute · K8)는 전체 길이가 스킬 시간과 무관 — 경고하지 않는다
+	const UAnimMontage* AsMontage = Cast<UAnimMontage>(Anim);
+	const bool bMultiSection = AsMontage && AsMontage->CompositeSections.Num() > 1;
+	if (!bMultiSection && ExpectedSeconds > 0.f && Length / Rate > ExpectedSeconds * LengthWarnRatio)
 	{
 		static TSet<const UObject*> Warned;
 		if (!Warned.Contains(Anim))

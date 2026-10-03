@@ -1,0 +1,173 @@
+{
+  "_설명": "ER.Skill.ImportJson Common — 캐릭터에 매이지 않은 공용 스킬 DA (평타 · 무기 D). 적힌 칸만 덮는다. 형식은 Katja.json 과 같다. Targets 는 칸을 전부 적는다 (최대 대상 · 조준 보조를 이관 값 그대로 — 2026-10-02 ER.Skill.Resave 로그). · \"From\": \"@원본\" = 새로 만들 때 그 DA 를 복제 (이미 있으면 무시).",
+  "Folder": "/Game/GAS/Skill",
+  "Skills": [
+    {
+      "Asset": "DA_BasicAttack",
+      "_메모": "평타 — 적만 (사용자 2026-10-02 \"평타가 아군도 때린다\" · 옛 데이터 TeamFilter All 이 S3.1 이관으로 Targets.Team All 로 그대로 옮겨졌다)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Axe",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Bat",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Dagger",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Dagger_Recast",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=1)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Hammer",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Pistol",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Shuriken",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Sniper",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Sniper_Deadeye",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=1,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Sniper_Stop",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=1,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Throw",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_Skill_D_Throw_2nd",
+      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      }
+    },
+    {
+      "Asset": "DA_BasicAttack_SniperRifle",
+      "From": "@DA_BasicAttack",
+      "_메모": "저격총 평타 — 대상을 끝까지 따라가는 탄 · 대상만 맞음 · 강화는 도착 때 (Argument 60 D2 · H1 · T1 · 사용자 2026-10-02). 속도 40 m/s · 반경 0.2 [자체] (원작 미확인). 탄 모습 BP 가 생기면 Delivery ProjectileClass 에",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Single",
+          "Speed": 40,
+          "Radius": 0.2,
+          "bPierce": false,
+          "bHoming": true,
+          "bHitOnlyTarget": true
+        }
+      }
+    },
+    {
+      "Asset": "DA_BasicAttack_Pistol",
+      "From": "@DA_BasicAttack",
+      "_메모": "권총 평타 — 대상을 끝까지 따라가는 탄 · 대상만 맞음 · 강화는 도착 때 (Argument 60 D2 · H1 · T1 · 사용자 2026-10-02). 속도 35 m/s · 반경 0.2 [자체] (원작 미확인). 탄 모습 BP 가 생기면 Delivery ProjectileClass 에",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Single",
+          "Speed": 35,
+          "Radius": 0.2,
+          "bPierce": false,
+          "bHoming": true,
+          "bHitOnlyTarget": true
+        }
+      }
+    },
+    {
+      "Asset": "DA_BasicAttack_Shuriken",
+      "From": "@DA_BasicAttack",
+      "_메모": "암기 평타 — 대상을 끝까지 따라가는 탄 · 대상만 맞음 · 강화는 도착 때 (Argument 60 D2 · H1 · T1 · 사용자 2026-10-02). 속도 25 m/s · 반경 0.2 [자체] (원작 미확인). 탄 모습 BP 가 생기면 Delivery ProjectileClass 에",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Single",
+          "Speed": 25,
+          "Radius": 0.2,
+          "bPierce": false,
+          "bHoming": true,
+          "bHitOnlyTarget": true
+        }
+      }
+    },
+    {
+      "Asset": "DA_BasicAttack_Throw",
+      "From": "@DA_BasicAttack",
+      "_메모": "투척 평타 — 대상을 끝까지 따라가는 탄 · 대상만 맞음 · 강화는 도착 때 (Argument 60 D2 · H1 · T1 · 사용자 2026-10-02). 속도 20 m/s · 반경 0.2 [자체] (원작 미확인). 탄 모습 BP 가 생기면 Delivery ProjectileClass 에",
+      "Props": {
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Single",
+          "Speed": 20,
+          "Radius": 0.2,
+          "bPierce": false,
+          "bHoming": true,
+          "bHitOnlyTarget": true
+        }
+      }
+    }
+  ]
+}

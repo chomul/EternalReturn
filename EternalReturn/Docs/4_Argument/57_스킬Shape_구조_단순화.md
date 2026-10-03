@@ -106,7 +106,7 @@ UPROPERTY(EditDefaultsOnly, Instanced) TObjectPtr<UERSkillDelivery> Delivery;  /
 
 ---
 
-## ✅ 결정: S3.1 (사용자 2026-10-02 "2번 먼저 · 카티야 완성 뒤 사운드") — 착수 계획 (승인 대기)
+## ✅ 결정: S3.1 (사용자 2026-10-02 "2번 먼저 · 카티야 완성 뒤 사운드") — 착수 계획 (사용자 승인 2026-10-02 "승인 진행하자")
 
 ### 1. 구조
 
@@ -165,3 +165,14 @@ UPROPERTY(EditDefaultsOnly, Instanced) TObjectPtr<UERSkillDelivery> Delivery;  /
 3. 쓰는 곳 바꾸기 (판정 · 발사 · 미리보기 · AI · 장판 · 피해 · 평타 · 투사체) → 빌드
 4. 임포터 (Type 객체) · `Katja.json` 새 형식 → 빌드
 5. 에디터: `ER.Skill.Resave` → `ER.Skill.ImportJson Katja` → 회귀 PIE
+
+### 6. 구현하며 바뀐 것 (2026-10-02 · 빌드 에러 0 Editor · Server)
+
+| 계획 | 실제 | 이유 · 근거 |
+|---|---|---|
+| 모양 베이스 `UERSkillShape` | **`UERSkillShapeBase`** (파생 `UERShape_*` 는 그대로) | UHT 에러 `Class 'UERSkillShape' shares engine name 'ERSkillShape' with struct 'FERSkillShape'` — 옛 구조체를 이관 원본으로 남겨야 해서 새 클래스 쪽 이름을 바꿈 |
+| 이관 표 DualRadius "밖 RangeMax" | **밖 = `RadiusOuter`** | 판정은 원래 `RadiusOuter` 를 썼다 (`Source/EternalReturn/Combat/ERTargeting.cpp` `QueryDualRadius` `OuterM = Q.RadiusOuter`). 옛 그림 · AI 사거리만 RangeMax → 이관 로그에 둘 다 찍어 대조 |
+| 비관통 직선 = 대상 MaxTargets 1 | 대상 수 상한을 **모든 모양에 공통**으로 (`ERTargeting::Query` 끝에서 가까운 순 자르기) | 대상 칸이 모양마다 따로 먹히면 "MaxTargets 를 적었는데 안 먹힘" 이 생긴다. 사다리꼴은 원래 자르고 있어 결과 같음 |
+| 평타 사거리 | 문맥 `RangeOverride` = 어빌리티 `GetRangeMax` → 질의 `RangeMax` 를 덮는다 | 옛 `BuildQuery` 가 모든 모양에 `GetRangeMax` 를 넣었다 — 평타만 무기 사거리, 그 외는 모양 `GetMaxReach` 와 같아 결과 동일 |
+| 투사체 관통 `Skill->Shape.bPenetrate` | `InitLaunch(…, bPierce)` (발사 방식 칸) | 투사체가 스킬 DA 의 모양을 읽지 않게 |
+| 순차 타이머 람다 | 어빌리티 · 발사 객체 · 스킬 **셋 다 약참조** · 필터의 지정 대상 비움 | E19 (`ClearAllTimersForObject`) · 타이머 동안 사라질 수 있는 포인터 |

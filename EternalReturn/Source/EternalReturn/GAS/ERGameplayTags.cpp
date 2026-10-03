@@ -174,8 +174,14 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit_E, "Pres.Sfx.SkillHit.E");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit_R, "Pres.Sfx.SkillHit.R");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit_D, "Pres.Sfx.SkillHit.D");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_AttackEnhanced, "Pres.Sfx.AttackEnhanced");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_HitEnhanced, "Pres.Sfx.HitEnhanced");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_EnhanceReady, "Pres.Sfx.EnhanceReady");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillAim_R, "Pres.Sfx.SkillAim.R");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Attack, "GameplayCue.Pres.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Hit, "GameplayCue.Pres.Hit");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Aim, "GameplayCue.Pres.Aim");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Ready, "GameplayCue.Pres.Ready");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeStart, "Pres.Anim.ModeStart");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeIdle, "Pres.Anim.ModeIdle");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeRun, "Pres.Anim.ModeRun");

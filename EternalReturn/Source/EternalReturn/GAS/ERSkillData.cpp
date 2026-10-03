@@ -7,6 +7,12 @@
 #include "EternalReturn.h"
 #include "GAS/ERGameplayAbility.h"
 #include "GAS/ERGameplayTags.h"
+#include "GAS/Delivery/ERSkillDelivery.h"
+#include "GAS/Shape/ERSkillShapes.h"
+#include "Serialization/CustomVersion.h"
+#if WITH_EDITOR
+#include "Misc/DataValidation.h"
+#endif
 
 bool FERSkillShape::IsAoE() const
 {
@@ -17,6 +23,233 @@ bool FERSkillShape::IsAoE() const
 	default:                            return true;
 	}
 }
+
+namespace ERSkillDataVersion
+{
+	enum Type
+	{
+		Initial = 0,
+		/** 옛 FERSkillShape 하나 → Area(모양) · Targets · Delivery(발사) (Argument 57 S3.1) */
+		ShapeDeliveryRefactor = 1,
+
+		VersionPlusOne,
+		Latest = VersionPlusOne - 1
+	};
+	const FGuid GUID(0x6A1E3C52, 0x8B7F4D10, 0x9E2A5C34, 0x17D0B8F1);
+}
+static FCustomVersionRegistration GRegisterERSkillDataVersion(ERSkillDataVersion::GUID, ERSkillDataVersion::Latest, TEXT("ERSkillDataVersion"));
+
+void UERSkillData::Serialize(FArchive& Ar)
+{
+	Super::Serialize(Ar);
+	Ar.UsingCustomVersion(ERSkillDataVersion::GUID);
+}
+
+void UERSkillData::PostLoad()
+{
+	Super::PostLoad();
+	// ⚠ 버전이 낮고 새 칸이 비었을 때만 — 이미 옮긴(저장된) 애셋을 옛 값으로 덮지 않는다
+	if (GetLinkerCustomVersion(ERSkillDataVersion::GUID) < ERSkillDataVersion::ShapeDeliveryRefactor && !Area && !Delivery)
+	{
+		const FString Line = MigrateLegacyShape();
+		bShapeMigratedOnLoad = true;
+		UE_LOG(LogEternalReturn, Log, TEXT("%s"), *Line);
+	}
+}
+
+FString UERSkillData::MigrateLegacyShape()
+{
+	const FERSkillShape& S = Shape;
+	const EObjectFlags Flags = GetMaskedFlags(RF_PropagateToSubObjects) | RF_Transactional;
+	auto MakeArea = [this, Flags](TSubclassOf<UERSkillShapeBase> Cls) { return NewObject<UERSkillShapeBase>(this, Cls, NAME_None, Flags); };
+
+	Targets.Team = S.TeamFilter;
+	Targets.bPlayersOnly = S.bPlayersOnly;
+	Targets.MaxTargets = S.MaxTargets;
+	Targets.AimAssistRadius = S.AimAssistRadius;
+
+	// 발사 — 옛 암묵 규칙 "속도 > 0 = 날아간다" 를 칸으로 (S3.1 ⑨)
+	auto MakeInstant = [this, Flags](int32 Fan, float FanAngle)
+	{
+		UERDelivery_Instant* D = NewObject<UERDelivery_Instant>(this, NAME_None, Flags);
+		D->FanCount = FMath::Max(1, Fan);
+		D->FanAngleDeg = FanAngle;
+		return D;
+	};
+	auto MakeProjectile = [this, Flags, &S](EERFirePattern Pattern)
+	{
+		UERDelivery_Projectile* D = NewObject<UERDelivery_Projectile>(this, NAME_None, Flags);
+		D->FirePattern = Pattern;
+		D->Speed = S.ProjectileSpeed;
+		D->Radius = S.ProjectileRadius;
+		D->bPierce = S.bPenetrate;
+		D->ProjectileClass = S.ProjectileClass;
+		D->Count = FMath::Max(1, S.ProjectileCount);
+		D->SpreadAngleDeg = S.SpreadAngleDeg;
+		return D;
+	};
+
+	switch (S.Shape)
+	{
+	case ESkillTargeting::SingleTarget:
+	{
+		UERShape_Single* A = CastChecked<UERShape_Single>(MakeArea(UERShape_Single::StaticClass()));
+		A->Range = S.RangeMax;
+		Area = A;
+		Delivery = MakeInstant(1, 0.f);
+		break;
+	}
+	case ESkillTargeting::SelfRadius:
+	{
+		UERShape_Circle* A = CastChecked<UERShape_Circle>(MakeArea(UERShape_Circle::StaticClass()));
+		A->Radius = S.RangeMax;
+		A->ForwardOffset = S.ForwardOffset;
+		Area = A;
+		Delivery = MakeInstant(1, 0.f);
+		break;
+	}
+	case ESkillTargeting::GroundCircle:
+	{
+		UERShape_Circle* A = CastChecked<UERShape_Circle>(MakeArea(UERShape_Circle::StaticClass()));
+		A->ShapeOrigin = EERShapeOrigin::AimPoint;
+		A->AimRange = S.RangeMax;
+		A->Radius = S.RadiusOuter > 0.f ? S.RadiusOuter : S.RangeMax;   // 반경 0 이면 옛 동작 = RangeMax (E35)
+		Area = A;
+		Delivery = MakeInstant(1, 0.f);
+		break;
+	}
+	case ESkillTargeting::DualRadius:
+	{
+		// ⚠ 판정은 RadiusOuter 가 바깥 (ERTargeting::QueryDualRadius) — 옛 그림 · AI 사거리는 RangeMax 였다. 로그에 둘 다
+		UERShape_DualCircle* A = CastChecked<UERShape_DualCircle>(MakeArea(UERShape_DualCircle::StaticClass()));
+		A->InnerRadius = S.RadiusInner;
+		A->OuterRadius = S.RadiusOuter;
+		A->ForwardOffset = S.ForwardOffset;
+		Area = A;
+		Delivery = MakeInstant(1, 0.f);
+		break;
+	}
+	case ESkillTargeting::Cone:
+	{
+		UERShape_Cone* A = CastChecked<UERShape_Cone>(MakeArea(UERShape_Cone::StaticClass()));
+		A->Length = S.RangeMax;
+		A->AngleDeg = S.AngleDeg;
+		Area = A;
+		Delivery = MakeInstant(1, 0.f);
+		break;
+	}
+	case ESkillTargeting::Projectile:
+	{
+		UERShape_Line* A = CastChecked<UERShape_Line>(MakeArea(UERShape_Line::StaticClass()));
+		A->Length = S.RangeMax;
+		A->Width = S.ProjectileRadius * 2.f;
+		Area = A;
+		if (S.ProjectileSpeed > 0.f)
+		{
+			Delivery = MakeProjectile(S.ProjectileCount > 1 ? EERFirePattern::Simultaneous : EERFirePattern::Single);
+		}
+		else
+		{
+			Delivery = MakeInstant(S.ProjectileCount, S.SpreadAngleDeg);
+			if (!S.bPenetrate) { Targets.MaxTargets = 1; }   // 비관통 = 줄마다 가장 가까운 하나
+		}
+		break;
+	}
+	case ESkillTargeting::Trapezoid:
+	{
+		UERShape_Trapezoid* A = CastChecked<UERShape_Trapezoid>(MakeArea(UERShape_Trapezoid::StaticClass()));
+		A->AimRange = S.RangeMax;
+		A->Length = S.TrapezoidLength > 0.f ? S.TrapezoidLength : S.RangeMax;
+		A->NearWidth = S.TrapezoidNearWidth;
+		A->FarWidth = S.TrapezoidFarWidth;
+		Area = A;
+		if (S.ProjectileSpeed > 0.f)
+		{
+			UERDelivery_Projectile* D = MakeProjectile(EERFirePattern::Sequential);
+			D->bHoming = true;
+			D->bPierce = false;
+			D->Interval = S.ShotInterval;
+			D->CancelDistance = S.ShotCancelDistance;
+			Delivery = D;
+		}
+		else
+		{
+			Delivery = MakeInstant(1, 0.f);
+		}
+		break;
+	}
+	case ESkillTargeting::PlayerCircles:
+	{
+		UERShape_PlayerCircles* A = CastChecked<UERShape_PlayerCircles>(MakeArea(UERShape_PlayerCircles::StaticClass()));
+		A->CaptureRange = S.RangeMax;
+		A->Radius = S.RadiusOuter;
+		Area = A;
+		Delivery = MakeInstant(1, 0.f);
+		break;
+	}
+	default:
+		break;
+	}
+	if (Area)
+	{
+		Area->MinReach = S.RangeMin;
+	}
+
+	return FString::Printf(TEXT("[스킬 이관] %s 옛 Shape=%s RangeMax=%.2f RangeMin=%.2f RadiusOuter=%.2f RadiusInner=%.2f 속도=%.1f 관통=%d 발=%d → Area=%s · Delivery=%s · Targets(팀 %s · 실험체만 %d · 최대 %d · 보조 %.2f)"),
+		*GetName(), *UEnum::GetValueAsString(S.Shape), S.RangeMax, S.RangeMin, S.RadiusOuter, S.RadiusInner, S.ProjectileSpeed, S.bPenetrate ? 1 : 0, S.ProjectileCount,
+		Area ? *Area->Describe() : TEXT("없음"), Delivery ? *Delivery->Describe() : TEXT("없음"),
+		*UEnum::GetValueAsString(Targets.Team), Targets.bPlayersOnly ? 1 : 0, Targets.MaxTargets, Targets.AimAssistRadius);
+}
+
+float UERSkillData::GetMaxReach() const
+{
+	return Area ? Area->GetMaxReach() : 0.f;
+}
+
+float UERSkillData::GetMinReach() const
+{
+	return Area ? Area->MinReach : 0.f;
+}
+
+bool UERSkillData::IsAoE() const
+{
+	if ((Area && Area->IsSingleTarget()) || Targets.MaxTargets == 1 || (Delivery && Delivery->IsSingleHit()))
+	{
+		return false;
+	}
+	return true;
+}
+
+#if WITH_EDITOR
+EDataValidationResult UERSkillData::IsDataValid(FDataValidationContext& Context) const
+{
+	EDataValidationResult Result = Super::IsDataValid(Context);
+	const FString Owner = GetName();
+	const uint32 ErrorsBefore = Context.GetNumErrors();
+	// 모양 · 발사가 없으면 판정이 안 돈다 — 조각이 판정을 대신하는 스킬(장판 · 모드)도 빈 원이라도 둔다
+	if (!Area)
+	{
+		Context.AddError(FText::FromString(FString::Printf(TEXT("%s: 판정 모양(Area) 없음"), *Owner)));
+	}
+	else
+	{
+		Area->ValidateShape(Context, Owner);
+	}
+	if (!Delivery)
+	{
+		Context.AddError(FText::FromString(FString::Printf(TEXT("%s: 발사 방식(Delivery) 없음"), *Owner)));
+	}
+	else
+	{
+		Delivery->ValidateDelivery(Context, Owner, Targets.MaxTargets);
+	}
+	if (Context.GetNumErrors() > ErrorsBefore)
+	{
+		Result = EDataValidationResult::Invalid;
+	}
+	return Result == EDataValidationResult::NotValidated ? EDataValidationResult::Valid : Result;
+}
+#endif
 
 float UERSkillData::LevelValue(const TArray<float>& Values, int32 Level)
 {

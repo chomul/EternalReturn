@@ -40,9 +40,10 @@ void AERProjectileBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION(AERProjectileBase, Launch, COND_InitialOnly);
 }
 
-void AERProjectileBase::InitLaunch(UERGameplayAbility* InAbility, const UERSkillData* InSkill, int32 InLevel, const FTargetQuery& InFilter, const FERProjectileLaunch& InLaunch, int32 InShotIndex)
+void AERProjectileBase::InitLaunch(UERGameplayAbility* InAbility, const UERSkillData* InSkill, int32 InLevel, const FTargetQuery& InFilter, const FERProjectileLaunch& InLaunch, int32 InShotIndex, bool bInPierce)
 {
 	ShotIndex = InShotIndex;
+	bPierce = bInPierce;
 	Ability = InAbility;
 	Skill = InSkill;
 	Level = InLevel;
@@ -97,6 +98,7 @@ void AERProjectileBase::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	++FlightTicks;
 	const FVector Now = GetActorLocation();
 	// ER.Skill.DebugDraw 1 — 지나온 길(초록) · 판정 굵기 (서버 월드 = 리슨 서버 창)
 	static const IConsoleVariable* CVarDraw = IConsoleManager::Get().FindConsoleVariable(TEXT("ER.Skill.DebugDraw"));
@@ -131,6 +133,10 @@ void AERProjectileBase::Tick(float DeltaSeconds)
 
 bool AERProjectileBase::CanHit(const AActor* Target) const
 {
+	if (Launch.bOnlyHomingTarget && Target != Launch.HomingTarget)
+	{
+		return false;   // 대상만 (원거리 평타 · Argument 60 H1)
+	}
 	return Target && !Filter.IgnoredActors.Contains(Target);
 }
 
@@ -142,14 +148,15 @@ void AERProjectileBase::OnHitTarget(AActor* Target)
 	{
 		DrawDebugSphere(GetWorld(), Target->GetActorLocation(), 45.f, 12, FColor::Red, false, 1.5f, 0, 2.f);   // 맞은 대상 (다른 판정 모양과 같은 표시)
 	}
-	UE_LOG(LogEternalReturn, Log, TEXT("[투사체] %s 적중 %s — 날아간 거리 %.1fm / %.1fm"),
-		*GetNameSafe(this), *GetNameSafe(Target), TraveledUU / 100.f, Launch.RangeUU / 100.f);
+	UE_LOG(LogEternalReturn, Log, TEXT("[투사체] %s 적중 %s — 날아간 거리 %.1fm / %.1fm · 비행 %.3f초 · 틱 %d · 대상까지 %.1fm"),
+		*GetNameSafe(this), *GetNameSafe(Target), TraveledUU / 100.f, Launch.RangeUU / 100.f, GetGameTimeSinceCreation(), FlightTicks,
+		FVector::Dist(GetActorLocation(), Target->GetActorLocation()) / 100.f);
 	if (UERGameplayAbility* A = Ability.Get())
 	{
 		const float Ratio = Launch.RangeUU > 0.f ? FMath::Clamp(TraveledUU / Launch.RangeUU, 0.f, 1.f) : -1.f;
 		A->ApplyProjectileHit(Skill, Target, Level, Ratio, ShotIndex);
 	}
-	if (!Skill || !Skill->Shape.bPenetrate)
+	if (!bPierce)
 	{
 		EndFlight(TEXT("적중"));
 	}

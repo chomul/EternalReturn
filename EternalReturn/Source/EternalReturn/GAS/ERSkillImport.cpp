@@ -19,13 +19,17 @@
 #include "EternalReturn.h"
 #include "GAS/ERSkillData.h"
 #include "GAS/Fragment/ERSkillFragment.h"
+#include "GAS/Delivery/ERSkillDelivery.h"
+#include "GAS/Shape/ERSkillShape.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/DataValidation.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Presentation/ERAnimNotify_HitMarker.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Sound/SoundBase.h"
 #include "UObject/Package.h"
 
 namespace
@@ -169,14 +173,17 @@ namespace
 				if (Close == INDEX_NONE) { break; }
 				const FString AnimName = Raw.Mid(At + 8, Close - At - 8).TrimStartAndEnd();
 				const FAssetData* AA = Index.Find(*AnimName);
-				const UAnimSequenceBase* Anim = AA ? Cast<UAnimSequenceBase>(AA->GetAsset()) : nullptr;
-				if (!Anim)
+				UObject* LenAsset = AA ? AA->GetAsset() : nullptr;
+				const UAnimSequenceBase* Anim = Cast<UAnimSequenceBase>(LenAsset);
+				const USoundBase* Sound = Cast<USoundBase>(LenAsset);   // 소리 길이도 (카티야 R 발 사이 조준 = Aiming 소리 길이 · 사용자 2026-10-02)
+				if (!Anim && !Sound)
 				{
-					UE_LOG(LogEternalReturn, Error, TEXT("[스킬 임포트] %s — 칸 %s: @Length(%s) 애니를 못 찾았다"), *Who, *KV.Key, *AnimName);
+					UE_LOG(LogEternalReturn, Error, TEXT("[스킬 임포트] %s — 칸 %s: @Length(%s) 애니 · 소리를 못 찾았다"), *Who, *KV.Key, *AnimName);
 					bOk = false;
 					break;
 				}
-				const float Len = Anim->GetPlayLength() / (FMath::IsNearlyZero(Anim->RateScale) ? 1.f : FMath::Abs(Anim->RateScale));
+				const float Len = Anim ? Anim->GetPlayLength() / (FMath::IsNearlyZero(Anim->RateScale) ? 1.f : FMath::Abs(Anim->RateScale))
+					: Sound->GetDuration();
 				UE_LOG(LogEternalReturn, Log, TEXT("[스킬 임포트] %s — %s 안 @Length(%s) = %.3f초"), *Who, *KV.Key, *AnimName, Len);
 				Raw = Raw.Left(At) + FString::SanitizeFloat(Len) + Raw.Mid(Close + 1);
 			}
@@ -194,7 +201,39 @@ namespace
 		return Errors;
 	}
 
-	UERSkillData* FindOrCreateSkill(const FString& AssetName, const FString& Folder, TMap<FName, FAssetData>& Index, bool& bCreated)
+	/**
+	 * `{"Type": "Trapezoid", "Props": {…}}` → Outer 안의 새 객체 (S3.1 ⑦). 논리 이름 → 클래스 `<Prefix><Type>` (ERShape_Trapezoid · ERDelivery_Projectile).
+	 * C++ 클래스 이름이 바뀌어도 JSON 은 그대로 — 여기 한 곳만 고친다. 못 만들면 nullptr.
+	 */
+	template <class TBase>
+	TBase* MakeTyped(UObject* Outer, const TSharedPtr<FJsonObject>& O, const TCHAR* Prefix, const TMap<FName, FAssetData>& Index, const FString& Who, int32& Errors)
+	{
+		FString Type;
+		if (!O.IsValid() || !O->TryGetStringField(TEXT("Type"), Type))
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[스킬 임포트] %s — \"Type\" 이 없다"), *Who);
+			++Errors;
+			return nullptr;
+		}
+		const FString ClassName = FString(Prefix) + Type;
+		UClass* Cls = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
+		if (!Cls || !Cls->IsChildOf(TBase::StaticClass()) || Cls->HasAnyClassFlags(CLASS_Abstract))
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[스킬 임포트] %s — Type '%s' 가 없다 (클래스 %s)"), *Who, *Type, *ClassName);
+			++Errors;
+			return nullptr;
+		}
+		TBase* Obj = NewObject<TBase>(Outer, Cls, NAME_None, RF_Transactional);
+		const TSharedPtr<FJsonObject>* Props = nullptr;
+		if (O->TryGetObjectField(TEXT("Props"), Props))
+		{
+			Errors += ApplyProps(Obj, *Props, Index, Who + TEXT(".") + Type);
+		}
+		return Obj;
+	}
+
+	/** From = 새로 만들 때 복제할 원본 DA 이름 (`@DA_BasicAttack` · 비면 빈 DA). 이미 있으면 무시 — 적힌 칸만 덮는다. */
+	UERSkillData* FindOrCreateSkill(const FString& AssetName, const FString& Folder, TMap<FName, FAssetData>& Index, bool& bCreated, const FString& From = FString())
 	{
 		bCreated = false;
 		if (const FAssetData* A = Index.Find(*AssetName))
@@ -207,7 +246,22 @@ namespace
 			return D;
 		}
 		UPackage* Package = CreatePackage(*(Folder / AssetName));
-		UERSkillData* D = NewObject<UERSkillData>(Package, *AssetName, RF_Public | RF_Standalone | RF_Transactional);
+		// "From" — 원본 DA 를 통째로 복제 (슬롯 · 어빌리티 클래스 · 조각 · 판정 칸) 후 적힌 칸만 덮는다 (원거리 평타 · Argument 60 D2)
+		const FString FromName = From.StartsWith(TEXT("@")) ? From.Mid(1) : From;
+		const FAssetData* FromAsset = FromName.IsEmpty() ? nullptr : Index.Find(*FromName);
+		UERSkillData* Source = FromAsset ? Cast<UERSkillData>(FromAsset->GetAsset()) : nullptr;
+		if (!FromName.IsEmpty() && !Source)
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[스킬 임포트] %s — From %s 를 못 찾았다 (스킬 DA 가 아니다) · 빈 DA 로 만든다"), *AssetName, *From);
+		}
+		UERSkillData* D = Source
+			? DuplicateObject<UERSkillData>(Source, Package, *AssetName)
+			: NewObject<UERSkillData>(Package, *AssetName, RF_Public | RF_Standalone | RF_Transactional);
+		D->SetFlags(RF_Public | RF_Standalone | RF_Transactional);
+		if (Source)
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[스킬 임포트] %s ← %s 복제"), *AssetName, *Source->GetName());
+		}
 		FAssetRegistryModule::AssetCreated(D);
 		Index.Add(*AssetName, FAssetData(D));   // 같은 임포트의 뒤 스킬이 @이름 으로 바로 참조한다 (카티야 Q · E → @DA_Skill_Katja_P)
 		bCreated = true;
@@ -268,11 +322,40 @@ namespace
 			FString Folder = DefaultFolder;
 			S->TryGetStringField(TEXT("Folder"), Folder);
 			bool bCreated = false;
-			UERSkillData* D = FindOrCreateSkill(AssetName, Folder, Index, bCreated);
+			FString From;
+			S->TryGetStringField(TEXT("From"), From);
+			UERSkillData* D = FindOrCreateSkill(AssetName, Folder, Index, bCreated, From);
 			if (!D) { ++OutErrors; continue; }
 
 			D->Modify();
-			int32 Errors = ApplyProps(D, S->GetObjectField(TEXT("Props")), Index, AssetName);
+			const TSharedPtr<FJsonObject> SkillProps = S->GetObjectField(TEXT("Props"));
+			int32 Errors = 0;
+			if (SkillProps.IsValid() && SkillProps->HasField(TEXT("Shape")))
+			{
+				// 옛 칸 — 써도 판정은 안 바뀐다 (S3.1). 조용히 무시하면 "고쳤는데 그대로" 가 된다
+				UE_LOG(LogEternalReturn, Error, TEXT("[스킬 임포트] %s — \"Shape\" 는 옛 칸이다 · \"Area\" · \"Targets\" · \"Delivery\" 로 (Argument 57 S3.1) — 무시"), *AssetName);
+				SkillProps->RemoveField(TEXT("Shape"));
+				++Errors;
+			}
+			Errors += ApplyProps(D, SkillProps, Index, AssetName);
+
+			// 어디를 · 어떻게 — 적었을 때만 통째로 바꾼다 (조각과 같다)
+			const TSharedPtr<FJsonObject>* AreaJson = nullptr;
+			if (S->TryGetObjectField(TEXT("Area"), AreaJson))
+			{
+				if (UERSkillShapeBase* A = MakeTyped<UERSkillShapeBase>(D, *AreaJson, TEXT("ERShape_"), Index, AssetName + TEXT(".Area"), Errors))
+				{
+					D->Area = A;
+				}
+			}
+			const TSharedPtr<FJsonObject>* DeliveryJson = nullptr;
+			if (S->TryGetObjectField(TEXT("Delivery"), DeliveryJson))
+			{
+				if (UERSkillDelivery* Dl = MakeTyped<UERSkillDelivery>(D, *DeliveryJson, TEXT("ERDelivery_"), Index, AssetName + TEXT(".Delivery"), Errors))
+				{
+					D->Delivery = Dl;
+				}
+			}
 
 			const TArray<TSharedPtr<FJsonValue>>* Frags = nullptr;
 			int32 FragCount = -1;
@@ -322,7 +405,7 @@ namespace
 			OutErrors += Errors;
 			UE_LOG(LogEternalReturn, Log, TEXT("[스킬 임포트] %s %s — 쿨 %d칸 · 선딜 %.2f · 모양 %s · 사거리 %.1f · 조각 %s%s"),
 				*AssetName, bCreated ? TEXT("새로 만듦") : TEXT("덮어씀"), D->Cooldowns.Num(), D->CastTime,
-				*UEnum::GetValueAsString(D->Shape.Shape), D->Shape.RangeMax,
+				D->Area ? *D->Area->Describe() : TEXT("없음"), D->GetMaxReach(),
 				FragCount < 0 ? TEXT("(손대지 않음)") : *FString::FromInt(FragCount),
 				Errors > 0 ? *FString::Printf(TEXT(" · ⚠ 에러 %d"), Errors) : TEXT(""));
 		}
@@ -364,6 +447,44 @@ namespace
 		TEXT("ER.Skill.ImportJson"),
 		TEXT("[에디터] Docs/3_EditorTasks/Data/Skills/<캐릭터>.json → 스킬 DA (적힌 칸만 · Fragments 는 통째로). ER.Skill.ImportJson <캐릭터|All>"),
 		FConsoleCommandWithArgsDelegate::CreateStatic(&ImportSkillJson));
+
+	/** 모든 스킬 DA 를 불러 이관(PostLoad) → 검사 → 이관된 것만 저장 (Argument 57 S3.1). */
+	void ResaveSkills()
+	{
+		TArray<FAssetData> Assets;
+		FAssetRegistryModule::GetRegistry().GetAssetsByClass(UERSkillData::StaticClass()->GetClassPathName(), Assets, /*bSearchSubClasses=*/true);
+		TArray<UPackage*> Touched;
+		int32 Invalid = 0;
+		for (const FAssetData& A : Assets)
+		{
+			UERSkillData* D = Cast<UERSkillData>(A.GetAsset());   // 불러오는 순간 PostLoad 가 이관 · 로그
+			if (!D)
+			{
+				continue;
+			}
+			FDataValidationContext Ctx;
+			if (D->IsDataValid(Ctx) == EDataValidationResult::Invalid)
+			{
+				++Invalid;
+				TArray<FText> Warnings, Errors;
+				Ctx.SplitIssues(Warnings, Errors);
+				for (const FText& E : Errors) { UE_LOG(LogEternalReturn, Error, TEXT("[스킬 이관] 검사 실패 %s"), *E.ToString()); }
+			}
+			if (D->bShapeMigratedOnLoad)
+			{
+				D->MarkPackageDirty();
+				Touched.Add(D->GetPackage());
+			}
+		}
+		const bool bSaved = Touched.IsEmpty() || UEditorLoadingAndSavingUtils::SavePackages(Touched, /*bOnlyDirty=*/true);
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬 이관] 끝 — 스킬 DA %d · 이관 · 저장 %d %s · 검사 실패 %d"),
+			Assets.Num(), Touched.Num(), bSaved ? TEXT("✅") : TEXT("⚠ 저장 실패 — Save All 로"), Invalid);
+	}
+
+	FAutoConsoleCommand GResaveSkillsCmd(
+		TEXT("ER.Skill.Resave"),
+		TEXT("[에디터] 모든 스킬 DA: 옛 Shape → Area · Targets · Delivery 이관 · 검사 · 저장 (S3.1 · 한 번)"),
+		FConsoleCommandDelegate::CreateStatic(&ResaveSkills));
 }
 
 #endif // WITH_EDITOR
