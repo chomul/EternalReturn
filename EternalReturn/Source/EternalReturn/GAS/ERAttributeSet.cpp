@@ -4,6 +4,8 @@
 #include "GAS/ERStatCapSettings.h"
 #include "AbilitySystemComponent.h"
 #include "GameplayEffectExtension.h"
+#include "Abilities/GameplayAbilityTypes.h"
+#include "GAS/ERGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 
 UERAttributeSet::UERAttributeSet()
@@ -137,6 +139,20 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 
 	// 피해 종단 알림 (F10-04 숙련도가 받는다). 한 줄 — F03 내부는 그대로.
 	OnDamageTaken.Broadcast(Data.EffectSpec.GetEffectContext().GetOriginalInstigator(), Damage);
+
+	// ⭐ 가해자에게 "적중" 이벤트 (Argument 61 E1 · 매그너스 근성 등 패시브가 듣는다). 자해는 제외.
+	//   여러 명을 한 번에 맞히면 대상마다 한 번씩 — 원작 12.0 "맞힌 수만큼" 과 같은 결과
+	if (UAbilitySystemComponent* SourceASC = Data.EffectSpec.GetEffectContext().GetOriginalInstigatorAbilitySystemComponent();
+		SourceASC && SourceASC != Data.Target.AbilityActorInfo->AbilitySystemComponent.Get())
+	{
+		FGameplayEventData Hit;
+		Hit.EventTag = ERTags::Event_Hit_Dealt;
+		Hit.Instigator = SourceASC->GetAvatarActor();
+		Hit.Target = Data.Target.AbilityActorInfo->AvatarActor.Get();
+		Hit.EventMagnitude = Damage;
+		Data.EffectSpec.GetAllAssetTags(Hit.InstigatorTags);   // Damage.Type.BasicAttack / Skill / True
+		SourceASC->HandleGameplayEvent(ERTags::Event_Hit_Dealt, &Hit);
+	}
 
 	// 사망 정의는 "0 **이하**"다. 0 미만이 아니다 - 클램프가 이미 0 에서 잘라내므로
 	// 0 미만은 애초에 나올 수 없고, 미만으로 쓰면 아무도 죽지 않는다.

@@ -2,10 +2,23 @@
 
 #include "Presentation/ERAnimInstance.h"
 
+#include "AbilitySystemComponent.h"
+#include "AbilitySystemGlobals.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GAS/ERGameplayTags.h"
+
+namespace
+{
+	/** 움직여서 끊기 직전에만 본다 — 매 틱 조회하지 않는다 */
+	bool HasAnimHold(const AActor* Owner)
+	{
+		const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Owner);
+		return ASC && ASC->HasMatchingGameplayTag(ERTags::State_AnimHold);
+	}
+}
 
 void UERAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
@@ -40,7 +53,8 @@ void UERAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		{
 			bWatchedSeenStill = true;
 		}
-		else if (bWatchedSeenStill && !(Move && Move->HasRootMotionSources()))
+		// · 모션 유지 태그(State.AnimHold — 매그너스 W 장판 동안 · Argument 63 M1) 중에는 안 끊는다. 복제 loose 태그라 모든 머신에 있다
+		else if (bWatchedSeenStill && !(Move && Move->HasRootMotionSources()) && !HasAnimHold(Owner))
 		{
 			Montage_Stop(MoveStopBlendOut, Current);
 			WatchedMontage = nullptr;

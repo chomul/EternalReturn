@@ -20,6 +20,8 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Unstoppable,    "State.Unstoppable");
 	UE_DEFINE_GAMEPLAY_TAG(State_Untargetable,   "State.Untargetable");
 	UE_DEFINE_GAMEPLAY_TAG(State_CCImmune,       "State.CCImmune");
+	UE_DEFINE_GAMEPLAY_TAG(State_Riding,         "State.Riding");
+	UE_DEFINE_GAMEPLAY_TAG(State_AnimHold,       "State.AnimHold");
 	UE_DEFINE_GAMEPLAY_TAG(State_Gathering,      "State.Gathering");
 
 	UE_DEFINE_GAMEPLAY_TAG(State_Block_Movement,    "State.Block.Movement");
@@ -91,6 +93,7 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(State_NextAttackBuff, "State.NextAttackBuff");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Input_Move, "Event.Input.Move");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Skill_Aim,  "Event.Skill.Aim");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Hit_Dealt,  "Event.Hit.Dealt");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowPercent,          "SetByCaller.SlowPercent");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_OnHitMagnitude,       "SetByCaller.OnHitMagnitude");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Charges,              "SetByCaller.Charges");
@@ -148,6 +151,7 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_Dance, "Pres.Anim.Dance");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_Death, "Pres.Anim.Death");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_Gather, "Pres.Anim.Gather");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Prop_Bike,   "Pres.Prop.Bike");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Attack, "Pres.Sfx.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Hit, "Pres.Sfx.Hit");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillCast, "Pres.Sfx.SkillCast");
@@ -178,6 +182,11 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_HitEnhanced, "Pres.Sfx.HitEnhanced");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_EnhanceReady, "Pres.Sfx.EnhanceReady");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillAim_R, "Pres.Sfx.SkillAim.R");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHitLate_Q, "Pres.Sfx.SkillHitLate.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLoop_W, "Pres.Sfx.SkillLoop.W");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLoop_R, "Pres.Sfx.SkillLoop.R");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLoopStart_R, "Pres.Sfx.SkillLoopStart.R");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillRecast_R, "Pres.Sfx.SkillRecast.R");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Attack, "GameplayCue.Pres.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Hit, "GameplayCue.Pres.Hit");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Aim, "GameplayCue.Pres.Aim");

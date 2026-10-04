@@ -17,6 +17,7 @@ class UCameraComponent;
 class USpringArmComponent;
 class UERPresentationComponent;
 class UERForcedMoveComponent;
+class UERRideComponent;
 class AERPlayerState;
 
 /**
@@ -172,6 +173,10 @@ protected:
 	/** 강제 이동 받기 — 전파 · 벽 감시 · 벽 충돌 알림 (Argument 44 K1 · 야생동물과 공용). */
 	UPROPERTY(VisibleAnywhere, Category = "전투")
 	TObjectPtr<UERForcedMoveComponent> ForcedMove;
+
+	/** 탑승 이동 (매그너스 R 바이크 · Argument 62 V3) — 탈 때만 틱 */
+	UPROPERTY(VisibleAnywhere, Category = "Combat")
+	TObjectPtr<UERRideComponent> Ride;
 
 	/**
 	 * 이 캐릭터가 어느 실험체인지.

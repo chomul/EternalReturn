@@ -135,7 +135,7 @@ public:
 	/** [서버] 시전자 연출 사건 하나 (K8) — `GameplayCue.Pres.Aim` (순차 사격 다음 발 조준 · 발 번호) · `.Ready` (강화 걸림). 무엇을 틀지는 받는 쪽 키. */
 	void SendEventCue(FGameplayTag CueTag, const UERSkillData& Skill, int32 ShotNumber = 0) const;
 	/** 이번 실행이 2차 판정 · 리캐스트 데이터인가 — 시전음은 시전 한 번에 한 번 */
-	bool IsExecutingOther() const { return ExecOverride != nullptr; }
+	bool IsExecutingOther() const { return bExecutingOther; }
 	/** 서버 인스턴스인가 (발사 방식은 엔진 HasAuthority 에 못 닿는다 — protected) */
 	bool IsExecAuthority() const { return HasAuthority(&CurrentActivationInfo); }
 
@@ -278,6 +278,8 @@ private:
 
 	/** ExecuteAndRecover · ExecuteOther 가 세팅 · 해제. 리캐스트 · 2차 판정 · 벽 충돌 데이터. */
 	const UERSkillData* ExecOverride = nullptr;
+	/** 2차 판정(ExecuteOther) 중 — 공격음을 안 낸다. ⚠ ExecOverride 로 판단하면 리캐스트 데이터(매그너스 R 바이크 발사)까지 소리가 막혔다 (2026-10-04) */
+	bool bExecutingOther = false;
 
 	// ── 조각 (F11.5) ──
 	/** 이번 실행의 문맥. ExecuteAndRecover/ExecuteOther 가 만들고 ExecuteSkill 이 읽는다 (bSkipTargeting · Targets). */

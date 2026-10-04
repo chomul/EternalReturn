@@ -1,0 +1,325 @@
+{
+  "_설명": "ER.Skill.ImportJson Magnus — 형식은 Katja.json 과 같다. 근거 Docs/0_GameDesign/Characters/02_매그너스.md §3 게임 툴팁 (사용자 2026-10-03) · Argument 61. R 폭주 바이크 = Argument 62 V3 (탑승 조각 · UERRideComponent · 발사 바이크 ERProjectile_Bike). ⚠ GE_Magnus_ToughBody · GE_Magnus_ToughBodyMax · GE_CCResistUp · GE_Magnus_Ride 애셋을 먼저 만든다 (Docs/3_EditorTasks/F19_실험체_킷.md F19-02). CastTime 은 [자체] — 애니에 'ER 타격 지점' 노티파이를 찍으면 \"@Marker(애니)\" 로 바꾼다.",
+  "Folder": "/Game/ERCharacter/CharData/Skill/Magnus",
+  "Character": "DA_Char_Magnus",
+  "Skills": [
+    {
+      "Asset": "DA_Skill_Magnus_P",
+      "_메모": "P 근성 — 적 실험체 적중: 평타 +1 · 스킬 +2 (여러 명이면 대상마다) · 최대 10 · 중첩당 방어력 2/2.5/3% · 최대 시 초당 체력 재생 +3/4/5 · 영구 (죽어도 유지 — 사용자 2026-10-03). 패시브 어빌리티가 적중 이벤트를 듣는다 (Argument 61 E1). 레벨은 포인트 (카티야 P 와 같은 규칙)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.P\")",
+        "AbilityClass": "/Script/EternalReturn.ERPassiveAbility",
+        "MaxLevel": 3,
+        "InitialLevel": 1,
+        "Cooldowns": "(0,0,0)",
+        "CastTime": 0
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfStacks",
+          "Props": {
+            "StackEffect": "@GE_Magnus_ToughBody",
+            "PerStack": "(0.02,0.025,0.03)",
+            "MaxStacks": 10,
+            "MaxStackEffect": "@GE_Magnus_ToughBodyMax",
+            "MaxStackMagnitude": "(3,4,5)",
+            "StacksOnBasicHit": 1,
+            "StacksOnSkillHit": 2,
+            "bPlayersOnly": true
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Magnus_Q",
+      "_메모": "Q 파쇄탄 — 방향 투사체 10.5m · 21 m/s · 피해 80~260 (+추가 공격력 115% · 증폭 90%) · 둔화 40~60% 2초 · 쿨 11→7. 반경 0.3 · 선딜 0.3 [자체]. ⏸ 둔화가 지속시간에 걸쳐 천천히 회복 (툴팁) — 지금 둔화 GE 는 고정 값",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.Q\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(11,10,9,8,7)",
+        "CastTime": "@Marker(Magnus_Hammer_skill01)",
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Line",
+        "Props": {
+          "Length": 10.5,
+          "Width": 0.6
+        }
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Single",
+          "Speed": 21,
+          "Radius": 0.3,
+          "bPierce": false
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(80,125,170,215,260)",
+            "BonusAPRatio": "(1.15)",
+            "SkillAmpRatio": "(0.9)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(2)",
+            "SlowPercent": "(0.4,0.45,0.5,0.55,0.6)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Magnus_W",
+      "_메모": "W 17대 1 — 4초 동안 자기 주변 2.5m · 11회 + 추가 방어력 35당 1회 (시전 순간 확정 · 근성 % 포함 — 사용자) · 1회 22~46 (+추가 공격력 45% · 증폭 20% · 적 최대 체력 2.5%) · 적중마다(펄스당 한 번 [자체]) 쿨 −0.5초 · 방해 저항 +40% 4초 · 이동 가능 (사용자) · 쿨 14→10. 시전자를 따라다니는 장판 (Argument 61 M1)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.W\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(14,13,12,11,10)",
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 2.5
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "Effects": "((Effect=@GE_CCResistUp,Duration=(4),Magnitude=(0.4)))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Area",
+          "Props": {
+            "Duration": 4,
+            "Radius": 2.5,
+            "bFollowCaster": true,
+            "bHoldCasterAnim": true,
+            "bHitCuePerPulse": true,
+            "BasePulses": 11,
+            "BonusDefensePerPulse": 35
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(22,28,34,40,46)",
+            "BonusAPRatio": "(0.45)",
+            "SkillAmpRatio": "(0.2)",
+            "MaxHPRatio": "(0.025)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_CooldownOnHit",
+          "Props": {
+            "Seconds": "(0.5)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Magnus_E_Wall",
+      "_메모": "E 강타의 벽 충돌 — 추가 20~100 (+추가 공격력 40% · 증폭 35% · 대상 최대 체력 8%) + 기절 0.72~1.30초 (게임 툴팁). 넉백 조각의 WallImpactSkill 이 쓴다 (피해 · 적중 효과 조각만)",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(20,40,60,80,100)",
+            "BonusAPRatio": "(0.4)",
+            "SkillAmpRatio": "(0.35)",
+            "MaxHPRatio": "(0.08)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Stun",
+            "Duration": "(0.72,0.85,1.0,1.15,1.3)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Magnus_E",
+      "_메모": "E 강타 — 대상 지정 3m · 40~180 (+추가 공격력 50% · 증폭 50% · 대상 최대 체력 8%) · **바라보는 왼쪽으로** 3m 밀침 (게임 툴팁) · 벽 → DA_Skill_Magnus_E_Wall · 쿨 11→7. 밀리는 시간 0.3 · 선딜 0.25 [자체]",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.E\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(11,10,9,8,7)",
+        "CastTime": "@Marker(Magnus_Hammer_skill03)",
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Single",
+        "Props": {
+          "Range": 3
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(40,75,110,145,180)",
+            "BonusAPRatio": "(0.5)",
+            "SkillAmpRatio": "(0.5)",
+            "MaxHPRatio": "(0.08)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Knockback",
+          "Props": {
+            "Distance": 3,
+            "Duration": 0.15,
+            "bCasterLeft": true,
+            "WallImpactSkill": "@DA_Skill_Magnus_E_Wall"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Magnus_R_Explode",
+      "_메모": "R 폭주 바이크 폭발 — 100/250/400 (+추가 공격력 150% · 증폭 90% · 대상 현재 체력 30%) (게임 툴팁). 탑승 조각 · 발사 바이크가 반경 2m [자체] 안 적에게 쓴다 (야생동물도 맞음 [자체])",
+      "Props": {
+        "MaxLevel": 3,
+        "InitialLevel": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(100,250,400)",
+            "BonusAPRatio": "(1.5)",
+            "SkillAmpRatio": "(0.9)",
+            "CurHPRatio": "(0.3)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Magnus_R_Launch",
+      "_메모": "R 재사용 — 매그너스는 내리고 바이크만 앞으로 (조준 방향 [자체]) 16 m/s · 9m · 적 실험체 · 벽에 닿으면 폭발 (탑승 조각 bDismount · ERProjectile_Bike) · 끝까지 안 닿으면 그냥 사라짐 [자체]",
+      "Props": {
+        "MaxLevel": 3,
+        "InitialLevel": 0,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=True,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Line",
+        "Props": {
+          "Length": 9,
+          "Width": 1.0
+        }
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Single",
+          "Speed": 16,
+          "Radius": 0.5,
+          "bPierce": false,
+          "ProjectileClass": "/Script/EternalReturn.ERProjectile_Bike"
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Ride",
+          "Props": {
+            "bDismount": true,
+            "ExplodeRadius": 2,
+            "ExplodeSkill": "@DA_Skill_Magnus_R_Explode"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Magnus_R",
+      "_메모": "R 폭주 바이크 — 7초 · 1→8 m/s (2초) · 늘 앞으로 · 우클릭 쪽으로 초당 120° [자체] (누누 · 사용자) · 적 실험체 · 벽 충돌 → 폭발 → 내림 (사용자) · 야생동물은 지나침 [자체] · 사용 즉시 근성 4/7/10 · 이동 방해 면역 · 재사용 = 바이크만 발사 (리캐스트 창 7초) · 쿨 80/70/60. 판정 모양은 반경 0 원 (판정 없이 리캐스트 창만 열리게)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.R\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 3,
+        "InitialLevel": 0,
+        "MinCharacterLevel": "(6,11,16)",
+        "Cooldowns": "(80,70,60)",
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=True,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfStacks",
+          "Props": {
+            "StacksOnExecute": "(4,7,10)",
+            "StackSource": "@DA_Skill_Magnus_P"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Ride",
+          "Props": {
+            "RideEffect": "@GE_Magnus_Ride",
+            "Duration": 7,
+            "SpeedStart": 1,
+            "SpeedMax": 8,
+            "RampTime": 2,
+            "TurnRateDeg": 120,
+            "HitReach": 0.5,
+            "ExplodeRadius": 2,
+            "ExplodeSkill": "@DA_Skill_Magnus_R_Explode"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Recast",
+          "Props": {
+            "bOnHitOnly": false,
+            "Window": 7,
+            "RecastSkill": "@DA_Skill_Magnus_R_Launch"
+          }
+        }
+      ]
+    }
+  ]
+}

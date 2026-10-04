@@ -69,6 +69,8 @@ namespace ERTags
 	// ⏸ 대상 지정 불가 — 이미 적용된 효과 외 전부 무시. 요구 사례 없음. 자리만.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Untargetable);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CCImmune);       // 이동 방해 면역 (매그너스 R)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Riding);         // 탑승 중 (매그너스 R 바이크 — GE_Magnus_Ride 가 단다 · UERRideComponent 가 본다 · Argument 62)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_AnimHold);       // 스킬 모션 유지 — 이동해도 안 끊고, 빠지면 End 섹션 (매그너스 W 장판 동안 · Argument 63 M1). 연출 전용
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Gathering);      // 채집 중 — 연출 전용 (AnimBP 채집 포즈 · Argument 46). 아무것도 막지 않는다
 
 	// ── 차단 축 ────────────────────────────────────────────────
@@ -106,6 +108,7 @@ namespace ERTags
 	// 입력 → 어빌리티. PC 가 어빌리티 내부를 모르게 하는 통로 (SendGameplayEventToActor).
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Input_Move);        // 이동 명령이 서버에서 수락됨
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Skill_Aim);         // 스킬 발동 요청에 실린 조준 데이터 (Docs/4_Argument/18)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Hit_Dealt);         // 내 피해가 들어갔다 — 어트리뷰트셋이 가해자에게 (Target = 맞은 쪽 · InstigatorTags = Damage.Type.*) · 패시브가 듣는다 (Argument 61 E1)
 
 	// ── 어빌리티 형태 ──────────────────────────────────────────
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Form_Channeled);      // 채널링 — CC로 중단된다
@@ -294,6 +297,7 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Dance);   // 춤 — 스킨마다 다를 수 있다 (사용자 2026-09-24)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Death);   // 사망 (04 에서 재생)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Gather);  // 채집 — 공용 collect (04 · Argument 46)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Prop_Bike);    // 소품 — 매그너스 R 바이크 (스킨 DA Props 키 · 발사 바이크가 이 키로 찾는다 · Argument 64 B1)
 
 	// 소리 키 (F12.5-05 · Argument 49) — 동작표 줄의 키. 큐가 시전자의 연출 컴포넌트에서 이 키로 찾는다 (39 ④ K2)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Attack);     // 평타 공격음 (휘두름 · 총성)
@@ -330,6 +334,12 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_HitEnhanced);     // 강화 평타 타격음 (평소 Hit 대신)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_EnhanceReady);    // 강화가 걸린 순간
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillAim_R);      // R 다음 발 조준 (발 번호로 고른다)
+	// F19-02 매그너스 소리 (Docs/3_EditorTasks/Audio/Magnus.md) — 지금 필요한 슬롯만
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHitLate_Q);   // Q 타격음 뒤 조금 늦게 한 번 더 (매그너스 Skill01_Impact)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoop_W);      // W 도는 동안 반복 (State.AnimHold 동안 · 매그너스 Skill02_Attack)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoop_R);      // R 탄 동안 반복 (State.Riding 동안 · 매그너스 Skill04_Drive)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoopStart_R); // R 반복이 시작될 때 한 번 (시동 · 매그너스 Skill04_GoActive)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillRecast_R);    // R 재사용의 공격음 (평소 SkillCast.R 대신 · 매그너스 Skill04_Attack 바이크 발사)
 
 	// 연출 큐 (F12.5-05 · Argument 49) — 네트워크 사건. 무엇을 틀지는 키가 정한다 (큐 ≠ 키)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Attack);   // 시전자 — 공격이 나갔다 (판정 시점)

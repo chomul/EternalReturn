@@ -9,8 +9,10 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/AssetManager.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/StreamableManager.h"
 #include "EternalReturn.h"
 #include "GameFramework/Character.h"
@@ -20,7 +22,9 @@
 #include "Presentation/ERAnimInstance.h"
 #include "Presentation/ERAnimNotify_HitMarker.h"
 #include "GameplayEffectTypes.h"
+#include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 #include "Sound/SoundBase.h"
 #include "Weapon/ERWeaponLibrary.h"
 #include "Weapon/ERWeaponTypes.h"
@@ -36,6 +40,16 @@ namespace
 
 	/** 애니 길이가 선딜+후딜 × 이 값보다 길면 경고 — 판정과 모션이 어긋나는 걸 데이터 단계에서 잡는다. */
 	constexpr float LengthWarnRatio = 1.5f;
+
+	/** 반복 소리 (F19-02 · Audio/Magnus.md) — 이 태그가 있는 동안 Loop 키를 반복 · 붙을 때 Start 키 한 번 */
+	struct FLoopSfx { FGameplayTag Tag; FGameplayTag Loop; FGameplayTag Start; };
+	TArray<FLoopSfx> LoopSfxTable()
+	{
+		return {
+			{ ERTags::State_AnimHold, ERTags::Pres_Sfx_SkillLoop_W, FGameplayTag() },               // W 도는 동안 (장판 동안 모션 유지 태그)
+			{ ERTags::State_Riding, ERTags::Pres_Sfx_SkillLoop_R, ERTags::Pres_Sfx_SkillLoopStart_R }, // R 탄 동안 · 시동
+		};
+	}
 
 	const TCHAR* NetTag(const AActor* Owner)
 	{
@@ -94,6 +108,9 @@ void UERPresentationComponent::SetSkin(const TSoftObjectPtr<UERSkinData>& SkinRe
 	}
 	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 스킨 %s (%s)"), *GetNameSafe(GetOwner()), Skin ? *Skin->GetName() : TEXT("없음"), NetTag(GetOwner()));
 	Rebuild();
+	// 부착 (Argument 64) — 스킨이 무기 · 소품 모습을 정한다
+	RefreshWeaponAttach();
+	BindPropTags();
 }
 
 void UERPresentationComponent::SetWeapon(EERWeaponType InWeapon)
@@ -134,6 +151,7 @@ void UERPresentationComponent::SetWeapon(EERWeaponType InWeapon)
 	}
 	// ⭐ 비동기 — 로드 전 몇 프레임은 비어 "판정만" (Argument 39 로드 시점). 서버 · 각 클라가 각자.
 	Rebuild();
+	RefreshWeaponAttach();   // 손 무기 (Argument 64 W1) — 스킨 DA 에 있어 세트 로드를 기다리지 않는다
 	if (ToLoad.IsEmpty())
 	{
 		return;
@@ -391,8 +409,14 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 			Key = Enhanced;
 		}
 	}
+	// 재사용의 공격음 (F19-02 매그너스 R 바이크 발사) — 줄이 있으면 슬롯 소리 대신
+	const bool bRecastSfx = bAttackCue && Params.AggregatedSourceTags.HasTagExact(ERTags::Ability_Slot_R_Recast) && Source->HasKey(ERTags::Pres_Sfx_SkillRecast_R);
+	if (bRecastSfx)
+	{
+		Key = ERTags::Pres_Sfx_SkillRecast_R;
+	}
 	// 스킬마다 다른 소리 (F12.6-05 오메가 Q · W · F19 실험체) — `<SkillCast|SkillHit>.<슬롯>` 줄이 있으면 그것 · 없으면 공통 키
-	if (!bBasic && !bAimCue && !bReadyCue)
+	if (!bBasic && !bAimCue && !bReadyCue && !bRecastSfx)
 	{
 		struct FSlotSfx { FGameplayTag Slot; FGameplayTag Cast; FGameplayTag Hit; };
 		static const FSlotSfx SlotSfx[] = {
@@ -423,6 +447,22 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 	const FResolved* From = Source->Cache.Find(Key);
 	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 소리 %s [%s] ← %s 의 %s (%s)"), *GetNameSafe(GetOwner()),
 		Sound ? *Sound->GetName() : TEXT("없음"), From ? From->Source : TEXT("줄 없음"), *GetNameSafe(Instigator), *Key.ToString(), NetTag(GetOwner()));
+
+	// 타격 뒤 조금 늦게 한 번 더 (F19-02 매그너스 Q Impact · 사용자 2026-10-04 "Hit 보다 조금 느리게") — 같은 자리
+	if (!bAttackCue && !bAimCue && !bReadyCue && !bBasic && EventSlot == ERTags::Ability_Slot_Q && Source->HasKey(ERTags::Pres_Sfx_SkillHitLate_Q))
+	{
+		constexpr float LateSeconds = 0.15f;   // [자체] — 들어보고 조절
+		TWeakObjectPtr<USoundBase> Late = Source->PickSound(ERTags::Pres_Sfx_SkillHitLate_Q);
+		FTimerHandle Unused;
+		GetWorld()->GetTimerManager().SetTimer(Unused, FTimerDelegate::CreateWeakLambda(this, [this, Late, Location]()
+		{
+			if (USoundBase* S = Late.Get())
+			{
+				UGameplayStatics::PlaySoundAtLocation(this, S, Location);
+				UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 소리 %s (타격 뒤 늦게 · %s)"), *GetNameSafe(GetOwner()), *S->GetName(), NetTag(GetOwner()));
+			}
+		}), LateSeconds, false);
+	}
 }
 
 UAnimSequenceBase* UERPresentationComponent::FindFirstAnim(FGameplayTag Key) const
@@ -810,6 +850,12 @@ void UERPresentationComponent::StopActionAnim()
 	{
 		return;
 	}
+	// 장판 동안 도는 모션(매그너스 W)은 걸어도 유지 — 끝은 태그가 빠질 때 End 섹션 (Argument 63 M1). 죽으면 그래도 끊는다
+	if (!bDead && ASC->HasMatchingGameplayTag(ERTags::State_AnimHold))
+	{
+		UE_LOG(LogEternalReturn, Verbose, TEXT("[연출] %s 이동 — 모션 유지 중이라 안 끊음 (%s)"), *GetNameSafe(GetOwner()), NetTag(GetOwner()));
+		return;
+	}
 	ASC->CurrentMontageStop(BlendOut);
 	// Log — 재생 중일 때만 찍힌다 (위에서 조기 반환). 검증 증거로 남긴다 (2026-09-27 Verbose 라 확인 못 함).
 	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 이동 — 모션 끊음 %s (%s)"),
@@ -826,6 +872,13 @@ void UERPresentationComponent::BindModeTags(UAbilitySystemComponent* InASC)
 	{
 		Old->RegisterGameplayTagEvent(ERTags::Mode, EGameplayTagEventType::AnyCountChange).Remove(ModeTagHandle);
 		Old->RegisterGameplayTagEvent(ERTags::State_Gathering, EGameplayTagEventType::NewOrRemoved).Remove(GatherTagHandle);
+		Old->RegisterGameplayTagEvent(ERTags::State_AnimHold, EGameplayTagEventType::NewOrRemoved).Remove(AnimHoldTagHandle);
+		UnbindPropTags(Old);
+		for (const TPair<FGameplayTag, FDelegateHandle>& H : LoopSfxTagHandles)
+		{
+			Old->RegisterGameplayTagEvent(H.Key, EGameplayTagEventType::NewOrRemoved).Remove(H.Value);
+		}
+		LoopSfxTagHandles.Reset();
 	}
 	ModeASC = InASC;
 	// 부모 태그(Mode)로 구독 — 자식(Mode.Sniper …)이 늘고 줄 때도 부모 개수가 바뀌어 불린다
@@ -834,7 +887,51 @@ void UERPresentationComponent::BindModeTags(UAbilitySystemComponent* InASC)
 	// 채집 (04 · Argument 46 · 47) — 모드와 같은 길: 서버가 복제 loose 태그 → 각 머신이 자기 화면에 몽타주
 	GatherTagHandle = InASC->RegisterGameplayTagEvent(ERTags::State_Gathering, EGameplayTagEventType::NewOrRemoved)
 		.AddUObject(this, &UERPresentationComponent::OnGatherTagChanged);
+	AnimHoldTagHandle = InASC->RegisterGameplayTagEvent(ERTags::State_AnimHold, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &UERPresentationComponent::OnAnimHoldTagChanged);
+	BindPropTags();   // 소품 켜는 태그 (Argument 64 B1) — 이미 타고 있으면 바로 붙는다
+	for (const FLoopSfx& L : LoopSfxTable())
+	{
+		LoopSfxTagHandles.Add(L.Tag, InASC->RegisterGameplayTagEvent(L.Tag, EGameplayTagEventType::NewOrRemoved)
+			.AddUObject(this, &UERPresentationComponent::OnLoopSfxTagChanged));
+	}
+	RefreshLoopSfx(/*bPlayStart=*/false);   // 늦게 들어온 클라 — 이미 도는 중이면 반복만
 	RefreshMode();   // 이미 모드 중에 붙었을 수 있다 (늦은 relevant · 부활)
+}
+
+void UERPresentationComponent::OnAnimHoldTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	const APawn* Pawn = Cast<APawn>(GetOwner());
+	UAbilitySystemComponent* ASC = ModeASC.Get();
+	UAnimMontage* Current = ASC ? ASC->GetCurrentMontage() : nullptr;
+	if (NewCount > 0)
+	{
+		// 진단 — 반복하려면 Loop 섹션의 다음이 Loop 여야 한다 (몽타주 Sections 패널 연결)
+		const int32 LoopIdx = Current ? Current->GetSectionIndex(ERPresSection::Loop) : INDEX_NONE;
+		UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 모션 유지 시작 — 몽타주 %s · Loop 다음 = %s · End %s (%s)"), *GetNameSafe(GetOwner()),
+			Current ? *Current->GetName() : TEXT("없음"),
+			LoopIdx != INDEX_NONE ? *Current->CompositeSections[LoopIdx].NextSectionName.ToString() : TEXT("Loop 섹션 없음"),
+			Current && Current->IsValidSectionName(ERPresSection::End) ? TEXT("있음") : TEXT("없음"), NetTag(GetOwner()));
+		return;
+	}
+	if (!Current && Pawn && (Pawn->HasAuthority() || Pawn->IsLocallyControlled()))
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 모션 유지 끝 — 몽타주가 이미 끝나 있다 (Loop → Loop 연결 확인) (%s)"), *GetNameSafe(GetOwner()), NetTag(GetOwner()));
+	}
+	// 다른 클라(시뮬레이티드)는 서버 섹션 복제를 따른다 · 그 사이 다른 스킬이 덮었으면 End 가 없거나 이미 끝났다
+	if (!Pawn || !(Pawn->HasAuthority() || Pawn->IsLocallyControlled()) || !Current || !Current->IsValidSectionName(ERPresSection::End))
+	{
+		return;
+	}
+	if (Pawn->HasAuthority())
+	{
+		ASC->CurrentMontageJumpToSection(ERPresSection::End);
+	}
+	else if (const ACharacter* Character = Cast<ACharacter>(Pawn); Character && Character->GetMesh() && Character->GetMesh()->GetAnimInstance())
+	{
+		Character->GetMesh()->GetAnimInstance()->Montage_JumpToSection(ERPresSection::End, Current);
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 모션 유지 끝 — %s 섹션 End → (%s)"), *GetNameSafe(GetOwner()), *Current->GetName(), NetTag(GetOwner()));
 }
 
 void UERPresentationComponent::OnGatherTagChanged(const FGameplayTag Tag, int32 NewCount)
@@ -917,11 +1014,232 @@ void UERPresentationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		ASC->RegisterGameplayTagEvent(ERTags::Mode, EGameplayTagEventType::AnyCountChange).Remove(ModeTagHandle);
 		ASC->RegisterGameplayTagEvent(ERTags::State_Gathering, EGameplayTagEventType::NewOrRemoved).Remove(GatherTagHandle);
+		ASC->RegisterGameplayTagEvent(ERTags::State_AnimHold, EGameplayTagEventType::NewOrRemoved).Remove(AnimHoldTagHandle);
+		UnbindPropTags(ASC);
+		for (const TPair<FGameplayTag, FDelegateHandle>& H : LoopSfxTagHandles)
+		{
+			ASC->RegisterGameplayTagEvent(H.Key, EGameplayTagEventType::NewOrRemoved).Remove(H.Value);
+		}
 	}
+	LoopSfxTagHandles.Reset();
 	ModeASC.Reset();
 	ModeTagHandle.Reset();
 	GatherTagHandle.Reset();
+	AnimHoldTagHandle.Reset();
 	Super::EndPlay(EndPlayReason);
+}
+
+void UERPresentationComponent::OnLoopSfxTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	RefreshLoopSfx(/*bPlayStart=*/NewCount > 0);
+}
+
+void UERPresentationComponent::RefreshLoopSfx(bool bPlayStart)
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;   // 소리를 안 튼다
+	}
+	const UAbilitySystemComponent* ASC = ModeASC.Get();
+	for (const FLoopSfx& L : LoopSfxTable())
+	{
+		const bool bWant = ASC && ASC->HasMatchingGameplayTag(L.Tag) && HasKey(L.Loop);
+		TObjectPtr<UAudioComponent>* Playing = LoopAudio.Find(L.Loop);
+		if (bWant && !Playing)
+		{
+			if (bPlayStart && L.Start.IsValid())
+			{
+				if (USoundBase* Start = PickSound(L.Start))
+				{
+					UGameplayStatics::SpawnSoundAttached(Start, GetOwner()->GetRootComponent());
+				}
+			}
+			UAudioComponent* Audio = UGameplayStatics::SpawnSoundAttached(PickSound(L.Loop), GetOwner()->GetRootComponent(),
+				NAME_None, FVector::ZeroVector, EAttachLocation::KeepRelativeOffset, /*bStopWhenAttachedToDestroyed=*/true,
+				1.f, 1.f, 0.f, nullptr, nullptr, /*bAutoDestroy=*/false);
+			if (Audio)
+			{
+				Audio->OnAudioFinished.AddDynamic(this, &UERPresentationComponent::OnLoopAudioFinished);
+				LoopAudio.Add(L.Loop, Audio);
+				UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 반복 소리 시작 %s (%s 동안 · %s)"), *GetNameSafe(GetOwner()),
+					*GetNameSafe(Audio->Sound), *L.Tag.ToString(), NetTag(GetOwner()));
+			}
+		}
+		else if (!bWant && Playing)
+		{
+			if (UAudioComponent* Audio = Playing->Get())
+			{
+				Audio->OnAudioFinished.RemoveAll(this);
+				Audio->Stop();
+				Audio->DestroyComponent();
+			}
+			LoopAudio.Remove(L.Loop);
+			UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 반복 소리 멈춤 (%s 빠짐 · %s)"), *GetNameSafe(GetOwner()), *L.Tag.ToString(), NetTag(GetOwner()));
+		}
+	}
+}
+
+void UERPresentationComponent::OnLoopAudioFinished()
+{
+	// 한 번 다 돌았다 — 태그가 아직 있으면 다시 (소리 애셋이 반복 설정이 아니어도 이어진다)
+	for (const TPair<FGameplayTag, TObjectPtr<UAudioComponent>>& P : LoopAudio)
+	{
+		if (UAudioComponent* Audio = P.Value.Get(); Audio && !Audio->IsPlaying())
+		{
+			Audio->Play();
+		}
+	}
+}
+
+const FERAttachProp* UERPresentationComponent::FindProp(FGameplayTag Key) const
+{
+	return Skin ? Skin->Props.Find(Key) : nullptr;
+}
+
+void UERPresentationComponent::SpawnPieces(AActor* Owner, USceneComponent* Parent, const TArray<FERAttachPiece>& Pieces, TArray<TObjectPtr<USceneComponent>>& OutComps)
+{
+	if (!Owner || !Parent || Owner->GetNetMode() == NM_DedicatedServer)
+	{
+		return;   // 그리지 않는 머신 — 판정과 무관
+	}
+	for (const FERAttachPiece& P : Pieces)
+	{
+		UMeshComponent* Comp = nullptr;
+		if (USkeletalMesh* SK = Cast<USkeletalMesh>(P.Mesh))
+		{
+			USkeletalMeshComponent* C = NewObject<USkeletalMeshComponent>(Owner);
+			C->SetSkeletalMesh(SK);
+			Comp = C;
+		}
+		else if (UStaticMesh* SM = Cast<UStaticMesh>(P.Mesh))
+		{
+			UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(Owner);
+			C->SetStaticMesh(SM);
+			Comp = C;
+		}
+		if (!Comp)
+		{
+			continue;   // 빈 칸 — Fill 이 못 찾았으면 그때 에러를 냈다
+		}
+		if (!P.Socket.IsNone() && !Parent->DoesSocketExist(P.Socket))
+		{
+			UE_LOG(LogEternalReturn, Warning, TEXT("[부착] %s — %s 에 소켓 %s 가 없다 → 원점에 붙인다 (스켈레톤에 소켓을 만든다)"),
+				*GetNameSafe(Owner), *GetNameSafe(Parent), *P.Socket.ToString());
+		}
+		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Comp->SetupAttachment(Parent, P.Socket);
+		Comp->SetRelativeTransform(P.Offset);
+		Comp->RegisterComponent();
+		OutComps.Add(Comp);
+	}
+}
+
+void UERPresentationComponent::RefreshWeaponAttach()
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	for (USceneComponent* C : WeaponComps)
+	{
+		if (C) { C->DestroyComponent(); }
+	}
+	WeaponComps.Reset();
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	const FERAttachPieces* Want = Skin && Weapon != EERWeaponType::None ? Skin->WeaponMeshes.Find(Weapon) : nullptr;
+	if (!Character || !Want)
+	{
+		return;
+	}
+	SpawnPieces(GetOwner(), Character->GetMesh(), Want->Pieces, WeaponComps);
+	if (!WeaponComps.IsEmpty())
+	{
+		const FERAttachPiece& First = Want->Pieces[0];
+		UE_LOG(LogEternalReturn, Log, TEXT("[부착] %s 무기 %s ← %s @%s (%d조각 · %s)"), *GetNameSafe(GetOwner()), *UEnum::GetValueAsString(Weapon),
+			*GetNameSafe(First.Mesh), *First.Socket.ToString(), WeaponComps.Num(), NetTag(GetOwner()));
+	}
+}
+
+void UERPresentationComponent::BindPropTags()
+{
+	UAbilitySystemComponent* ASC = ModeASC.Get();
+	UnbindPropTags(ASC);
+	if (ASC && Skin)
+	{
+		for (const TPair<FGameplayTag, FERAttachProp>& P : Skin->Props)
+		{
+			const FGameplayTag Show = P.Value.ShowWhile;
+			if (Show.IsValid() && !PropTagHandles.Contains(Show))
+			{
+				PropTagHandles.Add(Show, ASC->RegisterGameplayTagEvent(Show, EGameplayTagEventType::NewOrRemoved)
+					.AddUObject(this, &UERPresentationComponent::OnPropTagChanged));
+			}
+		}
+	}
+	RefreshProps();
+}
+
+void UERPresentationComponent::UnbindPropTags(UAbilitySystemComponent* ASC)
+{
+	if (ASC)
+	{
+		for (const TPair<FGameplayTag, FDelegateHandle>& H : PropTagHandles)
+		{
+			ASC->RegisterGameplayTagEvent(H.Key, EGameplayTagEventType::NewOrRemoved).Remove(H.Value);
+		}
+	}
+	PropTagHandles.Reset();
+}
+
+void UERPresentationComponent::OnPropTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	RefreshProps();
+}
+
+void UERPresentationComponent::RefreshProps()
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;   // 그리지 않는다 — 판정과 무관 (Argument 64 네트워크)
+	}
+	const UAbilitySystemComponent* ASC = ModeASC.Get();
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	// 켜야 할 것 — 스킨에 있고 켜는 태그가 붙은 소품
+	TSet<FGameplayTag> Want;
+	if (Skin && ASC)
+	{
+		for (const TPair<FGameplayTag, FERAttachProp>& P : Skin->Props)
+		{
+			if (P.Value.ShowWhile.IsValid() && ASC->HasMatchingGameplayTag(P.Value.ShowWhile))
+			{
+				Want.Add(P.Key);
+			}
+		}
+	}
+	// 끄기 — 태그가 빠졌거나 스킨이 바뀌어 없어진 소품
+	for (auto It = ActiveProps.CreateIterator(); It; ++It)
+	{
+		if (!Want.Contains(It.Key()))
+		{
+			for (USceneComponent* C : It.Value().Comps)
+			{
+				if (C) { C->DestroyComponent(); }
+			}
+			UE_LOG(LogEternalReturn, Log, TEXT("[부착] %s 소품 %s 꺼짐 (%s)"), *GetNameSafe(GetOwner()), *It.Key().ToString(), NetTag(GetOwner()));
+			It.RemoveCurrent();
+		}
+	}
+	// 켜기
+	for (const FGameplayTag& Key : Want)
+	{
+		if (ActiveProps.Contains(Key) || !Character)
+		{
+			continue;
+		}
+		FERSpawnedAttach& Spawned = ActiveProps.Add(Key);
+		SpawnPieces(GetOwner(), Character->GetMesh(), Skin->Props[Key].Pieces, Spawned.Comps);
+		UE_LOG(LogEternalReturn, Log, TEXT("[부착] %s 소품 %s 켜짐 %d조각 (%s)"), *GetNameSafe(GetOwner()), *Key.ToString(), Spawned.Comps.Num(), NetTag(GetOwner()));
+	}
 }
 
 void UERPresentationComponent::DumpToLog() const

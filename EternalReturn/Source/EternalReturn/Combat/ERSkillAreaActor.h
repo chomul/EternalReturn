@@ -26,9 +26,12 @@ public:
 	/** [서버] 스폰 직후 한 번. 첫 판정은 즉시. */
 	/** 장판 조각이 반경 · 주기 · 감쇠를 넘긴다. 펄스마다 Ability->ApplyOnTargets (피해 · 적중 효과 조각). */
 	void InitializeFromFragment(UERGameplayAbility* InAbility, const UERSkillData* InSkill, int32 InLevel, float InDuration, float InRadius, float InTickInterval, float InDecay,
-		const class UERSkillFragment_Area* InFragment = nullptr);
+		const class UERSkillFragment_Area* InFragment = nullptr, int32 InMaxPulses = 0);
 
 protected:
+	/** [서버] 모션 유지 태그를 뗀다 (bHoldCasterAnim) — 펄스를 다 쳤든 수명이 끝났든 여기로 온다. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	void Pulse();
 	/** 시전자가 안에 있으면 CasterEffectsInside 를 다시 건다 (F12.6-06 신경 가스). */
 	void ApplyCasterInside(AActor* Caster);
@@ -47,4 +50,9 @@ protected:
 	FTimerHandle PulseTimer;
 	float Radius = 1.5f;
 	float Decay = 0.f;
+	/** 펄스 수 상한 (0 = 수명 동안 계속) — 다 치면 사라진다 (매그너스 W) */
+	int32 MaxPulses = 0;
+	int32 PulsesDone = 0;
+	/** State.AnimHold 를 건 시전자 ASC — EndPlay 에서 뗀다 (Argument 63 M1) */
+	TWeakObjectPtr<class UAbilitySystemComponent> HoldASC;
 };

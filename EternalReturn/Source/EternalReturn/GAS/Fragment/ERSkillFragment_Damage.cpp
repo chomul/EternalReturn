@@ -64,6 +64,7 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_BonusAPRatio,  UERSkillData::LevelValue(BonusAPRatio, Level) * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_SkillAmpRatio, UERSkillData::LevelValue(SkillAmpRatio, Level) * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_MaxHPRatio,    UERSkillData::LevelValue(MaxHPRatio, Level) * Scale);
+	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_CurHPRatio,    UERSkillData::LevelValue(CurHPRatio, Level) * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_TargetLostHPScaleMax, UERSkillData::LevelValue(TargetLostHPScaleMax, Level));   // Scale 무관
 
 	// 채널 태그 — 애셋 태그와 같은 통로 (GameplayEffect.h:1119-1120). 없으면 Execution 이 경고한다.

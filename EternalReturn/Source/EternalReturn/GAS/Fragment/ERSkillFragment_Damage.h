@@ -65,6 +65,10 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> MaxHPRatio;
 
+	/** 대상 **현재** 체력 비례 — 이 스킬 피해에 더한다 (방어 적용 · 매그너스 R 30% · 재키 Q). Execution `Data.Damage.CurHPRatio` (ERDamageExecution.cpp 3-b). */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> CurHPRatio;
+
 	/** 대상 **현재** 체력 비례 **고정 피해** — 별도 스펙 (Damage.Type.True · 방어 무시). 단검 D 8%. */
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> FixedCurHPRatio;

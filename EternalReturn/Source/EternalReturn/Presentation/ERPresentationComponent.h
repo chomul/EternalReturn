@@ -17,10 +17,23 @@ class UERSkinData;
 class UGameplayAbility;
 class USoundBase;
 struct FERPresentationEntry;
+struct FERAttachPiece;
+struct FERAttachProp;
+class USceneComponent;
 struct FGameplayCueParameters;
 struct FStreamableHandle;
 
 #include "ERPresentationComponent.generated.h"
+
+/** 이 머신이 만든 부착 컴포넌트들 (Argument 64) — TMap 값으로 붙잡으려고 */
+USTRUCT()
+struct FERSpawnedAttach
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<TObjectPtr<USceneComponent>> Comps;
+};
 
 /** 대기 중 쉬는 자세 (F12.6-02 야생동물 경계 · 잠) — 상태라 AnimBP 상태머신이 튼다. */
 UENUM()
@@ -126,6 +139,15 @@ public:
 	/** 해석 결과 전부 (ER.Pres.Show). */
 	void DumpToLog() const;
 
+	/** 지금 스킨의 소품 (발사 바이크가 쏜 사람의 것을 꺼낸다 · Argument 64 B1). 없으면 nullptr. */
+	const FERAttachProp* FindProp(FGameplayTag Key) const;
+
+	/**
+	 * 조각들을 Parent 의 소켓에 만들어 붙인다 — 이 머신 화면에만 (복제 안 함). 충돌 없음. 만든 컴포넌트를 OutComps 에 더한다.
+	 * 데디 서버에서는 아무것도 안 한다. 소켓이 없으면 Warning 후 원점에 붙인다.
+	 */
+	static void SpawnPieces(AActor* Owner, USceneComponent* Parent, const TArray<FERAttachPiece>& Pieces, TArray<TObjectPtr<USceneComponent>>& OutComps);
+
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -141,6 +163,22 @@ private:
 
 	/** 채집 태그가 붙으면 collect 를 **원래 속도로** 튼다 · 떨어지면 길고 부드러운 블렌드 아웃으로 일어선다 (Argument 47 F1). 이동하면 AnimInstance 가 끊는다. */
 	void OnGatherTagChanged(const FGameplayTag Tag, int32 NewCount);
+	/** 모션 유지 태그(State.AnimHold)가 빠지면 지금 몽타주를 End 섹션으로 — 서버(복제) · 소유 클라(로컬 재생분) (Argument 63 M1). */
+	void OnAnimHoldTagChanged(const FGameplayTag Tag, int32 NewCount);
+	/** 반복 소리 (F19-02 매그너스 W · R · Audio/Magnus.md) — 태그가 있는 동안 SkillLoop 키 소리를 몸에 붙여 반복 · 빠지면 멈춤. bPlayStart = 막 붙었다 (시작음) */
+	void OnLoopSfxTagChanged(const FGameplayTag Tag, int32 NewCount);
+	void RefreshLoopSfx(bool bPlayStart);
+	UFUNCTION()
+	void OnLoopAudioFinished();
+	/** 손 무기를 지금 스킨 · 무기 종류로 다시 붙인다 (Argument 64 W1). SetSkin · SetWeapon 이 부른다. */
+	void RefreshWeaponAttach();
+	/** 지금 스킨 소품의 켜는 태그를 구독한다 (스킨 · ASC 가 바뀔 때 다시). */
+	void BindPropTags();
+	void UnbindPropTags(UAbilitySystemComponent* ASC);
+	void OnPropTagChanged(const FGameplayTag Tag, int32 NewCount);
+	/** 켜는 태그가 있는 소품만 몸에 붙어 있게 맞춘다 (Argument 64 B1). */
+	void RefreshProps();
+
 	/** 상태 포즈(사망)를 AnimInstance 에 (04). Rebuild 끝에서도 — 스킨 · 야생동물 AnimBP 교체 뒤 새 인스턴스에 다시 알린다. */
 	void PushStateToAnim();
 
@@ -187,6 +225,11 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> ModeASC;
 	FDelegateHandle ModeTagHandle;
 	FDelegateHandle GatherTagHandle;
+	FDelegateHandle AnimHoldTagHandle;
+	/** 반복 소리 태그 → 구독 핸들 · 지금 도는 소리 (이 머신만) */
+	TMap<FGameplayTag, FDelegateHandle> LoopSfxTagHandles;
+	UPROPERTY()
+	TMap<FGameplayTag, TObjectPtr<class UAudioComponent>> LoopAudio;
 	/** 지금 트는 채집 몽타주 — 채집 끝에 이것만 멈춘다 (그 사이 스킬 몽타주가 덮었으면 이미 끝나 있다). */
 	TWeakObjectPtr<UAnimMontage> GatherMontage;
 
@@ -199,6 +242,17 @@ private:
 	/** 지금 붙어 있는 무기 레이어 — 바뀔 때 이것을 Unlink 한다. */
 	UPROPERTY()
 	TSubclassOf<UAnimInstance> LinkedLayer;
+
+	/** 손 무기 컴포넌트 (이 머신만) */
+	UPROPERTY()
+	TArray<TObjectPtr<USceneComponent>> WeaponComps;
+
+	/** 켜져 있는 소품 — 키(Pres.Prop.*) → 컴포넌트 (이 머신만) */
+	UPROPERTY()
+	TMap<FGameplayTag, FERSpawnedAttach> ActiveProps;
+
+	/** 소품 켜는 태그 → 구독 핸들 */
+	TMap<FGameplayTag, FDelegateHandle> PropTagHandles;
 
 	/** 재생 실패 Warning 은 액터당 한 번 (AnimBP 없는 야생동물이 평타마다 찍었다 — 2026-09-27 로그). */
 	bool bWarnedPlayFail = false;

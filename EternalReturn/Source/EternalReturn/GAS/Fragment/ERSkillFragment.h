@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 #include "UObject/Object.h"
 #include "ERSkillContext.h"
 #include "ERSkillFragment.generated.h"
@@ -37,6 +38,9 @@ public:
 
 	/** [소유 클라 · 리슨 호스트] 연출성 로컬 작업 — 모드 카메라. 게임 로직 금지. */
 	virtual void OnLocalExecute(FERSkillContext& Ctx) const {}
+
+	/** [서버] 이 스킬 주인의 피해가 누군가에게 들어갔다 — 패시브 어빌리티(UERPassiveAbility)만 부른다. HitTags = 그 피해의 Damage.Type.* (Argument 61 E1). */
+	virtual void OnHitDealt(FERSkillContext& Ctx, AActor* Target, const FGameplayTagContainer& HitTags) const {}
 
 	/** [서버] EndAbility — 어떤 경로든 (정상 · 취소 · 외부). 모드 정리 · 쿨 반환. */
 	virtual void OnEnd(FERSkillContext& Ctx, bool bCancelled) const {}

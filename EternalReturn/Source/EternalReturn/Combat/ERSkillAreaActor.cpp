@@ -24,7 +24,7 @@ AERSkillAreaActor::AERSkillAreaActor()
 
 
 void AERSkillAreaActor::InitializeFromFragment(UERGameplayAbility* InAbility, const UERSkillData* InSkill, int32 InLevel, float InDuration, float InRadius, float InTickInterval, float InDecay,
-	const UERSkillFragment_Area* InFragment)
+	const UERSkillFragment_Area* InFragment, int32 InMaxPulses)
 {
 	if (!HasAuthority() || !InAbility || !InSkill)
 	{
@@ -38,15 +38,45 @@ void AERSkillAreaActor::InitializeFromFragment(UERGameplayAbility* InAbility, co
 	Decay = InDecay;
 	Fragment = InFragment;
 	TickInterval = InTickInterval;
-	SetLifeSpan(InDuration);
+	MaxPulses = InMaxPulses;
+	// 펄스 수가 정해졌으면 수명은 마지막 펄스 뒤 조금 (마지막이 수명에 잘리지 않게)
+	SetLifeSpan(MaxPulses > 0 ? InTickInterval * MaxPulses + 0.1f : InDuration);
 	UE_LOG(LogEternalReturn, Log, TEXT("[장판] %s 스폰 @%s — 반경 %.1fm · %.1f초 · %.1f초마다 · 감쇠 %.0f%%"),
 		*GetNameSafe(InSkill), *GetActorLocation().ToCompactString(), InRadius, InDuration, InTickInterval, InDecay * 100.f);
+	// 장판 동안 시전자 모션 유지 (매그너스 W · Argument 63 M1) — 채집과 같은 길: 서버 태그 + 복제 태그 → 각 머신의 연출 컴포넌트가 본다
+	if (Fragment && Fragment->bHoldCasterAnim)
+	{
+		if (UAbilitySystemComponent* ASC = InAbility->GetAbilitySystemComponentFromActorInfo())
+		{
+			ASC->AddLooseGameplayTag(ERTags::State_AnimHold);
+			ASC->AddReplicatedLooseGameplayTag(ERTags::State_AnimHold);
+			HoldASC = ASC;
+		}
+	}
 	Pulse();
 	GetWorldTimerManager().SetTimer(PulseTimer, this, &AERSkillAreaActor::Pulse, InTickInterval, true);
 }
 
+void AERSkillAreaActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UAbilitySystemComponent* ASC = HoldASC.Get())
+	{
+		ASC->RemoveLooseGameplayTag(ERTags::State_AnimHold);
+		ASC->RemoveReplicatedLooseGameplayTag(ERTags::State_AnimHold);
+		HoldASC.Reset();
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
 void AERSkillAreaActor::Pulse()
 {
+	if (MaxPulses > 0 && PulsesDone >= MaxPulses)
+	{
+		GetWorldTimerManager().ClearTimer(PulseTimer);
+		Destroy();
+		return;
+	}
+	++PulsesDone;
 	UERGameplayAbility* A = Ability.Get();
 	if (!A || !Skill || !A->GetAvatarActorFromActorInfo())
 	{
@@ -77,6 +107,10 @@ void AERSkillAreaActor::Pulse()
 		const float Scale = FMath::Pow(1.f - Decay, static_cast<float>(Count));
 		++Count;
 		A->ApplyOnTargets(Skill, { Target }, Scale, Level);
+		if (Fragment && Fragment->bHitCuePerPulse)
+		{
+			A->SendPresCues(*Skill, A->GetAvatarActorFromActorInfo(), { Target }, /*bWithAttack=*/false);
+		}
 		UE_LOG(LogEternalReturn, Log, TEXT("[장판] %s -> %s %d번째 (피해 x%.2f)"), *GetNameSafe(Skill), *GetNameSafe(Target), Count, Scale);
 	}
 

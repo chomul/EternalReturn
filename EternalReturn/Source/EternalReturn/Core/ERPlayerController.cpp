@@ -3,6 +3,7 @@
 #include "Core/ERPlayerController.h"
 #include "Character/ERCharacterBase.h"
 #include "Character/ERInputConfig.h"
+#include "Combat/ERRideComponent.h"
 #include "ERCollisionChannels.h"
 #include "EternalReturn.h"
 
@@ -519,6 +520,13 @@ void AERPlayerController::OnMoveToCursor()
 	if (!GetHitResultUnderCursor(ECC_Visibility, /*bTraceComplex=*/false, Hit))
 	{
 		// 하늘을 클릭한 경우 등. 조용히 무시한다 - 에러가 아니다.
+		return;
+	}
+
+	// 탑승 중 (매그너스 R 바이크) — 경로를 시작하지 않고 조종 목표만 바꾼다 (누누 · 사용자 2026-10-03 · Argument 62 V3)
+	if (UERRideComponent* Ride = GetPawn() ? GetPawn()->FindComponentByClass<UERRideComponent>() : nullptr; Ride && Ride->IsSteering())
+	{
+		Ride->SetSteerTarget(Hit.ImpactPoint);
 		return;
 	}
 

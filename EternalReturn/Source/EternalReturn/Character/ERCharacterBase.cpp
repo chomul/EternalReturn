@@ -12,6 +12,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Character/ERCharacterMovementComponent.h"
 #include "Combat/ERForcedMoveComponent.h"
+#include "Combat/ERRideComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Item/ERInventoryComponent.h"
 #include "Item/ERItemData.h"
@@ -27,6 +28,7 @@ AERCharacterBase::AERCharacterBase(const FObjectInitializer& ObjectInitializer)
 	PrimaryActorTick.bCanEverTick = false;
 
 	ForcedMove = CreateDefaultSubobject<UERForcedMoveComponent>(TEXT("ForcedMove"));
+	Ride = CreateDefaultSubobject<UERRideComponent>(TEXT("Ride"));
 
 	// ── 연출 (F12.5-01 · Argument 39) ─────────────────────────
 	Presentation = CreateDefaultSubobject<UERPresentationComponent>(TEXT("Presentation"));

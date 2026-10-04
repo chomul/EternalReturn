@@ -35,6 +35,10 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	bool bAwayFromCaster = false;
 
+	/** 시전자가 **바라보는 왼쪽**으로 민다 (매그너스 E 강타 — 게임 툴팁 2026-10-03). bAwayFromCaster 보다 먼저 본다. */
+	UPROPERTY(EditDefaultsOnly)
+	bool bCasterLeft = false;
+
 	/** 벽 충돌 시 대상에게 실행할 데이터 (피해 · 적중 효과 조각만 쓴다). */
 	UPROPERTY(EditDefaultsOnly)
 	TObjectPtr<UERSkillData> WallImpactSkill;

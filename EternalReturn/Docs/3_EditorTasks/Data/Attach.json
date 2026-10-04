@@ -1,0 +1,42 @@
+{
+  "_설명": "ER.Pres.Fill <캐릭터> 가 읽어 스킨 DA(DA_Skin_<캐릭터>_<S0nn>)의 WeaponMeshes · Props 를 통째로 덮는다 (Argument 64 W1 · B1). 메시는 이름(그 스킨 폴더 먼저 → 전체 · 같은 이름이 여럿이면 에러) 또는 /Game/… 경로. 조각 = { Mesh, Socket, Location [x,y,z], Rotation [pitch,yaw,roll], Scale } — Socket 외에는 생략 가능 (보통 소켓을 옮겨 맞춘다). 무기 종류 = EERWeaponType 이름 (Hammer · Bat · SniperRifle …). 소품 키 = Pres.Prop.* 태그 · ShowWhile = 그 태그가 있는 동안 몸에 붙인다.",
+  "Magnus": {
+    "_메모": "소켓은 사용자가 스켈레톤 Character_UE_Skeleton 에 만든다 — ER_Weapon_R (오른손 뼈) · ER_Bike (루트 뼈). (미확인) S000 기본 무기(s000_Weapon_Special_Magnus_01 · Attach_Weapon_Special_Magnus_01 · Attach_DirtyMac 이 무엇인지) · 다른 스킨 바이크(WP_Special_Magnus_S00x 가 바이크인지) — 확인되면 채운다.",
+    "S000": {
+      "Props": {
+        "Pres.Prop.Bike": {
+          "ShowWhile": "State.Riding",
+          "Pieces": [
+            { "Mesh": "s000_HD_Fatboy", "Socket": "ER_Bike" },
+            { "Mesh": "s000_HD_Fatboy_Front", "Socket": "ER_Bike" },
+            { "Mesh": "s000_HD_Fatboy_Wheel_Front", "Socket": "ER_Bike" },
+            { "Mesh": "s000_HD_Fatboy_Wheel_Rear", "Socket": "ER_Bike" }
+          ]
+        }
+      }
+    },
+    "S002": {
+      "Weapons": {
+        "Hammer": [ { "Mesh": "Weapon_Magnus_S002_Hammer", "Socket": "ER_Weapon_R" } ]
+      }
+    },
+    "S003": {
+      "Weapons": {
+        "Hammer": [ { "Mesh": "Weapon_Magnus_S003_LOD1_Hammer", "Socket": "ER_Weapon_R" } ],
+        "Bat": [ { "Mesh": "Weapon_Magnus_S003_LOD1_Bat", "Socket": "ER_Weapon_R" } ]
+      }
+    },
+    "S004": {
+      "Weapons": {
+        "Hammer": [ { "Mesh": "Magnus_S004_LOD1_Hammer", "Socket": "ER_Weapon_R" } ],
+        "Bat": [ { "Mesh": "Magnus_S004_LOD1_Bat", "Socket": "ER_Weapon_R" } ]
+      }
+    },
+    "S005": {
+      "Weapons": {
+        "Hammer": [ { "Mesh": "Magnus_S005_LOD1_Hammaer", "Socket": "ER_Weapon_R" } ],
+        "Bat": [ { "Mesh": "Magnus_S005_LOD1_Bat", "Socket": "ER_Weapon_R" } ]
+      }
+    }
+  }
+}

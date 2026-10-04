@@ -6,6 +6,7 @@
 #include "AbilitySystemComponent.h"
 #include "EternalReturn.h"
 #include "GAS/ERGameplayAbility.h"
+#include "GAS/ERPassiveAbility.h"
 #include "GAS/ERGameplayTags.h"
 #include "GAS/Delivery/ERSkillDelivery.h"
 #include "GAS/Shape/ERSkillShapes.h"
@@ -226,8 +227,15 @@ EDataValidationResult UERSkillData::IsDataValid(FDataValidationContext& Context)
 	EDataValidationResult Result = Super::IsDataValid(Context);
 	const FString Owner = GetName();
 	const uint32 ErrorsBefore = Context.GetNumErrors();
+	// 판정을 직접 돌리지 않는 DA 는 모양 · 발사가 필요 없다 (2026-10-03 매그너스 검사 에러):
+	//   어빌리티 없음 = 조각 묶음 (벽 충돌 · 폭발 · 강화 내용 — 다른 조각이 적중 조각만 꺼내 쓴다) · 패시브 = 이벤트만 듣는다
+	const bool bRunsJudgment = AbilityClass && !AbilityClass->IsChildOf(UERPassiveAbility::StaticClass());
 	// 모양 · 발사가 없으면 판정이 안 돈다 — 조각이 판정을 대신하는 스킬(장판 · 모드)도 빈 원이라도 둔다
-	if (!Area)
+	if (!bRunsJudgment)
+	{
+		if (Area) { Area->ValidateShape(Context, Owner); }
+	}
+	else if (!Area)
 	{
 		Context.AddError(FText::FromString(FString::Printf(TEXT("%s: 판정 모양(Area) 없음"), *Owner)));
 	}
@@ -237,7 +245,7 @@ EDataValidationResult UERSkillData::IsDataValid(FDataValidationContext& Context)
 	}
 	if (!Delivery)
 	{
-		Context.AddError(FText::FromString(FString::Printf(TEXT("%s: 발사 방식(Delivery) 없음"), *Owner)));
+		if (bRunsJudgment) { Context.AddError(FText::FromString(FString::Printf(TEXT("%s: 발사 방식(Delivery) 없음"), *Owner))); }
 	}
 	else
 	{

@@ -44,6 +44,31 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	TArray<FERSelfEffect> CasterEffectsInside;
 
+	/** 시전자에 붙어 따라다닌다 — 시전자 발밑에서 시작 (매그너스 W 17대 1 · Argument 61 M1) */
+	UPROPERTY(EditDefaultsOnly)
+	bool bFollowCaster = false;
+
+	/**
+	 * 장판이 있는 동안 시전자의 스킬 모션을 유지한다 — 이동해도 안 끊고(몽타주 Loop 섹션이 반복), 장판이 사라지면 End 섹션으로 (매그너스 W · Argument 63 M1).
+	 * 시전자 ASC 에 State.AnimHold (복제 loose 태그) 를 건다.
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	bool bHoldCasterAnim = false;
+
+	/** 펄스마다 맞은 대상에 타격음 큐 (매그너스 W "도는 동안 타격음" · Audio/Magnus.md). 끄면 소리 없이 피해만 (독가스 · 마름쇠 — 지금까지 동작) */
+	UPROPERTY(EditDefaultsOnly)
+	bool bHitCuePerPulse = false;
+
+	/**
+	 * 펄스 수를 정한다 (0 = 끔 · 지금까지처럼 Duration 동안 TickInterval 마다). >0 이면 **시전 순간** 펄스 수 = BasePulses + 추가 방어력 / BonusDefensePerPulse (내림)
+	 * → 간격 = Duration / 펄스 수 · 그 수만큼 치고 사라진다. 매그너스 W: 11 · 35 (게임 툴팁 · 추가 방어력 = 최종 − 기본, 근성 % 포함 — 사용자 2026-10-03)
+	 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	int32 BasePulses = 0;
+
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "BasePulses > 0"))
+	float BonusDefensePerPulse = 0.f;
+
 	virtual void OnExecute(FERSkillContext& Ctx) const override;
 	virtual FString GetDebugName() const override { return TEXT("장판"); }
 };

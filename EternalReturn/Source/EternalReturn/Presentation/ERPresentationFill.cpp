@@ -18,7 +18,12 @@
 #include "Animation/AnimSequenceBase.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Character/ERCharacterData.h"
+#include "Dom/JsonObject.h"
 #include "Engine/SkeletalMesh.h"
+#include "Engine/StaticMesh.h"
+#include "Misc/FileHelper.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "EternalReturn.h"
 #include "GAS/ERGameplayTags.h"
 #include "HAL/IConsoleManager.h"
@@ -247,6 +252,45 @@ namespace
 				}
 			}
 		}
+		// 무기 토큰 없는 캐릭터 스킬 소리 (F19-02 · Docs/3_EditorTasks/Audio/Magnus.md) — <캐릭터>_Skill0N_<사건>[_rK] → **캐릭터 기본 표** (무기 무관 · OutWeapon None)
+		//   사건: Attack · Activation = 시전 · Hit = 타격 · Impact = 타격 뒤 늦게 · Drive = 반복. _rK 는 무작위 변형 (같은 키로 묶인다)
+		if (T.Num() == 3 || (T.Num() == 4 && T[3].StartsWith(TEXT("r"), ESearchCase::IgnoreCase) && T[3].RightChop(1).IsNumeric()))
+		{
+			// 예외 — 같은 사건 이름이 스킬마다 뜻이 다르다. 배치표(Audio/<캐릭터>.md)가 원본이고 이 표는 그 거울이다
+			static const TMap<FString, FGameplayTag> Exceptions = {
+				{ TEXT("magnus_skill02_attack"), ERTags::Pres_Sfx_SkillLoop_W },       // 도는 동안 나는 소리 (사용자 2026-10-04)
+				{ TEXT("magnus_skill04_attack"), ERTags::Pres_Sfx_SkillRecast_R },     // 바이크 발사
+				{ TEXT("magnus_skill04_goactive"), ERTags::Pres_Sfx_SkillLoopStart_R }, // 시동 (사용자 2026-10-04)
+			};
+			const FString Base3 = FString::Join(TArray<FString>(T.GetData(), 3), TEXT("_")).ToLower();
+			FGameplayTag Key = Exceptions.FindRef(Base3);
+			if (!Key.IsValid())
+			{
+				const FGameplayTag Slot = ActionToKey(T[1].ToLower(), /*bCommon=*/false);
+				const FString Event = T[2].ToLower();
+				struct FCharSfx { FGameplayTag Slot; FGameplayTag Cast; FGameplayTag Hit; FGameplayTag HitLate; FGameplayTag Loop; };
+				static const FCharSfx CharSfx[] = {
+					{ ERTags::Ability_Slot_Q, ERTags::Pres_Sfx_SkillCast_Q, ERTags::Pres_Sfx_SkillHit_Q, ERTags::Pres_Sfx_SkillHitLate_Q, FGameplayTag() },
+					{ ERTags::Ability_Slot_W, ERTags::Pres_Sfx_SkillCast_W, ERTags::Pres_Sfx_SkillHit_W, FGameplayTag(), ERTags::Pres_Sfx_SkillLoop_W },
+					{ ERTags::Ability_Slot_E, ERTags::Pres_Sfx_SkillCast_E, ERTags::Pres_Sfx_SkillHit_E, FGameplayTag(), FGameplayTag() },
+					{ ERTags::Ability_Slot_R, ERTags::Pres_Sfx_SkillCast_R, ERTags::Pres_Sfx_SkillHit_R, FGameplayTag(), ERTags::Pres_Sfx_SkillLoop_R },
+				};
+				for (const FCharSfx& S : CharSfx)
+				{
+					if (S.Slot == Slot)
+					{
+						Key = (Event == TEXT("attack") || Event == TEXT("activation")) ? S.Cast : Event == TEXT("hit") ? S.Hit
+							: Event == TEXT("impact") ? S.HitLate : Event == TEXT("drive") ? S.Loop : FGameplayTag();
+					}
+				}
+			}
+			if (Key.IsValid())
+			{
+				OutWeapon = EERWeaponType::None;
+				OutKey = Key;
+				return true;
+			}
+		}
 		return false;
 	}
 
@@ -340,6 +384,184 @@ namespace
 		else if (!Pres.AnimLayer)
 		{
 			Stats.Unmatched.Add(FString::Printf(TEXT("%s (레이어 %s 없음 — 만들면 다시 Fill)"), *Pres.GetName(), *LayerName));
+		}
+	}
+
+	/** 메시 이름 → 애셋. 경로(/Game/…)면 그대로. 이름이면 그 스킨 폴더에서 먼저 · 없으면 전체에서 — 같은 이름이 여럿이면 실패 (경로로 적는다). */
+	UObject* FindAttachMesh(const FString& Name, const FString& PreferFolder, FString& OutWhy)
+	{
+		if (Name.StartsWith(TEXT("/")))
+		{
+			UObject* Obj = FSoftObjectPath(Name).TryLoad();
+			OutWhy = Obj ? FString() : FString(TEXT("경로에 애셋이 없다"));
+			return Obj;
+		}
+		TArray<FAssetData> Hits;
+		for (UClass* C : { USkeletalMesh::StaticClass(), UStaticMesh::StaticClass() })
+		{
+			TArray<FAssetData> All;
+			Registry().GetAssetsByClass(C->GetClassPathName(), All);
+			Hits.Append(All.FilterByPredicate([&Name](const FAssetData& A) { return A.AssetName.ToString() == Name; }));
+		}
+		const TArray<FAssetData> Local = Hits.FilterByPredicate([&PreferFolder](const FAssetData& A)
+			{ return !PreferFolder.IsEmpty() && A.PackagePath.ToString().StartsWith(PreferFolder); });
+		const TArray<FAssetData>& Pick = Local.IsEmpty() ? Hits : Local;
+		if (Pick.Num() == 1)
+		{
+			return Pick[0].GetAsset();
+		}
+		// ⚠ 같은 이름 다른 애셋 — 조용히 하나를 고르지 않는다 (메모리 "같은 이름 다른 내용")
+		OutWhy = Pick.IsEmpty() ? FString(TEXT("이 이름의 메시가 없다"))
+			: FString::Printf(TEXT("같은 이름 %d개 (%s · %s …) — 경로로 적는다"), Pick.Num(), *Pick[0].PackageName.ToString(), *Pick[1].PackageName.ToString());
+		return nullptr;
+	}
+
+	/** {"Mesh","Socket","Location":[x,y,z],"Rotation":[pitch,yaw,roll],"Scale":n} 하나 */
+	bool ParseAttachPiece(const TSharedPtr<FJsonObject>& J, const FString& PreferFolder, const FString& Who, FERAttachPiece& Out)
+	{
+		FString MeshName;
+		if (!J.IsValid() || !J->TryGetStringField(TEXT("Mesh"), MeshName) || MeshName.IsEmpty())
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[연출 채우기] 부착 %s — Mesh 칸이 없다"), *Who);
+			return false;
+		}
+		FString Why;
+		Out.Mesh = FindAttachMesh(MeshName, PreferFolder, Why);
+		if (!Out.Mesh)
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[연출 채우기] 부착 %s — 메시 %s: %s"), *Who, *MeshName, *Why);
+			return false;
+		}
+		FString Socket;
+		Out.Socket = J->TryGetStringField(TEXT("Socket"), Socket) && !Socket.IsEmpty() ? FName(*Socket) : FName(NAME_None);
+		auto Vec3 = [&J](const TCHAR* Field)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+			return J->TryGetArrayField(Field, Arr) && Arr->Num() == 3
+				? FVector((*Arr)[0]->AsNumber(), (*Arr)[1]->AsNumber(), (*Arr)[2]->AsNumber()) : FVector::ZeroVector;
+		};
+		const FVector Loc = Vec3(TEXT("Location"));
+		const FVector Rot = Vec3(TEXT("Rotation"));
+		double Scale = 1.0;
+		J->TryGetNumberField(TEXT("Scale"), Scale);
+		Out.Offset = FTransform(FRotator(Rot.X, Rot.Y, Rot.Z), Loc, FVector(Scale));
+		return true;
+	}
+
+	/** 조각 배열 칸 → Out (실패한 조각은 빼고 에러 수를 센다) */
+	void ParseAttachPieces(const TArray<TSharedPtr<FJsonValue>>& Arr, const FString& PreferFolder, const FString& Who, TArray<FERAttachPiece>& Out, int32& Errors)
+	{
+		for (const TSharedPtr<FJsonValue>& PJ : Arr)
+		{
+			FERAttachPiece Piece;
+			if (ParseAttachPiece(PJ->AsObject(), PreferFolder, Who, Piece))
+			{
+				Out.Add(Piece);
+			}
+			else
+			{
+				++Errors;
+			}
+		}
+	}
+
+	/**
+	 * Attach.json 의 이 캐릭터 칸 → 스킨 DA 의 WeaponMeshes · Props (Argument 64). JSON 이 원본이라 **적힌 스킨은 통째로 덮는다** (Force 무관).
+	 * 형식: { "<캐릭터>": { "S0nn": { "Weapons": { "<무기 종류>": [조각…] }, "Props": { "Pres.Prop.*": { "ShowWhile": "<태그>", "Pieces": [조각…] } } } } }
+	 */
+	void FillAttach(const FString& Char, const TArray<TPair<FString, UERSkinData*>>& SkinAssets, const TMap<FString, FString>& SkinFolderOf)
+	{
+		const FString Path = FPaths::Combine(FPaths::ProjectDir(), TEXT("Docs/3_EditorTasks/Data/Attach.json"));
+		FString Text;
+		TSharedPtr<FJsonObject> Root;
+		if (!FFileHelper::LoadFileToString(Text, *Path) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+		{
+			UE_LOG(LogEternalReturn, Warning, TEXT("[연출 채우기] 부착 — %s 를 못 읽었다 (없거나 JSON 오류) · 건너뜀"), *Path);
+			return;
+		}
+		const TSharedPtr<FJsonObject>* CharJ = nullptr;
+		if (!Root->TryGetObjectField(Char, CharJ))
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기] 부착 — Attach.json 에 %s 칸 없음 · 건너뜀"), *Char);
+			return;
+		}
+		const UEnum* WeaponEnum = StaticEnum<EERWeaponType>();
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& SkinKV : (*CharJ)->Values)
+		{
+			if (SkinKV.Key.StartsWith(TEXT("_")))
+			{
+				continue;   // 메모 칸
+			}
+			const TPair<FString, UERSkinData*>* Skin = SkinAssets.FindByPredicate([&SkinKV](const TPair<FString, UERSkinData*>& S) { return S.Key == SkinKV.Key; });
+			const TSharedPtr<FJsonObject> SkinJ = SkinKV.Value->AsObject();
+			if (!Skin || !SkinJ.IsValid())
+			{
+				UE_LOG(LogEternalReturn, Error, TEXT("[연출 채우기] 부착 %s.%s — 스킨 DA 가 없다 (Skins/ 폴더 이름에 %s)"), *Char, *SkinKV.Key, *SkinKV.Key);
+				continue;
+			}
+			UERSkinData* DA = Skin->Value;
+			const FString Folder = SkinFolderOf.FindRef(SkinKV.Key);
+			DA->Modify();
+			DA->WeaponMeshes.Reset();
+			DA->Props.Reset();
+			int32 Errors = 0;
+			const TSharedPtr<FJsonObject>* WeaponsJ = nullptr;
+			if (SkinJ->TryGetObjectField(TEXT("Weapons"), WeaponsJ))
+			{
+				for (const TPair<FString, TSharedPtr<FJsonValue>>& W : (*WeaponsJ)->Values)
+				{
+					if (W.Key.StartsWith(TEXT("_")))
+					{
+						continue;
+					}
+					const int64 Value = WeaponEnum->GetValueByNameString(W.Key);
+					if (Value == INDEX_NONE)
+					{
+						UE_LOG(LogEternalReturn, Error, TEXT("[연출 채우기] 부착 %s — 무기 종류 %s 가 없다 (EERWeaponType 이름)"), *DA->GetName(), *W.Key);
+						++Errors;
+						continue;
+					}
+					ParseAttachPieces(W.Value->AsArray(), Folder, DA->GetName() + TEXT(".") + W.Key,
+						DA->WeaponMeshes.Add(static_cast<EERWeaponType>(Value)).Pieces, Errors);
+				}
+			}
+			const TSharedPtr<FJsonObject>* PropsJ = nullptr;
+			if (SkinJ->TryGetObjectField(TEXT("Props"), PropsJ))
+			{
+				for (const TPair<FString, TSharedPtr<FJsonValue>>& P : (*PropsJ)->Values)
+				{
+					if (P.Key.StartsWith(TEXT("_")))
+					{
+						continue;
+					}
+					const FGameplayTag Key = FGameplayTag::RequestGameplayTag(FName(*P.Key), /*ErrorIfNotFound=*/false);
+					const TSharedPtr<FJsonObject> PropJ = P.Value->AsObject();
+					if (!Key.IsValid() || !PropJ.IsValid())
+					{
+						UE_LOG(LogEternalReturn, Error, TEXT("[연출 채우기] 부착 %s — 소품 키 %s 가 태그가 아니다 (ERGameplayTags 에 Pres.Prop.*)"), *DA->GetName(), *P.Key);
+						++Errors;
+						continue;
+					}
+					FERAttachProp& Prop = DA->Props.Add(Key);
+					FString Show;
+					if (PropJ->TryGetStringField(TEXT("ShowWhile"), Show) && !Show.IsEmpty())
+					{
+						Prop.ShowWhile = FGameplayTag::RequestGameplayTag(FName(*Show), false);
+						if (!Prop.ShowWhile.IsValid())
+						{
+							UE_LOG(LogEternalReturn, Error, TEXT("[연출 채우기] 부착 %s.%s — ShowWhile %s 가 태그가 아니다"), *DA->GetName(), *P.Key, *Show);
+							++Errors;
+						}
+					}
+					const TArray<TSharedPtr<FJsonValue>>* PiecesJ = nullptr;
+					if (PropJ->TryGetArrayField(TEXT("Pieces"), PiecesJ))
+					{
+						ParseAttachPieces(*PiecesJ, Folder, DA->GetName() + TEXT(".") + P.Key, Prop.Pieces, Errors);
+					}
+				}
+			}
+			DA->MarkPackageDirty();
+			UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기] %s 부착 — 무기 %d · 소품 %d · 에러 %d"), *DA->GetName(), DA->WeaponMeshes.Num(), DA->Props.Num(), Errors);
 		}
 	}
 
@@ -498,6 +720,7 @@ namespace
 		Registry().GetSubPaths(CharRoot / TEXT("Skins"), SkinFolders, /*bRecurse=*/false);
 		SkinFolders.Sort();
 		TArray<TPair<FString, UERSkinData*>> SkinAssets;
+		TMap<FString, FString> SkinFolderOf;   // S0nn → 폴더 (부착 메시를 그 스킨 폴더에서 먼저 찾는다)
 		for (const FString& SkinFolder : SkinFolders)
 		{
 			FString SkinId;
@@ -535,8 +758,12 @@ namespace
 			}
 			SkinDA->MarkPackageDirty();
 			SkinAssets.Add({ SkinId, SkinDA });
+			SkinFolderOf.Add(SkinId, SkinFolder);
 		}
 		SkinAssets.Sort([](const TPair<FString, UERSkinData*>& A, const TPair<FString, UERSkinData*>& B) { return A.Key < B.Key; });   // S000 이 0 번
+
+		// 3.2) 부착 — 손 무기 · 소품 (Argument 64 W1 · B1) · 원본 Docs/3_EditorTasks/Data/Attach.json
+		FillAttach(Char, SkinAssets, SkinFolderOf);
 
 		// 3.5) 소리 (F12.5-05 · Argument 49) — Character_FX/<캐릭터>/s000 = 이 캐릭터 전용 → 무기 세트 · s00x = 스킨 전용 → 스킨 DA (무기 칸 채움)
 		//   원작 3층: 무기 기본(SFX/Attack … — FillWeapon) < 캐릭터(s000) < 스킨(s00x). 스킨은 무기 기본과 **같은 파일명 · 다른 내용** (사운드_분류.md)
@@ -590,6 +817,14 @@ namespace
 				{
 					for (const TPair<TPair<EERWeaponType, FGameplayTag>, TArray<UObject*>>& G : Groups)
 					{
+						if (G.Key.Key == EERWeaponType::None)
+						{
+							// 무기 무관 (캐릭터 스킬 소리 · F19-02) → 캐릭터 기본 표
+							Base->Modify();
+							SoundRows += WriteEntry(Base->Entries, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats) ? 1 : 0;
+							Base->MarkPackageDirty();
+							continue;
+						}
 						const FString WeaponName = StaticEnum<EERWeaponType>()->GetNameStringByValue(static_cast<int64>(G.Key.Key));
 						UERPresentationData* Set = FindOrCreate<UERPresentationData>(Folder, FString::Printf(TEXT("DA_Pres_%s_%s"), *Char, *WeaponName), Stats);
 						if (!Set)

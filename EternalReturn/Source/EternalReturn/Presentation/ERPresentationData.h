@@ -14,6 +14,52 @@ class USoundBase;
 #include "ERPresentationData.generated.h"
 
 /**
+ * 붙이는 조각 하나 (Argument 64 W1 · B1) — 무기 · 소품. 각 머신이 자기 화면에만 만든다 (복제 안 함 · 데디 서버는 안 만든다).
+ * ⚠ 손으로 안 채운다 — `ER.Pres.Fill <캐릭터>` 가 `Docs/3_EditorTasks/Data/Attach.json` 에서 넣는다.
+ */
+USTRUCT()
+struct FERAttachPiece
+{
+	GENERATED_BODY()
+
+	/** 스켈레탈 메시 또는 스태틱 메시 */
+	UPROPERTY(EditDefaultsOnly, meta = (AllowedClasses = "/Script/Engine.SkeletalMesh,/Script/Engine.StaticMesh"))
+	TObjectPtr<UObject> Mesh;
+
+	/** 붙일 소켓 · 뼈 (몸 메시 · 발사 바이크는 루트). 비면 원점 */
+	UPROPERTY(EditDefaultsOnly)
+	FName Socket;
+
+	/** 소켓 기준 위치 · 회전 · 크기 (보통은 소켓을 옮겨 맞춘다) */
+	UPROPERTY(EditDefaultsOnly)
+	FTransform Offset;
+};
+
+/** 조각 묶음 — TMap 값으로 쓰려고 (무기 하나 = 조각 여럿일 수 있다: 쌍권총 · 드론) */
+USTRUCT()
+struct FERAttachPieces
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly)
+	TArray<FERAttachPiece> Pieces;
+};
+
+/** 소품 — 태그가 붙은 동안만 몸에 붙는다 (매그너스 R 바이크 = State.Riding) */
+USTRUCT()
+struct FERAttachProp
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditDefaultsOnly)
+	TArray<FERAttachPiece> Pieces;
+
+	/** 이 태그가 있는 동안 몸에 붙인다. 비면 몸에는 안 붙는다 (발사 바이크처럼 다른 액터만 쓴다) */
+	UPROPERTY(EditDefaultsOnly)
+	FGameplayTag ShowWhile;
+};
+
+/**
  * 스킬 몽타주 섹션 이름 (F19-01 K8 · 사용자 2026-10-02 "모든 스킬을 몽타주로 · 한 단계짜리도 통일" · 섹션 이름 Execute).
  *   스킬 하나 = 몽타주 하나 `AM_<캐릭터|종>_<무기>_<동작>`. 코드가 이 이름으로 넘긴다 — 섹션 이름을 **정확히** 이렇게.
  *   - `Execute` 가 있으면 **판정 순간**에 그 섹션으로 (멧돼지 돌진 · 순차 사격은 발마다) · 없으면 처음부터 끝까지 (한 단계 스킬)
@@ -120,4 +166,12 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "연출")
 	TMap<TObjectPtr<USoundBase>, TObjectPtr<USoundBase>> SoundSwaps;
+
+	/** 손에 드는 무기 — 장착 무기 종류마다 (Argument 64 W1). 없는 종류는 아무것도 안 붙는다. ⚠ Fill 이 Attach.json 에서 */
+	UPROPERTY(EditDefaultsOnly, Category = "부착")
+	TMap<EERWeaponType, FERAttachPieces> WeaponMeshes;
+
+	/** 소품 — 키(Pres.Prop.*) → 조각 · 켜는 태그 (Argument 64 B1). ⚠ Fill 이 Attach.json 에서 */
+	UPROPERTY(EditDefaultsOnly, Category = "부착", meta = (Categories = "Pres.Prop"))
+	TMap<FGameplayTag, FERAttachProp> Props;
 };

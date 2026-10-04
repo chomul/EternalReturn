@@ -27,7 +27,8 @@ void UERSkillFragment_Knockback::OnTargetsResolved(FERSkillContext& Ctx, const T
 		{
 			continue;
 		}
-		FVector Dir = bAwayFromCaster ? (Character->GetActorLocation() - Ctx.Avatar->GetActorLocation()) : Ctx.AimDirection;
+		FVector Dir = bCasterLeft ? -Ctx.Avatar->GetActorRightVector()
+			: bAwayFromCaster ? (Character->GetActorLocation() - Ctx.Avatar->GetActorLocation()) : Ctx.AimDirection;
 		Dir.Z = 0.f;
 		if (!Dir.Normalize())
 		{

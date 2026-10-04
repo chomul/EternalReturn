@@ -637,7 +637,7 @@ void UERGameplayAbility::ResolveInstantHits(const UERSkillData& SkillRef, const 
 		//   ⏸ 소유자 공격음 예측은 GAS 예측을 켤 때 (CLAUDE.md §8). 타격음은 예측하지 않는다 — 서버 확정만.
 		if (HasAuthority(&CurrentActivationInfo))
 		{
-			SendPresCues(*Skill, Avatar, Targets, /*bWithAttack=*/ExecOverride == nullptr);
+			SendPresCues(*Skill, Avatar, Targets, /*bWithAttack=*/!bExecutingOther);
 			// 야생동물이 누굴 맞혔다 — 돌아다니는 종(위클라인)은 그 자리가 새 기준 (F12.6-06 · 사용자 2026-10-01)
 			if (!Targets.IsEmpty())
 			{
@@ -662,6 +662,27 @@ void UERGameplayAbility::SendPresCues(const UERSkillData& Skill, AActor* Avatar,
 	Base.EffectCauser = Avatar;
 	Base.SourceObject = &Skill;
 	Base.AggregatedSourceTags.AddTag(Skill.SlotTag);   // 평타 / 스킬 구분 (키 Pres.Sfx.Attack · SkillCast …)
+	// 슬롯 없는 하위 DA (매그너스 R_Explode · R_Launch · E_Wall) — 이 어빌리티 스킬의 슬롯 소리로 (F19-02 · 없으면 무기 공용 소리가 났다)
+	if (!Skill.SlotTag.IsValid())
+	{
+		if (const UERSkillData* Own = GetSkillData())
+		{
+			Base.AggregatedSourceTags.AddTag(Own->SlotTag);
+		}
+	}
+	// 재사용으로 발동 — 받는 쪽이 재사용 소리 키가 있으면 그것으로 (매그너스 R 바이크 발사 · F19-02)
+	if (bActivatedByRecast && bWithAttack)
+	{
+		static const TMap<FGameplayTag, FGameplayTag> RecastOf = {
+			{ ERTags::Ability_Slot_Q, ERTags::Ability_Slot_Q_Recast }, { ERTags::Ability_Slot_W, ERTags::Ability_Slot_W_Recast },
+			{ ERTags::Ability_Slot_E, ERTags::Ability_Slot_E_Recast }, { ERTags::Ability_Slot_R, ERTags::Ability_Slot_R_Recast },
+			{ ERTags::Ability_Slot_D, ERTags::Ability_Slot_D_Recast },
+		};
+		for (const TPair<FGameplayTag, FGameplayTag>& R : RecastOf)
+		{
+			if (Base.AggregatedSourceTags.HasTagExact(R.Key)) { Base.AggregatedSourceTags.AddTag(R.Value); break; }
+		}
+	}
 	Base.RawMagnitude = static_cast<float>(ShotNumber);   // 순차 사격의 몇 번째 발 (카티야 R) — 2 이상이면 받는 쪽이 판정 순간 애니를 다시 튼다. 그 외 0
 	// 이번 평타가 강화를 소비한다 (강화 대기 중 — 소비는 이 뒤 OnTargetsResolved · 투사체 평타는 도착 때) → 받는 쪽이 강화 소리 키로 (카티야 P Reinforce · K8)
 	//   투사체 평타는 쏠 때 대상 목록이 비어 있다 — 그래서 대상 조건 없이 (즉시 평타는 대상이 없으면 발동 자체가 안 된다)
@@ -918,14 +939,17 @@ void UERGameplayAbility::ExecuteOther(const UERSkillData* Other, float Scale, bo
 	// 바깥 실행의 문맥 · 오버라이드를 보존하고 잠시 바꾼다 (2차 판정이 끝나면 원래대로).
 	const UERSkillData* SavedOverride = ExecOverride;
 	const FERSkillContext SavedCtx = ExecCtx;
+	const bool bSavedOther = bExecutingOther;
 
 	ExecOverride = Other;
+	bExecutingOther = true;
 	ExecCtx = MakeContext(Other, Scale);
 	if (bWithExecuteHooks) { RunFragmentsExecute(ExecCtx); }
 	ExecuteSkill();
 
 	ExecOverride = SavedOverride;
 	ExecCtx = SavedCtx;
+	bExecutingOther = bSavedOther;
 }
 
 void UERGameplayAbility::EndFromFragment(bool bCancelled)
@@ -1148,6 +1172,19 @@ bool UERGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Han
 	if (GetAbilityLevel(Handle, ActorInfo) <= 0)
 	{
 		return false;
+	}
+
+	// 탑승 중 (매그너스 R 바이크) — 평타 · 다른 스킬은 막고 **자기 리캐스트 창(재사용 발사)만** 연다.
+	//   차단 태그(State.Block.Skill)로 막으면 R 재사용까지 막힌다 — 리캐스트는 쿨다운만 건너뛰기 때문 (Argument 62).
+	const UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+	if (ASC && ASC->HasMatchingGameplayTag(ERTags::State_Riding))
+	{
+		const UERSkillData* Skill = GetSkillData(Handle, ActorInfo);
+		const FGameplayTag Recast = Skill ? ERSkill::RecastTagForSlot(Skill->SlotTag) : FGameplayTag();
+		if (!Recast.IsValid() || !ASC->HasMatchingGameplayTag(Recast))
+		{
+			return false;
+		}
 	}
 
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
