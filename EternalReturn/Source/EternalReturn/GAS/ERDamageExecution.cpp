@@ -61,6 +61,9 @@ void UERDamageExecution::Execute_Implementation(
 	const float CurHPRatio  = Spec.GetSetByCallerMagnitude(ERTags::Data_Damage_CurHPRatio,  false, 0.f);
 	const float LostHPRatio = Spec.GetSetByCallerMagnitude(ERTags::Data_Damage_LostHPRatio, false, 0.f);
 	const float TargetLostHPScaleMax = Spec.GetSetByCallerMagnitude(ERTags::Data_Damage_TargetLostHPScaleMax, false, 0.f);   // F11-05 D 데드아이
+	const float DamageMultiplier = Spec.GetSetByCallerMagnitude(ERTags::Data_Damage_Multiplier, false, 1.f);   // 조건부 증가 (재키 Q 출혈 최대 +30%)
+	// 중첩 GE (출혈 — 주기 실행은 중첩된 Spec 으로 불린다 · GameplayEffect.cpp:3137). 즉발 피해는 늘 1
+	const int32 Stacks = FMath::Max(1, Spec.GetStackCount());
 
 	// ── 캡처값 ──────────────────────────────────────────────
 	float AttackPower = 0.f;
@@ -284,6 +287,9 @@ void UERDamageExecution::Execute_Implementation(
 			Damage *= 1.f + TakenAmp;
 		}
 
+		// 8-d. 조건부 배율 · 중첩 수 (Argument 65 — 재키 Q · 출혈). 자체 배치 — 원문에 단계 없음
+		Damage *= DamageMultiplier * static_cast<float>(Stacks);
+
 		// 9. 최종 피해 추가 - **보류**. 원본 표기가 `x 최종 피해 추가(%)` 라
 		//    (1+x) 인지 x 배인지 해석이 안 됐다 (§8). 추측해서 넣으면 피해가 배 단위로 틀린다.
 
@@ -320,9 +326,30 @@ void UERDamageExecution::Execute_Implementation(
 		Damage = 0.f;
 	}
 
+	// 체력 하한 (시셀라 R 자해 — 100 아래로 안 떨어진다 · 자해 스펙에만 실린다). 하한이 있는 스펙만 — 어트리뷰트셋은 하한을 모른다 (ClampAttribute 주석)
+	if (const float HPFloor = Spec.GetSetByCallerMagnitude(ERTags::Data_Damage_HPFloor, false, 0.f); HPFloor > 0.f)
+	{
+		float TargetHPNow = 0.f;
+		ExecParams.AttemptCalculateCapturedAttributeMagnitude(S.TargetHPDef, EvalParams, TargetHPNow);
+		const float Allowed = FMath::Max(0.f, TargetHPNow - HPFloor);
+		if (Damage > Allowed)
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[피해] 체력 하한 %.0f — 피해 %.1f → %.1f (체력 %.1f)"), HPFloor, Damage, Allowed, TargetHPNow);
+			Damage = Allowed;
+		}
+	}
+
 	// 음수 피해는 회복이 되어 버린다. 여기서 자른다.
 	// ⚠ 상한(최대 체력 등) 클램프는 여기서 하지 않는다. F02-03 의 PreAttributeChange 가 한다.
 	Damage = FMath::Max(Damage, 0.f);
+
+	// 진단 (재키 출혈 · 2026-10-05) — 도트 틱의 중첩 수 · 계수 · 결과. 2중첩 5.8 → 3중첩 12.9 (2.22배)가 맞는지 본다
+	if (SpecTags.HasTag(ERTags::Damage_Secondary) && Spec.GetPeriod() > 0.f)
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[도트] %s 틱 — 중첩 %d · 기본 %.2f · 공격력 계수 %.3f (공격력 %.1f) · 피해 %.1f"),
+			*GetNameSafe(ExecParams.GetTargetAbilitySystemComponent() ? ExecParams.GetTargetAbilitySystemComponent()->GetAvatarActor() : nullptr),
+			Stacks, Base, APRatio, AttackPower, Damage);
+	}
 
 	if (Damage > 0.f)
 	{

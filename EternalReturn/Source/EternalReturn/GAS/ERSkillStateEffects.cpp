@@ -24,6 +24,12 @@ UERNextAttackBuffInfiniteEffect::UERNextAttackBuffInfiniteEffect()
 	DurationPolicy = EGameplayEffectDurationType::Infinite;
 }
 
+UERTimedTagEffect::UERTimedTagEffect()
+{
+	DurationPolicy = EGameplayEffectDurationType::HasDuration;
+	DurationMagnitude = StateDuration();
+}
+
 UERRecastWindowEffect::UERRecastWindowEffect()
 {
 	DurationPolicy = EGameplayEffectDurationType::HasDuration;

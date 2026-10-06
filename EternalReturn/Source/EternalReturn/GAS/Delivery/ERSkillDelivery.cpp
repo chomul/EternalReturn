@@ -19,6 +19,38 @@
 // ── 즉시 ───────────────────────────────────────────────────
 void UERDelivery_Instant::Deliver(UERGameplayAbility& Ability, const UERSkillData& Skill, const FTargetQuery& Q, const FERShapeContext& Ctx) const
 {
+	UWorld* World = Ctx.Avatar ? Ctx.Avatar->GetWorld() : nullptr;
+	if (!World || !Skill.Area)
+	{
+		return;
+	}
+	// 착지 순간 판정 (재키 E) — 같은 질의를 N초 뒤에. 지연 실행은 아래 즉시 경로를 다시 탄다 (JudgeDelay 0 인 사본처럼)
+	if (JudgeDelay > 0.f && Ability.IsExecAuthority())
+	{
+		TWeakObjectPtr<UERGameplayAbility> WeakAbility(&Ability);
+		TWeakObjectPtr<const UERDelivery_Instant> WeakThis(this);
+		TWeakObjectPtr<const UERSkillData> WeakSkill(&Skill);
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 판정 %.2f초 뒤 (착지)"), *GetNameSafe(&Skill), JudgeDelay);
+		// 시전음은 **지금** (뛰어오를 때 — 재키 Skill03_Jumping · 사용자 2026-10-06 "E 눌렀을 때") · 착지 때는 착지 큐
+		Ability.SendPresCues(Skill, Ability.GetAvatarActorFromActorInfo(), {}, /*bWithAttack=*/true);
+		FTimerHandle Unused;
+		World->GetTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([WeakAbility, WeakThis, WeakSkill, Q, Ctx]()
+		{
+			UERGameplayAbility* A = WeakAbility.Get();
+			const UERDelivery_Instant* Self = WeakThis.Get();
+			const UERSkillData* S = WeakSkill.Get();
+			if (A && Self && S && Ctx.Avatar && IsValid(Ctx.Avatar))
+			{
+				Self->Resolve(*A, *S, Q, Ctx, /*bLanding=*/true);
+			}
+		}), JudgeDelay, false);
+		return;
+	}
+	Resolve(Ability, Skill, Q, Ctx);
+}
+
+void UERDelivery_Instant::Resolve(UERGameplayAbility& Ability, const UERSkillData& Skill, const FTargetQuery& Q, const FERShapeContext& Ctx, bool bLanding) const
+{
 	const UWorld* World = Ctx.Avatar ? Ctx.Avatar->GetWorld() : nullptr;
 	if (!World || !Skill.Area)
 	{
@@ -43,11 +75,19 @@ void UERDelivery_Instant::Deliver(UERGameplayAbility& Ability, const UERSkillDat
 		Result = Skill.Area->Query(World, Q, Ctx);
 		Ability.DebugDrawQuery(Skill, Q, Result);   // ER.Skill.DebugDraw 1
 	}
-	Ability.ResolveInstantHits(Skill, Q, Result);
+	Ability.ResolveInstantHits(Skill, Q, Result, /*bAttackCue=*/!bLanding);
+	if (bLanding)
+	{
+		Ability.SendEventCue(ERTags::GameplayCue_Pres_Land, Skill);   // 착지 소리 (재키 Skill03_Bump) — 맞힌 사람이 없어도
+	}
 }
 
 FString UERDelivery_Instant::Describe() const
 {
+	if (JudgeDelay > 0.f)
+	{
+		return FString::Printf(TEXT("Instant(%.2f초 뒤)"), JudgeDelay);
+	}
 	return FanCount > 1 ? FString::Printf(TEXT("Instant(부채 %d줄 · %.0f°)"), FanCount, FanAngleDeg) : TEXT("Instant");
 }
 
@@ -91,6 +131,10 @@ void UERDelivery_Projectile::Deliver(UERGameplayAbility& Ability, const UERSkill
 		L.HomingTarget = bHoming ? Q.DesignatedTarget.Get() : nullptr;
 		// 따라가는 탄은 사거리 대신 시간 (AERProjectile_Homing) — 대상이 순간이동해도 끝까지 (사용자 2026-10-01 · Argument 60)
 		L.RangeUU = L.HomingTarget ? 0.f : Q.RangeMax * 100.f;
+		if (bStopAtAimPoint && !L.HomingTarget)
+		{
+			L.RangeUU = FMath::Max(1.f, FVector::Dist2D(L.Start, Ctx.AimPoint));
+		}
 		L.bOnlyHomingTarget = bHitOnlyTarget && L.HomingTarget != nullptr;
 		Ability.SpawnProjectile(Skill, ResolveClass(), L, Q, Ability.GetAbilityLevel(), /*ShotIndex=*/-1, bPierce);
 	}

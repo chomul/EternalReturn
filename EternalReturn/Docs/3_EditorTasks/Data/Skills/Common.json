@@ -62,7 +62,8 @@
       "Asset": "DA_Skill_D_Sniper",
       "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
       "Props": {
-        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)",
+        "bNoCastCue": true
       }
     },
     {

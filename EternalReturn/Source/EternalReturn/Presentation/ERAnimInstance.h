@@ -77,6 +77,29 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "모드")
 	TObjectPtr<UAnimSequenceBase> ModeEndAnim;
 
+	/**
+	 * 진입 · 해제 애니가 있나 — 없으면 상태머신이 그 상태를 **건너뛴다** (재키 전기톱: 진입은 R 몽타주 · 해제 애니 없음 · Argument 66).
+	 * BP 노출 이유: 상태머신 전이 규칙이 읽는다. 빈 Sequence Player 상태에 들어가면 T 포즈로 멈춘다 (2026-10-05 PIE).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "모드")
+	bool bModeHasStart = false;
+	UPROPERTY(BlueprintReadOnly, Category = "모드")
+	bool bModeHasEnd = false;
+
+	/**
+	 * 모드 전이 규칙 — 상태머신 전이마다 이것 **하나**를 Can Enter Transition 에 꽂는다 (Fast Path · 에일리어스 · Argument 66).
+	 *   평소(Idle · Run) → ModeStart = bEnterModeStart · 평소 → ModeLoop = bEnterModeLoop
+	 *   모드(ModeStart · ModeLoop) → ModeEnd = bExitModeEnd · 모드 → Idle = bExitModeNone
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "모드|전이")
+	bool bEnterModeStart = false;
+	UPROPERTY(BlueprintReadOnly, Category = "모드|전이")
+	bool bEnterModeLoop = false;
+	UPROPERTY(BlueprintReadOnly, Category = "모드|전이")
+	bool bExitModeEnd = false;
+	UPROPERTY(BlueprintReadOnly, Category = "모드|전이")
+	bool bExitModeNone = false;
+
 	/** 사망 — 상태머신 Dead 상태 (한 번 들어가면 안 나온다). Sequence Player: 반복 끔 · Start Position = DeathStartPosition. */
 	UPROPERTY(BlueprintReadOnly, Category = "상태")
 	bool bDead = false;

@@ -30,6 +30,19 @@ public:
 	UERNextAttackBuffInfiniteEffect();
 };
 
+/**
+ * 태그만 거는 시간 상태 — HasDuration (SetByCaller.StateDuration) · 태그는 Spec 의 DynamicGrantedTags 로 (재키 아드레날린 · Argument 65).
+ * 상태 하나마다 GE 애셋을 만들지 않으려고 — 수치 없이 "이 태그가 N초" 뿐인 상태용.
+ */
+UCLASS()
+class UERTimedTagEffect : public UGameplayEffect
+{
+	GENERATED_BODY()
+
+public:
+	UERTimedTagEffect();
+};
+
 /** 리캐스트 윈도우 — HasDuration. 동적 태그 Recast.Slot.* 가 있는 동안 그 슬롯은 쿨다운을 무시하고 발동된다. */
 UCLASS()
 class UERRecastWindowEffect : public UGameplayEffect

@@ -15,6 +15,9 @@
 #include "EnhancedInputSubsystems.h"
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERGameplayAbility.h"
+#include "GAS/ERAttributeSet.h"
+#include "Combat/ERTargeting.h"
+#include "Core/ERTeamStatics.h"
 #include "GAS/ERSkillData.h"
 #include "NavigationSystem.h"
 #include "Presentation/ERPresentationComponent.h"
@@ -237,6 +240,16 @@ void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
 				*GetNameSafe(Spec.SourceObject.Get()), Spec.Level, Spec.IsActive() ? TEXT(" 활성 중") : TEXT(""), Instance ? TEXT("") : TEXT(" CDO"),
 				bCooldown ? TEXT("OK") : TEXT("✘"), CD ? *CD->ToStringSimple() : TEXT("-"), bCost ? TEXT("OK") : TEXT("✘"), bTags ? TEXT("OK") : TEXT("✘"),
 				*Owned.ToStringSimple());
+			// 진단 (2026-10-05 재키 R 뒤 State.Block.BasicAttack 이 2분 남음 · 클라) — 태그 실패면 아직 활성인 어빌리티 (안 끝난 스킬이 소유 태그를 들고 있나)
+			if (!bTags)
+			{
+				FString Active;
+				for (const FGameplayAbilitySpec& S : ASC->GetActivatableAbilities())
+				{
+					if (S.IsActive()) { Active += FString::Printf(TEXT("%s%s"), Active.IsEmpty() ? TEXT("") : TEXT(", "), *GetNameSafe(S.SourceObject.Get())); }
+				}
+				UE_LOG(LogEternalReturn, Log, TEXT("[입력]   └ 활성 어빌리티 [%s]"), *Active);
+			}
 			return;
 		}
 
@@ -252,7 +265,12 @@ void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
 		//   ⚠ 이동은 **클라가 몬다** (E07) — 그래서 여기(소유 클라)서 멈춘다. 저격 모드 진입은 _Mode 도 멈춘다(중복 무해).
 		//   ⚠ 선판정을 통과했을 때만이다 — 쿨다운 중 연타로 걸음이 끊기면 안 된다.
 		//   돌진 · 도약(_SelfMove)은 ERForcedMove 가 따로 미므로 여기서 멈춰도 영향이 없다.
-		StopMovement();
+		//   예외: 걸으며 쓰는 스킬 (bCastWhileMoving — 시셀라 Q · E · 사용자 2026-10-06)
+		const UERSkillData* PressedSkill = Cast<UERSkillData>(Spec.SourceObject.Get());
+		if (!PressedSkill || !PressedSkill->bCastWhileMoving)
+		{
+			StopMovement();
+		}
 
 		FGameplayAbilityTargetDataHandle Aim;
 		FHitResult Hit;
@@ -330,6 +348,12 @@ void AERPlayerController::PlayerTick(float DeltaTime)
 	if (PreviewSlot.IsValid() && IsLocalController())
 	{
 		DrawSkillPreview();
+	}
+
+	// 자동 공격 (Argument 67 A1) — 대상이 있을 때만 (평소엔 비용 0) · 소유 클라만
+	if (bAutoAttacking && IsLocalController())
+	{
+		TickAutoAttack();
 	}
 
 	// ⭐ Tick 을 쓰는 이유: 가장자리 스크롤은 마우스 **위치**에 반응하므로
@@ -526,9 +550,24 @@ void AERPlayerController::OnMoveToCursor()
 	// 탑승 중 (매그너스 R 바이크) — 경로를 시작하지 않고 조종 목표만 바꾼다 (누누 · 사용자 2026-10-03 · Argument 62 V3)
 	if (UERRideComponent* Ride = GetPawn() ? GetPawn()->FindComponentByClass<UERRideComponent>() : nullptr; Ride && Ride->IsSteering())
 	{
+		SetAttackTarget(nullptr, TEXT("탑승"));
 		Ride->SetSteerTarget(Hit.ImpactPoint);
 		return;
 	}
+
+	// 자동 공격 (Argument 67 A1) — 커서 아래 살아 있는 적(실험체 · 야생동물)이면 대상으로. 이동 · 평타는 PlayerTick 이 한다
+	//   Select 채널 — 평타 조준과 같은 이유 (캡슐 · 히트박스가 막는다 · E13)
+	{
+		FHitResult ActorHit;
+		AActor* Clicked = GetHitResultUnderCursor(ERCollisionChannel::Select, /*bTraceComplex=*/false, ActorHit) ? ActorHit.GetActor() : nullptr;
+		const UAbilitySystemComponent* ClickedASC = Clicked ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Clicked) : nullptr;
+		if (ClickedASC && GetPawn() && ERTeamStatics::IsHostile(GetPawn(), Clicked) && ClickedASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 0.f)
+		{
+			SetAttackTarget(Clicked, TEXT("적 우클릭"));
+			return;
+		}
+	}
+	SetAttackTarget(nullptr, TEXT("바닥 클릭"));
 
 	// ⭐ **클라도 투영한다.** 예전에는 원본 클릭 지점으로 바로 움직여서,
 	//   상자를 클릭하면 클라와 서버가 서로 다른 곳으로 갔다.
@@ -655,4 +694,139 @@ void AERPlayerController::StartMoveTo(const FVector& Destination)
 	// ⭐ 엔진이 주는 것을 쓴다. 자체 경로 추적을 만들지 않는다 (CLAUDE.md §1).
 	//   SimpleMoveToLocation 은 AIController 를 요구하지 않는다 (역기획서 §2.1).
 	UAIBlueprintHelperLibrary::SimpleMoveToLocation(this, Destination);
+}
+
+void AERPlayerController::SetAttackTarget(AActor* Target, const TCHAR* Why)
+{
+	if (!Target && !bAutoAttacking)
+	{
+		return;   // 바닥 클릭마다 로그하지 않는다
+	}
+	if (Target)
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[자동공격] 대상 %s 설정 (%s)"), *GetNameSafe(Target), Why);
+	}
+	else
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[자동공격] 해제 — %s (대상 %s)"), Why, *GetNameSafe(AttackTarget.Get()));
+		if (bChasing)
+		{
+			StopMovement();
+		}
+	}
+	AttackTarget = Target;
+	bAutoAttacking = Target != nullptr;
+	bChasing = false;
+	LastChaseTime = -1.f;
+	LastAttackRequestTime = -1.f;
+}
+
+void AERPlayerController::TickAutoAttack()
+{
+	APawn* Me = GetPawn();
+	AActor* Target = AttackTarget.Get();
+	const UAbilitySystemComponent* MyASC = Me ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Me) : nullptr;
+	const UAbilitySystemComponent* TargetASC = Target ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target) : nullptr;
+	if (!Me || !MyASC || MyASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) <= 0.f)
+	{
+		SetAttackTarget(nullptr, TEXT("내 사망"));
+		return;
+	}
+	if (!Target || !TargetASC || TargetASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) <= 0.f || !ERTeamStatics::IsHostile(Me, Target))
+	{
+		SetAttackTarget(nullptr, TEXT("대상 사망 · 사라짐"));
+		return;
+	}
+	if (UERRideComponent* Ride = Me->FindComponentByClass<UERRideComponent>(); Ride && Ride->IsSteering())
+	{
+		SetAttackTarget(nullptr, TEXT("탑승"));
+		return;
+	}
+
+	// 평타를 휘두르는 동안(선딜 · 후딜)은 따라가지 않는다 — 대상이 조금 벗어나자마자 추적하면 이동이 휘두르던 평타를 끊었다 (2026-10-06 로그 16:53:47 "모션 끊음")
+	//   평타가 끝나면 다음 틱에 추적 · 다시 평타 (LoL 도 공격 동작은 끝까지 친다)
+	{
+		const FGameplayTag AttackSlot = ResolveModeSlot(*MyASC, ERTags::Ability_Slot_Attack);
+		for (const FGameplayAbilitySpec& Spec : MyASC->GetActivatableAbilities())
+		{
+			if (Spec.DynamicAbilityTags.HasTagExact(AttackSlot) && Spec.IsActive())
+			{
+				return;
+			}
+		}
+	}
+
+	// 사거리 — 평타 판정과 같은 거리 함수 · 같은 어트리뷰트 (서버와 "사거리 안" 이 같게)
+	const float RangeUU = MyASC->GetNumericAttribute(UERAttributeSet::GetAttackRangeAttribute()) * 100.f;
+	const float Dist = ERTargeting::SingleTargetDistance(Me, Me->GetActorLocation(), Target, /*bIgnoreZ=*/true);
+	const float Now = GetWorld()->GetTimeSeconds();
+	// 경계에서 추적 ↔ 멈춤이 번갈아 나지 않게 — 추적 중엔 사거리보다 25cm 안쪽까지 들어가서 멈춘다 `[자체]` (2026-10-06 로그 "7.0m · 사거리 7.0m" 반복)
+	const bool bOutOfRange = bChasing ? Dist > RangeUU - 25.f : Dist > RangeUU;
+	if (bOutOfRange)
+	{
+		// 추적 — 클릭 이동과 같은 길 (클라 먼저 · 서버 검증). 0.25초마다 · 대상이 50cm 넘게 움직였을 때만 다시 길찾기 `[자체]`
+		if (IsMovementBlockedByCC())
+		{
+			return;
+		}
+		const FVector Goal = Target->GetActorLocation();
+		if (!bChasing || (Now - LastChaseTime >= 0.25f && FVector::Dist2D(Goal, LastChaseGoal) > 50.f))
+		{
+			FVector Destination;
+			if (ResolveNavigableDestination(Goal, Destination))
+			{
+				StartMoveTo(Destination);
+				ServerSetDestination(Goal);
+				if (!bChasing)
+				{
+					UE_LOG(LogEternalReturn, Log, TEXT("[자동공격] 사거리 밖 — 추적 %s (%.1fm · 사거리 %.1fm)"), *GetNameSafe(Target), Dist / 100.f, RangeUU / 100.f);
+				}
+				bChasing = true;
+				LastChaseGoal = Goal;
+				LastChaseTime = Now;
+			}
+		}
+		return;
+	}
+
+	// 사거리 안 — 멈추고 평타 (준비되면). 스킬 중 · CC 중엔 선판정이 막아 기다린다 → 끝나면 다시 친다 (사용자 "재개")
+	// 추적이 아니어도 멈춘다 — 바닥 클릭으로 가던 중 사거리 안의 적을 우클릭하면 이전 길을 계속 가며 평타가 나갔다 (2026-10-06 로그 07:50:12 · 사용자 "이동하면서 공격이 나간 거 같다")
+	if (bChasing || Me->GetVelocity().SizeSquared2D() > 1.f)
+	{
+		StopMovement();
+		bChasing = false;
+	}
+	if (Now - LastAttackRequestTime >= 0.2f && RequestAttackOn(Target))
+	{
+		LastAttackRequestTime = Now;
+	}
+}
+
+bool AERPlayerController::RequestAttackOn(AActor* Target)
+{
+	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPawn());
+	if (!ASC || !Target)
+	{
+		return false;
+	}
+	const FGameplayTag SlotTag = ResolveModeSlot(*ASC, ERTags::Ability_Slot_Attack);
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (!Spec.Ability || !Spec.DynamicAbilityTags.HasTagExact(SlotTag))
+		{
+			continue;
+		}
+		// 평타 키와 같은 선판정 (인스턴스 · E12) — 실패는 조용히 (쿨 · 스킬 중 · CC — 매 틱 묻는다)
+		const UGameplayAbility* Instance = Spec.GetPrimaryInstance();
+		const UGameplayAbility* Checker = Instance ? Instance : Spec.Ability.Get();
+		if (!Checker->CanActivateAbility(Spec.Handle, ASC->AbilityActorInfo.Get()))
+		{
+			return false;
+		}
+		const FHitResult Hit(Target, nullptr, Target->GetActorLocation(), FVector::UpVector);
+		ServerActivateSkill(SlotTag, UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(Hit));
+		UE_LOG(LogEternalReturn, Verbose, TEXT("[자동공격] 평타 요청 -> %s"), *GetNameSafe(Target));
+		return true;
+	}
+	return false;
 }

@@ -4,17 +4,46 @@
 
 #include "AbilitySystemComponent.h"
 #include "EternalReturn.h"
+#include "GAS/ERBleedEffect.h"
 #include "GAS/ERGameplayAbility.h"
+#include "GAS/ERGameplayTags.h"
 #include "GAS/ERSkillData.h"
+
+namespace
+{
+	void ReduceCooldown(FERSkillContext& Ctx, const FGameplayTagContainer& CooldownTags, float Sec);
+}
 
 void UERSkillFragment_CooldownOnHit::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
 {
-	if (!Ctx.bAuthority || Targets.IsEmpty() || !Ctx.ASC || !Ctx.Ability)
+	if (bFromHitEvent || !Ctx.bAuthority || Targets.IsEmpty() || !Ctx.ASC || !Ctx.Ability)
 	{
 		return;
 	}
-	const float Sec = UERSkillData::LevelValue(Seconds, Ctx.Level);
-	const FGameplayTagContainer& CooldownTags = Ctx.Ability->GetCooldownTagsForFragment();
+	ReduceCooldown(Ctx, CooldownTags.IsEmpty() ? Ctx.Ability->GetCooldownTagsForFragment() : CooldownTags, UERSkillData::LevelValue(Seconds, Ctx.Level));
+}
+
+void UERSkillFragment_CooldownOnHit::OnHitDealt(FERSkillContext& Ctx, AActor* Target, const FGameplayTagContainer& HitTags) const
+{
+	if (!bFromHitEvent || !Ctx.bAuthority || !Ctx.ASC || CooldownTags.IsEmpty())
+	{
+		return;
+	}
+	if (bBasicAttackOnly && !HitTags.HasTag(ERTags::Damage_Type_BasicAttack))
+	{
+		return;
+	}
+	if (bRequireTargetMaxBleed && UERBleedEffect::GetStacks(Target, Ctx.ASC) < UERBleedEffect::MaxStacks)
+	{
+		return;
+	}
+	ReduceCooldown(Ctx, CooldownTags, UERSkillData::LevelValue(Seconds, Ctx.Level));
+}
+
+namespace
+{
+void ReduceCooldown(FERSkillContext& Ctx, const FGameplayTagContainer& CooldownTags, float Sec)
+{
 	if (Sec <= 0.f || CooldownTags.IsEmpty())
 	{
 		return;
@@ -24,8 +53,9 @@ void UERSkillFragment_CooldownOnHit::OnTargetsResolved(FERSkillContext& Ctx, con
 	{
 		Ctx.ASC->ModifyActiveEffectStartTime(H, -Sec);
 		const FActiveGameplayEffect* E = Ctx.ASC->GetActiveGameplayEffect(H);
-		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 적중 — 쿨다운 −%.1f초 (남은 %.1f초)"),
-			*GetNameSafe(Ctx.Ability->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), Sec,
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 적중 — %s 쿨다운 −%.1f초 (남은 %.1f초)"),
+			*GetNameSafe(Ctx.Avatar), *GetNameSafe(Ctx.Skill), *CooldownTags.ToStringSimple(), Sec,
 			E ? E->GetTimeRemaining(Ctx.ASC->GetWorld()->GetTimeSeconds()) : -1.f);
 	}
 }
+}   // namespace

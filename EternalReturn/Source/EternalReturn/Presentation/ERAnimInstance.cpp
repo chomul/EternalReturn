@@ -18,6 +18,14 @@ namespace
 		const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Owner);
 		return ASC && ASC->HasMatchingGameplayTag(ERTags::State_AnimHold);
 	}
+
+	/** 상체 슬롯만 쓰는 몽타주 — 다리는 걷기라 움직여도 끊지 않는다 (시셀라 Q · Argument 69) */
+	bool IsUpperBodyOnly(const UAnimMontage* M)
+	{
+		static const FName Upper(TEXT("UpperBody"));
+		static const FName Full(TEXT("DefaultSlot"));
+		return M && M->IsValidSlot(Upper) && !M->IsValidSlot(Full);
+	}
 }
 
 void UERAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
@@ -35,7 +43,14 @@ void UERAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		ModeIdleAnim = PendingModeAnims[1];
 		ModeRunAnim = PendingModeAnims[2];
 		ModeEndAnim = PendingModeAnims[3];
+		bModeHasStart = ModeStartAnim != nullptr;
+		bModeHasEnd = ModeEndAnim != nullptr;
 	}
+	// 전이 규칙용 — 규칙 그래프가 변수 하나만 읽게 (AND · NOT 노드가 있으면 Fast Path 를 못 탄다 · 2026-10-05 컴파일 경고)
+	bEnterModeStart = bInMode && bModeHasStart;
+	bEnterModeLoop = bInMode && !bModeHasStart;
+	bExitModeEnd = !bInMode && bModeHasEnd;
+	bExitModeNone = !bInMode && !bModeHasEnd;
 	// ⭐ 동작 몽타주(평타 · 스킬 · 채집 …)는 **움직이면 끊는다** — 모든 머신이 자기 화면 속도로 (Argument 48 ③ M1).
 	//   · 몽타주가 시작된 뒤 한 번 멈춘 적이 있어야 끊는다 — 도착하며 감속 중에 시작한 평타 · 복제 지연된 시뮬레이티드 프록시가 바로 끊기지 않게
 	//   · 루트모션 소스(자기 이동 돌진 · 블링크 · 넉백) 중에는 안 끊는다 — 그 이동은 스킬의 일부다. 모든 머신에 소스가 있다 (ERForcedMove Multicast)
@@ -54,7 +69,7 @@ void UERAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 			bWatchedSeenStill = true;
 		}
 		// · 모션 유지 태그(State.AnimHold — 매그너스 W 장판 동안 · Argument 63 M1) 중에는 안 끊는다. 복제 loose 태그라 모든 머신에 있다
-		else if (bWatchedSeenStill && !(Move && Move->HasRootMotionSources()) && !HasAnimHold(Owner))
+		else if (bWatchedSeenStill && !(Move && Move->HasRootMotionSources()) && !IsUpperBodyOnly(Current) && !HasAnimHold(Owner))
 		{
 			Montage_Stop(MoveStopBlendOut, Current);
 			WatchedMontage = nullptr;

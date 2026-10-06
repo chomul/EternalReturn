@@ -2,6 +2,7 @@
 
 #include "Core/ERPlayerState.h"
 #include "AbilitySystemComponent.h"
+#include "Abilities/GameplayAbilityTypes.h"
 #include "GAS/ERCCLibrary.h"
 #include "GAS/ERAttributeSet.h"
 #include "EternalReturn.h"
@@ -133,6 +134,19 @@ void AERPlayerState::BeginPlay()
 				if (const AERPlayerState* KillerPS = Cast<AERPlayerState>(Killer); KillerPS && KillerPS != this && KillerPS->GetGrowth())
 				{
 					KillerPS->GetGrowth()->OnPlayerKilled(Growth ? Growth->GetLevel() : 1);
+				}
+
+				// ⭐ 처치 이벤트 → 처치자 ASC (재키 P · E · R "처치 관여" · Argument 65). 지금은 **막타** — 어시스트는 F14 (관여자 목록)
+				if (AERPlayerState* KillerPS = Cast<AERPlayerState>(Killer); KillerPS && KillerPS != this)
+				{
+					if (UAbilitySystemComponent* KillerASC = KillerPS->GetAbilitySystemComponent())
+					{
+						FGameplayEventData Kill;
+						Kill.EventTag = ERTags::Event_Kill_Dealt;
+						Kill.Instigator = KillerPS->GetPawn();
+						Kill.Target = GetPawn();
+						KillerASC->HandleGameplayEvent(ERTags::Event_Kill_Dealt, &Kill);
+					}
 				}
 			});
 

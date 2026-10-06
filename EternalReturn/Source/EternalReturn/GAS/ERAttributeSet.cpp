@@ -6,6 +6,7 @@
 #include "GameplayEffectExtension.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "GAS/ERGameplayTags.h"
+#include "EternalReturn.h"   // LogEternalReturn (보호막 로그)
 #include "Net/UnrealNetwork.h"
 
 UERAttributeSet::UERAttributeSet()
@@ -31,6 +32,10 @@ void UERAttributeSet::ClampAttribute(const FGameplayAttribute& Attribute, float&
 	else if (Attribute == GetVPAttribute())
 	{
 		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxVP());
+	}
+	else if (Attribute == GetShieldAttribute())
+	{
+		NewValue = FMath::Max(NewValue, 0.f);
 	}
 	else if (Attribute == GetMaxHPAttribute() || Attribute == GetMaxVPAttribute())
 	{
@@ -122,7 +127,7 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 		return;
 	}
 
-	const float Damage = GetIncomingDamage();
+	float Damage = GetIncomingDamage();
 
 	// ⭐ 통로를 반드시 비운다. 안 비우면 다음 피해에 이전 값이 남아 중복으로 들어간다.
 	SetIncomingDamage(0.f);
@@ -130,6 +135,16 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 	if (Damage <= 0.f)
 	{
 		return;
+	}
+
+	// 보호막 먼저 (Argument 68 S1) — 다 막아도 적중은 적중이다 (적중 이벤트 · 숙련도는 그대로 간다)
+	if (const float Shielded = GetShield(); Shielded > 0.f)
+	{
+		const float Absorbed = FMath::Min(Shielded, Damage);
+		SetShield(Shielded - Absorbed);
+		UE_LOG(LogEternalReturn, Log, TEXT("[보호막] %s 피해 %.1f 중 %.1f 막음 → 남은 보호막 %.1f · HP 로 %.1f"),
+			*GetNameSafe(GetOwningActor()), Damage, Absorbed, GetShield(), Damage - Absorbed);
+		Damage -= Absorbed;
 	}
 
 	// 하한은 0 이다. "시셀라 R 은 100 아래로 안 떨어진다" 같은 규칙은 여기 없다 —
@@ -142,8 +157,11 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 
 	// ⭐ 가해자에게 "적중" 이벤트 (Argument 61 E1 · 매그너스 근성 등 패시브가 듣는다). 자해는 제외.
 	//   여러 명을 한 번에 맞히면 대상마다 한 번씩 — 원작 12.0 "맞힌 수만큼" 과 같은 결과
+	// ⚠ 부가 피해(출혈 틱 · 아드레날린 추가 피해)는 보내지 않는다 — 보내면 출혈이 출혈을 영원히 갱신한다 (Argument 65)
+	FGameplayTagContainer DamageAssetTags;
+	Data.EffectSpec.GetAllAssetTags(DamageAssetTags);
 	if (UAbilitySystemComponent* SourceASC = Data.EffectSpec.GetEffectContext().GetOriginalInstigatorAbilitySystemComponent();
-		SourceASC && SourceASC != Data.Target.AbilityActorInfo->AbilitySystemComponent.Get())
+		SourceASC && SourceASC != Data.Target.AbilityActorInfo->AbilitySystemComponent.Get() && !DamageAssetTags.HasTag(ERTags::Damage_Secondary))
 	{
 		FGameplayEventData Hit;
 		Hit.EventTag = ERTags::Event_Hit_Dealt;
@@ -271,6 +289,7 @@ void UERAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 	ER_REP(ModeDamageUp);
 	ER_REP(ModeDamageDown);
+	ER_REP(Shield);
 
 #undef ER_REP
 }
@@ -322,5 +341,6 @@ ER_ONREP(OutOfCombatRegen)
 
 ER_ONREP(ModeDamageUp)
 ER_ONREP(ModeDamageDown)
+ER_ONREP(Shield)
 
 #undef ER_ONREP

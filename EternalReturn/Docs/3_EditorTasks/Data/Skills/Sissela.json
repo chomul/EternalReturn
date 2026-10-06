@@ -1,0 +1,306 @@
+{
+  "_설명": "ER.Skill.ImportJson Sissela — 형식은 Katja.json · Jackie.json 과 같다. 근거 Docs/0_GameDesign/Characters/05_시셀라.md §3 게임 툴팁 (사용자 2026-10-06) · §6.2 사용자 결정 · Argument 68 W1 · P1 · S1. 1단계 P · 2단계 Q · W · E · R (2026-10-06). D 는 무기 공용 (Common.json DA_Skill_D_Shuriken · Throw — F11-05 C 에서 툴팁 값으로 만들었다). 윌슨은 코드 액터(AERWilson) · 보호막은 ERShield.",
+  "Folder": "/Game/ERCharacter/CharData/Skill/Sissela",
+  "Character": "DA_Char_Sissela",
+  "Skills": [
+    {
+      "Asset": "DA_Skill_Sissela_P",
+      "_메모": "P 삶은 고통이에요 — 현재 체력이 낮을수록 초당 회복 2~10 / 4~20 / 6~30 · 스킬 증폭 4~28 / 7~39 / 10~50 (잃은 체력에 정비례 [자체] · 사용자 2026-10-06) · 윌슨과 하나가 될 때(줍기 · 거리 복귀 · E · W) 다음 평타 강화 장전: 추가 스킬 피해 30 + 스킬 증폭 45% + 실험체 레벨 × 9 · 이속 −10/20/30% 2초 · 강화 평타를 쓰면 쿨 2초 (쿨 중 합침은 무시 · 사용자 2026-10-06). R 뒤 +100% 는 R 단계에서 (같은 효과 하나 더)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.P\")",
+        "AbilityClass": "/Script/EternalReturn.ERPassiveAbility",
+        "MaxLevel": 3,
+        "InitialLevel": 1,
+        "Cooldowns": "(2,2,2)",
+        "CastTime": 0
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_LostHPStats",
+          "Props": {
+            "RegenMin": "(2,4,6)",
+            "RegenMax": "(10,20,30)",
+            "SkillAmpMin": "(4,7,10)",
+            "SkillAmpMax": "(28,39,50)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_EventAttackBuff",
+          "Props": {
+            "EventTag": "(TagName=\"Event.Wilson.Joined\")"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(30)",
+            "SkillAmpRatio": "(0.45)",
+            "PerCharLevel": "(9)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(2)",
+            "SlowPercent": "(0.1,0.2,0.3)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Sissela_Q_Land",
+      "_메모": "Q 도착 범위 — 80/115/150/185/220 (+스증 65%). 날아간 윌슨이 착지할 때 반경 2m [자체] 안 적에게 (투사체 AERProjectile_Wilson 이 쓴다)",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(80,115,150,185,220)",
+            "SkillAmpRatio": "(0.65)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Sissela_Q",
+      "_메모": "Q 윌슨! 도와줘 — 체력 40 · 쿨 8→4 · 사거리 1~7.5m (조준점까지 날아감) · 경로 40~80 (+스증 35%) · 도착 범위 80~220 (+65%) → 윌슨이 그 자리에 남는다. 속도 15 m/s · 반경 0.5 · 착지 반경 2m · 선딜 0 은 [자체] (원작 미확인). 윌슨이 떨어져 있으면 **그 자리에서** 조준점으로 날아간다 (조준점은 시셀라 기준 사거리 안 — 오리아나 Q · 사용자 2026-10-06). E 로 끌려가는 중이면 착지 자리까지 다시 끌림 (결정 7) · 걸으며 쓴다 (bCastWhileMoving · 상체 몽타주 — 사용자 2026-10-06) · 날아가는 속도 15 → 12 m/s (사용자 2026-10-06 \"조금 낮추면\")",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.Q\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(8,7,6,5,4)",
+        "CastTime": 0,
+        "CostType": "HP",
+        "Costs": "(40,40,40,40,40)",
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)",
+        "bCastWhileMoving": true
+      },
+      "Area": {
+        "Type": "Line",
+        "Props": {
+          "Length": 7.5,
+          "Width": 1.0,
+          "MinReach": 1
+        }
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Single",
+          "Speed": 12,
+          "Radius": 0.5,
+          "bPierce": true,
+          "bStopAtAimPoint": true,
+          "ProjectileClass": "/Script/EternalReturn.ERProjectile_Wilson"
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_WilsonThrow",
+          "Props": {
+            "LandSkill": "@DA_Skill_Sissela_Q_Land",
+            "LandRadius": 2
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(40,50,60,70,80)",
+            "SkillAmpRatio": "(0.35)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Sissela_W_Burst",
+      "_메모": "W 터짐 — 시셀라 주변 2m 100/135/170/205/240 (+스증 80%)",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 2
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(100,135,170,205,240)",
+            "SkillAmpRatio": "(0.8)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Sissela_W",
+      "_메모": "W 어디있어 윌슨? — 체력 50~90 · 쿨 17→13 · 1.5초 피해 면역 (CC 는 받음) · 이속 +15% · 윌슨이 떨어져 있으면 합침 (붙어 있으면 장전 없음 · 결정 4) · 피해 면역이 끝나면 터짐 → 주변 2m 100~240 (+스증 80%) (다시 눌러 터뜨리기 없음 · 사용자 2026-10-06)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.W\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(17,16,15,14,13)",
+        "CastTime": 0,
+        "CostType": "HP",
+        "Costs": "(50,60,70,80,90)",
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_WilsonJoin",
+          "Props": {}
+        },
+        {
+          "Class": "ERSkillFragment_Bubble",
+          "Props": {
+            "Duration": 1.5,
+            "MoveSpeedEffect": "@GE_Wild_MoveSpeedUp",
+            "MoveSpeedMagnitude": "(1.15)",
+            "BurstSkill": "@DA_Skill_Sissela_W_Burst"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Sissela_E",
+      "_메모": "E 나랑 놀자 — 쿨 11/10.5/10/9.5/9 · 5.5m × 1.1m · 15 m/s · 윌슨이 떨어져 있으면 윌슨 자리에서 커서 쪽으로 · 적 적중 110~170 (+스증 70%) · 기절 0.6초 · 윌슨(또는 시셀라) 쪽으로 끌어옴 · 시셀라 적중 → 윌슨에게 끌려감 → 합침 · 보호막 60~240 (+스증 20%) 2.5초 · 쿨 −2초 · 날아가는 몸 · 끌려가는 대상 모두 벽을 넘는다 (사용자 2026-10-06). 끄는 속도 7 m/s (15 는 너무 빨랐다 · 사용자 2026-10-06) · 1m 앞에서 멈춤 [자체] · 걸으며 쓴다 (bCastWhileMoving · 상체 몽타주 — 사용자 2026-10-06) · 날아가는 속도 15 → 12 m/s (사용자 2026-10-06 \"조금 낮추면\")",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.E\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(11,10.5,10,9.5,9)",
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)",
+        "bCastWhileMoving": true
+      },
+      "Area": {
+        "Type": "Line",
+        "Props": {
+          "Length": 5.5,
+          "Width": 1.1
+        }
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Single",
+          "Speed": 12,
+          "Radius": 0.55,
+          "bPierce": false,
+          "ProjectileClass": "/Script/EternalReturn.ERProjectile_WilsonTether"
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_WilsonTether",
+          "Props": {
+            "PullSpeed": 7,
+            "PullStopShort": 1,
+            "ShieldBase": "(60,105,150,195,240)",
+            "ShieldSkillAmpRatio": "(0.2)",
+            "ShieldDuration": 2.5,
+            "SelfHitCooldownCut": 2
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(110,125,140,155,170)",
+            "SkillAmpRatio": "(0.7)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Stun",
+            "Duration": "(0.6)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Sissela_R",
+      "_메모": "R 모두 해방이에요 — 쿨 90/80/70 · 1초 정신 집중 (CastTime) → 3초 뒤 (JudgeDelay) 반경 20m 적 실험체 + 자신 150/200/250 (+스증 95%) + 시셀라 잃은 체력 1%당 2/2/3 · 자신은 체력 100 아래로 안 떨어짐 · 뒤 7/8/9초 패시브 +100% (결정 8 — 야생동물 제외) · 소리: 누를 때 Skill04_Start · 집중 끝 Skill04_Count 한 번 · 판정 Skill04_Explosion (착지 큐) — 시전 큐는 끔 (Audio/Sissela.md · 사용자 2026-10-06)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.R\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 3,
+        "InitialLevel": 0,
+        "MinCharacterLevel": "(6,11,16)",
+        "Cooldowns": "(90,80,70)",
+        "CastTime": 1,
+        "Targets": "(Team=Enemy,bPlayersOnly=True,MaxTargets=0,AimAssistRadius=0)",
+        "bNoCastCue": true
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 20
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {
+          "JudgeDelay": 3
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "CastStartSfx": "(TagName=\"Pres.Sfx.SkillCast.R\")",
+            "ExecuteSfx": "(TagName=\"Pres.Sfx.SkillCount.R\")"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(150,200,250)",
+            "SkillAmpRatio": "(0.95)",
+            "PerCasterLostHPPercent": "(2,2,3)",
+            "bIncludeSelf": true,
+            "SelfHPFloor": 100
+          }
+        },
+        {
+          "Class": "ERSkillFragment_PassiveBoost",
+          "Props": {
+            "PassiveSkill": "@DA_Skill_Sissela_P",
+            "Duration": "(7,8,9)"
+          }
+        }
+      ]
+    }
+  ]
+}

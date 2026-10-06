@@ -26,6 +26,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0.01"))
 	float Window = 3.f;
 
+	/** 레벨별 창 길이 — 있으면 Window 대신 (재키 R 8/9/10 = R 지속 · Argument 65 R1) */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> WindowByLevel;
+
 	UPROPERTY(EditDefaultsOnly)
 	TObjectPtr<UERSkillData> RecastSkill;
 

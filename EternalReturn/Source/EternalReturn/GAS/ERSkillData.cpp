@@ -496,6 +496,11 @@ bool LevelUpSkill(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int
 
 	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s %s -> Lv.%d/%d"),
 		*GetNameSafe(ASC->GetOwnerActor()), *GetNameSafe(Skill), Found->Level, Skill->MaxLevel);
+	// 패시브의 상시 효과는 레벨 값으로 걸려 있다 — 다시 건다 (시셀라 P · Argument 68)
+	if (UERPassiveAbility* Passive = Cast<UERPassiveAbility>(Found->GetPrimaryInstance()))
+	{
+		Passive->RefreshPassive();
+	}
 	return true;
 }
 

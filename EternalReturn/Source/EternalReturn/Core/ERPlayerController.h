@@ -61,6 +61,22 @@ private:
 	/** 미리보기 그리기 (PlayerTick) */
 	void DrawSkillPreview();
 
+	// ── 자동 공격 (Argument 67 A1 · 사용자 2026-10-05 "적 우클릭 = 사거리까지 다가가 평타를 계속") — 소유 클라만 ──
+	//   사거리 밖이면 클릭 이동과 같은 길로 따라가고 · 안이면 평타 키와 같은 요청을 보낸다. 서버는 요청마다 지금처럼 검사한다 (새 복제 없음).
+	/** 대상 설정 · 해제 (null). 해제 이유는 로그용 */
+	void SetAttackTarget(AActor* Target, const TCHAR* Why);
+	/** 매 틱 — 대상 확인 · 추적 · 평타 요청 */
+	void TickAutoAttack();
+	/** 평타 요청 — 선판정(조용히) 통과면 서버로. 평타 키와 같은 RPC */
+	bool RequestAttackOn(AActor* Target);
+	TWeakObjectPtr<AActor> AttackTarget;
+	bool bAutoAttacking = false;
+	bool bChasing = false;
+	FVector LastChaseGoal = FVector::ZeroVector;
+	float LastChaseTime = -1.f;
+	/** 같은 평타를 핑 동안 여러 번 보내지 않게 (쿨다운 복제 전) `[자체]` */
+	float LastAttackRequestTime = -1.f;
+
 	/**
 	 * [클라 -> 서버] 슬롯 스킬 발동 요청 + 조준 (F07-05).
 	 *

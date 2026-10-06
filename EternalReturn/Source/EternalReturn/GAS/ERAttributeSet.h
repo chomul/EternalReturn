@@ -320,6 +320,16 @@ public:
 	FGameplayAttributeData ModeDamageDown;
 	ATTRIBUTE_ACCESSORS(UERAttributeSet, ModeDamageDown)
 
+	// ── 보호막 (F19-04 시셀라 E · Argument 68 S1) ────────────
+	/**
+	 * 남은 보호막 양. 피해는 **여기서 먼저** 깎이고 남은 것만 HP 로 (PostGameplayEffectExecute).
+	 * 거는 곳은 ERShield::Apply (베이스값 + 지속 태그 State.Shielded) · 태그가 끝나면 0.
+	 * ⚠ 보호막이 여럿 겹쳐 있으면 마지막 것이 끝날 때 같이 사라진다 — 지금 보호막은 시셀라 E 하나 (Argument 68 S1)
+	 */
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Shield, Category = "Vital")
+	FGameplayAttributeData Shield;
+	ATTRIBUTE_ACCESSORS(UERAttributeSet, Shield)
+
 	// ── Meta ────────────────────────────────────────────────
 	/**
 	 * [Meta] 이번 한 번의 피해량. 저장되는 값이 아니라 한 번 쓰고 버리는 통로다.
@@ -384,4 +394,5 @@ protected:
 	UFUNCTION() void OnRep_OutOfCombatRegen(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_ModeDamageUp(const FGameplayAttributeData& OldValue);
 	UFUNCTION() void OnRep_ModeDamageDown(const FGameplayAttributeData& OldValue);
+	UFUNCTION() void OnRep_Shield(const FGameplayAttributeData& OldValue);
 };

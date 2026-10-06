@@ -77,9 +77,29 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> TargetLostHPScaleMax;
 
+	/** 대상이 (내가 건) 출혈 최대 중첩이면 피해 +이 비율 (재키 Q 0.3 — Data.Damage.Multiplier · Argument 65) */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> BonusVsMaxBleed;
+
 	/** 실제 깎인 HP 의 비율만큼 시전자 회복 (도끼 D 0.6). 흡혈 통로 · 감쇠 없음 `[자체]`. */
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> HealFromDamageRatio;
+
+	/** 시전자 **실험체 레벨** × 이 값을 기본 피해에 더한다 (시셀라 P 강화 평타 9 · 툴팁 "캐릭터 레벨 × 9"). 야생동물은 레벨 0 으로 본다 */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> PerCharLevel;
+
+	/** **시전자**가 잃은 체력 1%당 기본 피해 + 이 값 (시셀라 R 2/2/3 · 툴팁 "잃은 체력 1%당") — 판정 순간의 체력 */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> PerCasterLostHPPercent;
+
+	/** 시전자 자신도 맞는다 (시셀라 R) — 대상이 없어도 자신은 맞는다 */
+	UPROPERTY(EditDefaultsOnly)
+	bool bIncludeSelf = false;
+
+	/** 자해일 때 체력 하한 (시셀라 R 100) — 0 이면 없음 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "bIncludeSelf"))
+	float SelfHPFloor = 0.f;
 
 	virtual void OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const override;
 	virtual FString GetDebugName() const override { return TEXT("피해"); }

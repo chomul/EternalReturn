@@ -9,6 +9,7 @@
 #include "ERSkillFragment.generated.h"
 
 class UERSkillData;
+struct FGameplayEventData;
 
 /**
  * 스킬 기능 조각. UERSkillData.Fragments 에 Instanced 로 들어간다 — 애셋에는 그 스킬이 쓰는 조각만 보인다.
@@ -41,6 +42,24 @@ public:
 
 	/** [서버] 이 스킬 주인의 피해가 누군가에게 들어갔다 — 패시브 어빌리티(UERPassiveAbility)만 부른다. HitTags = 그 피해의 Damage.Type.* (Argument 61 E1). */
 	virtual void OnHitDealt(FERSkillContext& Ctx, AActor* Target, const FGameplayTagContainer& HitTags) const {}
+
+	/** [서버] 이 스킬 주인이 적 실험체를 처치했다 (막타 — F14 전 임시) — 패시브 어빌리티만 부른다 (Argument 65). */
+	virtual void OnKillDealt(FERSkillContext& Ctx, AActor* Victim) const {}
+
+	/** [서버] 패시브가 켜질 때 · **레벨이 바뀔 때** (UERPassiveAbility) — 상시 효과 걸기 (시셀라 P 잃은 체력 비례 스탯). 다시 불려도 되게 (이전 것 지우고 다시). */
+	virtual void OnPassiveStart(FERSkillContext& Ctx) const {}
+
+	/** 패시브가 들을 게임플레이 이벤트 (없으면 빈 태그) — 시셀라 P `Event.Wilson.Joined` (Argument 68) */
+	virtual FGameplayTag GetPassiveEventTag() const { return FGameplayTag(); }
+
+	/** [서버] GetPassiveEventTag 의 이벤트가 왔다 — 패시브 어빌리티만 부른다 */
+	virtual void OnPassiveEvent(FERSkillContext& Ctx, const FGameplayEventData& Payload) const {}
+
+	/**
+	 * [소유 클라] 조준 미리보기의 **출발점**을 바꾼다 (시셀라 Q · E — 떨어진 윌슨 자리). true 면 그 점에서 화살표.
+	 * bOutFullReach false = 조준점까지 (Q — 조준점은 시전자 기준 사거리 안) · true = 커서 쪽으로 **사거리만큼** (E — 윌슨에서 사거리)
+	 */
+	virtual bool GetPreviewOrigin(const AActor* Avatar, FVector& OutOrigin, bool& bOutFullReach) const { return false; }
 
 	/** [서버] EndAbility — 어떤 경로든 (정상 · 취소 · 외부). 모드 정리 · 쿨 반환. */
 	virtual void OnEnd(FERSkillContext& Ctx, bool bCancelled) const {}

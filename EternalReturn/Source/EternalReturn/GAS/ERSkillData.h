@@ -86,6 +86,10 @@ struct FERSelfEffect
 	/** 레벨별 시작 지연 초. 0 = 즉시. 권총 D 공속 버프 = 1 ("이동이 끝난 후"). 그 사이 시전자가 죽으면 안 건다. */
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> StartDelay;
+
+	/** 이 버프에 붙일 태그 (Spec 동적 태그) — 공용 GE 로 "이 스킬의 버프" 를 찾게 (재키 R Mode.Chainsaw → 처치 시 +5초 · 전기톱 모드 연출 · Argument 65 · 66) */
+	UPROPERTY(EditDefaultsOnly)
+	FGameplayTag GrantTag;
 };
 
 /**
@@ -430,6 +434,14 @@ public:
 	/** 후딜 초. 0 = 없음. 이 구간에서 다른 스킬 발동이 막히고, 이동 입력이 후딜을 끝낸다(애니메이션 캔슬, §5.1). */
 	UPROPERTY(EditDefaultsOnly, Category = "시전", meta = (ClampMin = "0"))
 	float RecoveryTime = 0.f;
+
+	/** 시전(공격) 소리 큐를 안 보낸다 — 타격음은 그대로 (저격총 D 모드 진입 · 사용자 2026-10-05 "D 소리 빼고") */
+	UPROPERTY(EditDefaultsOnly, Category = "시전")
+	bool bNoCastCue = false;
+
+	/** 걸으며 쓴다 — 누를 때 이동을 멈추지 않는다 (시셀라 Q · E · 사용자 2026-10-06). 모션은 상체 슬롯(UpperBody) 몽타주로 — 다리는 걷기 */
+	UPROPERTY(EditDefaultsOnly, Category = "시전")
+	bool bCastWhileMoving = false;
 
 	/**
 	 * 선딜 중 이동 입력이 시전을 **취소**하는가. false 면 선딜 중 이동이 **차단**된다(State.Block.Movement).

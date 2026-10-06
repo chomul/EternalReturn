@@ -69,6 +69,8 @@ namespace ERTags
 	// ⏸ 대상 지정 불가 — 이미 적용된 효과 외 전부 무시. 요구 사례 없음. 자리만.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Untargetable);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CCImmune);       // 이동 방해 면역 (매그너스 R)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Bleeding);       // 출혈 중 (재키 P · UERBleedEffect 동적 태그 · Argument 65 D1)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Adrenaline);     // 아드레날린 분비 (재키 P — 적중마다 출혈 최대 · 추가 피해 · 회복)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Riding);         // 탑승 중 (매그너스 R 바이크 — GE_Magnus_Ride 가 단다 · UERRideComponent 가 본다 · Argument 62)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_AnimHold);       // 스킬 모션 유지 — 이동해도 안 끊고, 빠지면 End 섹션 (매그너스 W 장판 동안 · Argument 63 M1). 연출 전용
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Gathering);      // 채집 중 — 연출 전용 (AnimBP 채집 포즈 · Argument 46). 아무것도 막지 않는다
@@ -104,10 +106,18 @@ namespace ERTags
 	//   카티야 P · 재키 W · 시셀라 Q · 권총 D 가 같은 GE 를 쓴다 (역기획서 §8 "4곳이 같은 구조").
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_NextAttackBuff);
 
+	// ── 시셀라 (F19-04 · Argument 68) ─────────────────────────
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Shielded);          // 보호막 지속 중 — 끝나면 Shield 어트리뷰트를 0 으로 (ERShield)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_WilsonAway);        // 윌슨이 떨어져 있다 (AERWilson 이 있는 동안 · 복제 루즈 태그)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_LostHPStats);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Bubble);            // 시셀라 W 감싸는 중 (피해 면역 · 이속 GE 에 같이) — 터질 때 이걸로 지운다       // 잃은 체력 비례 스탯 GE (상시 1개 — 레벨이 바뀌면 이걸로 찾아 지우고 다시)
+
 	// ── 게임플레이 이벤트 ──────────────────────────────────────
 	// 입력 → 어빌리티. PC 가 어빌리티 내부를 모르게 하는 통로 (SendGameplayEventToActor).
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Input_Move);        // 이동 명령이 서버에서 수락됨
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Skill_Aim);         // 스킬 발동 요청에 실린 조준 데이터 (Docs/4_Argument/18)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Kill_Dealt);        // 내가 적 실험체를 처치했다 (막타 — F14 전 임시 "처치 관여") — 플레이어 스테이트가 처치자 ASC 에 · 패시브가 듣는다 (Argument 65)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Wilson_Joined);     // 윌슨과 하나가 됐다 (줍기 · 거리 복귀 · E · W) — AERWilson 이 시셀라 ASC 에 · 패시브가 듣는다 (Argument 68)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Hit_Dealt);         // 내 피해가 들어갔다 — 어트리뷰트셋이 가해자에게 (Target = 맞은 쪽 · InstigatorTags = Damage.Type.*) · 패시브가 듣는다 (Argument 61 E1)
 
 	// ── 어빌리티 형태 ──────────────────────────────────────────
@@ -177,6 +187,7 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Type_BasicAttack); // 방어력 O / 치명타 O
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Type_Skill);       // 방어력 O / 치명타 X
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Type_True);        // 방어력 X / 치명타 X
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Secondary);        // 부가 피해 (도트 틱 · 적중 시 추가 피해) — 적중 이벤트를 안 보낸다. 안 막으면 출혈이 출혈을 영원히 갱신 (Argument 65)
 
 	// ── 초기 스탯 SetByCaller 키 ───────────────────────────────
 	//
@@ -209,6 +220,12 @@ namespace ERTags
 
 	// 상태 GE(다음 평타 강화 · 리캐스트 윈도우)의 길이(초). 0 이하면 어빌리티가 Infinite 클래스를 쓴다.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_StateDuration);
+
+	// 잃은 체력 비례 스탯 (시셀라 P) — 최소(체력 100%) · 최대(체력 0%). MMC 가 읽는다 (UERLostHPStatCalc)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_LostHP_RegenMin);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_LostHP_RegenMax);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_LostHP_SkillAmpMin);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_LostHP_SkillAmpMax);
 
 	// ⭐ 둔화 — 태그가 **2개**인 이유: 담는 값의 의미가 다르다.
 	//
@@ -282,6 +299,8 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_MaxHPRatio);      // 대상 **최대** 체력 비례
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_CurHPRatio);      // 대상 **현재** 체력 비례
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_LostHPRatio);     // **자신이 잃은** 체력 비례
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_HPFloor);      // 대상 체력 하한 — 이 아래로 안 깎는다 (시셀라 R 자해 100 · 자해 스펙에만)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_Multiplier);   // 최종 피해 배율 (없으면 1) — 조건부 증가 (재키 Q 출혈 최대 대상 +30% → 1.3)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Data_Damage_TargetLostHPScaleMax);   // **대상이 잃은** 체력 비율 × 이 값 만큼 최종 피해 증가 (저격총 데드아이 "잃은 체력 비례 최대 200%" = 1.0)
 
 	// ── 판정 형상 · 액터 유형 ──────────────────────────────
@@ -335,18 +354,35 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_EnhanceReady);    // 강화가 걸린 순간
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillAim_R);      // R 다음 발 조준 (발 번호로 고른다)
 	// F19-02 매그너스 소리 (Docs/3_EditorTasks/Audio/Magnus.md) — 지금 필요한 슬롯만
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit_P);       // 패시브가 대상에게 무언가를 걸 때 (재키 출혈 · Audio/Jackie.md 5)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoop_P);      // 패시브 상태 동안 반복 (재키 아드레날린 · State.Adrenaline 동안)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoopStart_P); // 그 상태가 시작될 때 한 번 (재키 아드레날린 시작)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLand_E);      // E 착지 순간 (재키 Skill03_Bump — 시전음은 뛰어오를 때 · Audio/Jackie.md 17 · 18)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHitLate_Q);   // Q 타격음 뒤 조금 늦게 한 번 더 (매그너스 Skill01_Impact)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoop_W);      // W 도는 동안 반복 (State.AnimHold 동안 · 매그너스 Skill02_Attack)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoop_R);      // R 탄 동안 반복 (State.Riding 동안 · 매그너스 Skill04_Drive)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoopStart_R); // R 반복이 시작될 때 한 번 (시동 · 매그너스 Skill04_GoActive)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillRecast_R);    // R 재사용의 공격음 (평소 SkillCast.R 대신 · 매그너스 Skill04_Attack 바이크 발사)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillRecast_R);
+	// 시셀라 (Audio/Sissela.md · 사용자 2026-10-06) — 소리 큐(GameplayCue.Pres.Sfx)로 바로 튼다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Join);             // 윌슨과 합칠 때 (Passive_Union)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillMove_Q);      // Q 윌슨이 날기 시작할 때 한 번 (Skill01_Move)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLand_Q);      // Q 착지 폭발 (Skill01_Hit2 · 맞힌 사람 없어도)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillBurst_W);     // W 터짐 (Skill02_End · 맞힌 사람 없어도)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillStun_E);      // E 적 적중 — 기절 (Skill03_Stun · 타격음과 겹쳐도 됨)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillPull_E);      // E 끌어올 때 (Skill03_Take — 적 · 시셀라)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillShield_E);    // E 시셀라 적중 — 보호막 (Skill03_Shield)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCount_R);     // R 카운트 (Skill04_Count · 한 번)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLand_R);      // R 늦춘 판정 순간 폭발 (Skill04_Explosion · 착지 큐의 R 몫)    // R 재사용의 공격음 (평소 SkillCast.R 대신 · 매그너스 Skill04_Attack 바이크 발사)
 
 	// 연출 큐 (F12.5-05 · Argument 49) — 네트워크 사건. 무엇을 틀지는 키가 정한다 (큐 ≠ 키)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Attack);   // 시전자 — 공격이 나갔다 (판정 시점)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Hit);      // 대상 — 맞았다 (서버 확정)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Aim);      // 시전자 — 순차 사격 다음 발 조준 시작 (발 번호 · K8)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Ready);    // 시전자 — 다음 평타 강화가 걸렸다 (K8)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Land);     // 시전자 — 늦춘 판정 순간 (도약 착지 · 재키 E · JudgeDelay)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Ready);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Sfx);      // 시전자 — 소리 키 하나를 그대로 (키 = AggregatedSourceTags 의 Pres.Sfx.* · 위치 = Location · UERPresentationComponent::SendSfxCue)    // 시전자 — 다음 평타 강화가 걸렸다 (K8)
 	// 모드 상태 애니 (Argument 42 ⑥ A2) — 모드 칸이 있는 줄에만 쓴다. C++ 가 해석해 AnimInstance 에 넘기고 상태머신이 튼다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_AttackEnhanced);   // 강화를 소비하는 평타 (재키 W skill02_attack) — 없으면 평소 평타 (Argument 66 E1)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeStart);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeIdle);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeRun);
@@ -355,4 +391,6 @@ namespace ERTags
 	// ── 연출 모드 (Argument 42) ── 서버가 복제 loose 태그로 붙인다. 각 머신의 연출 컴포넌트가 부모(Mode)를 구독해 모드 세트를 고른다.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode);              // 부모 — 구독용
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_Sniper);       // 저격총 D (카티야)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_Chainsaw);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_Bubble);   // 시셀라 W 감싸기 1.5초 — 감싸기 GE 에 같이 (Argument 69 B1)     // 전기톱 살인마 R (재키) — R 버프 GE 의 동적 태그 = "R 중" · 처치 +5초도 이 태그로 (Argument 66 M1)
 }

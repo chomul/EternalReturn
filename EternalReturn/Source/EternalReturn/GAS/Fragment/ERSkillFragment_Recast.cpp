@@ -29,9 +29,10 @@ void UERSkillFragment_Recast::OnTargetsResolved(FERSkillContext& Ctx, const TArr
 	if (FGameplayEffectSpec* Spec = SpecHandle.Data.Get())
 	{
 		Spec->DynamicGrantedTags.AddTag(RecastTag);
-		Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_StateDuration, Window);
+		const float Len = WindowByLevel.IsEmpty() ? Window : UERSkillData::LevelValue(WindowByLevel, Ctx.Level);
+		Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_StateDuration, Len);
 		A->ApplySpecToSelf(SpecHandle);
 		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 리캐스트 윈도우 %.1f초 (%s)"),
-			*GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), Window, *RecastTag.ToString());
+			*GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), Len, *RecastTag.ToString());
 	}
 }

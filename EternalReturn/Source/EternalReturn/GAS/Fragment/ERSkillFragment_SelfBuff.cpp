@@ -49,6 +49,7 @@ void UERSkillFragment_SelfBuff::ApplyEffects(FERSkillContext& Ctx) const
 		const float Magnitude = UERSkillData::LevelValueSigned(SE.Magnitude, Level);   // 음수 허용
 		if (Duration > 0.f)   { Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_CCDuration, Duration); }
 		if (Magnitude != 0.f) { Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_OnHitMagnitude, Magnitude); }
+		if (SE.GrantTag.IsValid()) { Spec->DynamicGrantedTags.AddTag(SE.GrantTag); }
 		if (SE.Charges > 0)
 		{
 			// "다음 N회 기본 공격" — 평타가 적중마다 1 줄인다 (UERBasicAttackAbility).
@@ -73,9 +74,11 @@ void UERSkillFragment_SelfBuff::ApplyEffects(FERSkillContext& Ctx) const
 		{
 			A->ApplySpecToSelf(SpecHandle);
 		}
-		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 자기 버프 %s (지속 %.1f · 크기 %.2f%s%s)"),
+		// GE 애셋이 거는 태그도 찍는다 — 바이너리라 에디터를 안 열고는 모른다 (재키 R 중 평타가 State.Block.BasicAttack 에 막힘 · 2026-10-05)
+		const FGameplayTagContainer AssetGrants = SE.Effect->GetDefaultObject<UGameplayEffect>()->GetGrantedTags();
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 자기 버프 %s (지속 %.1f · 크기 %.2f%s%s) · 거는 태그 [%s]"),
 			*GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), *SE.Effect->GetName(), Duration, Magnitude,
 			SE.Charges > 0 ? *FString::Printf(TEXT(" · %d회"), SE.Charges) : TEXT(""),
-			Delay > 0.f ? *FString::Printf(TEXT(" · %.1f초 뒤"), Delay) : TEXT(""));
+			Delay > 0.f ? *FString::Printf(TEXT(" · %.1f초 뒤"), Delay) : TEXT(""), *AssetGrants.ToStringSimple());
 	}
 }

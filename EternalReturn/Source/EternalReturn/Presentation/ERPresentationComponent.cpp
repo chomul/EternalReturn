@@ -33,6 +33,8 @@ namespace
 {
 	/** 동적 재생 슬롯 · 블렌드 [자체] (Argument 39 ⑤) — 상체 분리가 필요해지면 F12.5-03 에서 나눈다. */
 	const FName AnimSlotName(TEXT("DefaultSlot"));
+	/** 상체만 — AnimBP 가 Layered blend per bone 으로 다리 위에 얹는다 (움직이며 쓰는 스킬 · 사용자 2026-10-06 시셀라 Q). 몽타주가 이 슬롯이면 이동이 안 끊는다 */
+	const FName UpperBodySlotName(TEXT("UpperBody"));
 	constexpr float BlendIn = 0.1f;
 	constexpr float BlendOut = 0.2f;
 	/** 채집 끝 — 웅크림에서 서기까지 [자체] (Argument 47 F1). collect 에 일어서는 구간이 없어 이 블렌드가 일어서기다. */
@@ -47,7 +49,9 @@ namespace
 	{
 		return {
 			{ ERTags::State_AnimHold, ERTags::Pres_Sfx_SkillLoop_W, FGameplayTag() },               // W 도는 동안 (장판 동안 모션 유지 태그)
-			{ ERTags::State_Riding, ERTags::Pres_Sfx_SkillLoop_R, ERTags::Pres_Sfx_SkillLoopStart_R }, // R 탄 동안 · 시동
+			{ ERTags::State_Riding, ERTags::Pres_Sfx_SkillLoop_R, ERTags::Pres_Sfx_SkillLoopStart_R }, // R 탄 동안 · 시동 (매그너스)
+			{ ERTags::Mode_Chainsaw, ERTags::Pres_Sfx_SkillLoop_R, FGameplayTag() },               // R 전기톱 동안 (재키 · Audio/Jackie.md 23 · 24)
+			{ ERTags::State_Adrenaline, ERTags::Pres_Sfx_SkillLoop_P, ERTags::Pres_Sfx_SkillLoopStart_P }, // 아드레날린 동안 · 시작 (재키 6 · 7)
 		};
 	}
 
@@ -331,12 +335,49 @@ USoundBase* UERPresentationComponent::PickSound(FGameplayTag Key, int32 ShotNumb
 	return Sounds[FMath::RandRange(0, Sounds.Num() - 1)];
 }
 
+void UERPresentationComponent::SendSfxCue(AActor* Instigator, FGameplayTag SfxKey, const FVector& Location)
+{
+	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Instigator);
+	if (!ASC || !SfxKey.IsValid() || !Instigator->HasAuthority())
+	{
+		return;
+	}
+	FGameplayCueParameters P;
+	P.Instigator = Instigator;
+	P.EffectCauser = Instigator;
+	P.AggregatedSourceTags.AddTag(SfxKey);
+	P.Location = Location;
+	ASC->ExecuteGameplayCue(ERTags::GameplayCue_Pres_Sfx, P);
+}
+
 void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGameplayCueParameters& Params)
 {
+	// 소리 키 그대로 (시셀라 · Audio/Sissela.md) — 슬롯 · 강화 판단 없이
+	if (CueTag == ERTags::GameplayCue_Pres_Sfx)
+	{
+		AActor* By = Params.Instigator.Get();
+		const UERPresentationComponent* From = By ? By->FindComponentByClass<UERPresentationComponent>() : nullptr;
+		static const FGameplayTag SfxRoot = FGameplayTag::RequestGameplayTag(TEXT("Pres.Sfx"));
+		FGameplayTag Key;
+		for (const FGameplayTag& T : Params.AggregatedSourceTags)
+		{
+			if (T.MatchesTag(SfxRoot)) { Key = T; break; }
+		}
+		USoundBase* Sound = From && Key.IsValid() ? From->PickSound(Key) : nullptr;
+		if (Sound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, Sound, Params.Location.IsNearlyZero() ? GetOwner()->GetActorLocation() : FVector(Params.Location));
+		}
+		UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 소리 %s ← %s 의 %s (%s)"), *GetNameSafe(GetOwner()),
+			Sound ? *Sound->GetName() : TEXT("없음"), *GetNameSafe(By), *Key.ToString(), NetTag(GetOwner()));
+		return;
+	}
+
 	const bool bAttackCue = CueTag == ERTags::GameplayCue_Pres_Attack;
 	const bool bAimCue = CueTag == ERTags::GameplayCue_Pres_Aim;
 	const bool bReadyCue = CueTag == ERTags::GameplayCue_Pres_Ready;
-	if (!bAttackCue && !bAimCue && !bReadyCue && CueTag != ERTags::GameplayCue_Pres_Hit)
+	const bool bLandCue = CueTag == ERTags::GameplayCue_Pres_Land;
+	if (!bAttackCue && !bAimCue && !bReadyCue && !bLandCue && CueTag != ERTags::GameplayCue_Pres_Hit)
 	{
 		return;
 	}
@@ -398,6 +439,7 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 	}
 	FGameplayTag Key = bAimCue ? ERTags::Pres_Sfx_SkillAim_R
 		: bReadyCue ? ERTags::Pres_Sfx_EnhanceReady
+		: bLandCue ? (EventSlot == ERTags::Ability_Slot_R ? ERTags::Pres_Sfx_SkillLand_R : ERTags::Pres_Sfx_SkillLand_E)   // 늦춘 판정 순간 — 재키 E 착지 · 시셀라 R 폭발
 		: bAttackCue ? (bBasic ? ERTags::Pres_Sfx_Attack : ERTags::Pres_Sfx_SkillCast)
 		: (bBasic ? ERTags::Pres_Sfx_Hit : ERTags::Pres_Sfx_SkillHit);
 	// 강화를 소비하는 평타 — 강화 소리 줄이 있으면 평소 소리 **대신** (카티야 P Reinforce_Shot · _Hit · Docs/3_EditorTasks/Audio/Katja.md)
@@ -416,10 +458,11 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 		Key = ERTags::Pres_Sfx_SkillRecast_R;
 	}
 	// 스킬마다 다른 소리 (F12.6-05 오메가 Q · W · F19 실험체) — `<SkillCast|SkillHit>.<슬롯>` 줄이 있으면 그것 · 없으면 공통 키
-	if (!bBasic && !bAimCue && !bReadyCue && !bRecastSfx)
+	if (!bBasic && !bAimCue && !bReadyCue && !bLandCue && !bRecastSfx)
 	{
 		struct FSlotSfx { FGameplayTag Slot; FGameplayTag Cast; FGameplayTag Hit; };
 		static const FSlotSfx SlotSfx[] = {
+			{ ERTags::Ability_Slot_P, FGameplayTag(), ERTags::Pres_Sfx_SkillHit_P },   // 패시브가 거는 효과 (재키 출혈 · 시전음 없음)
 			{ ERTags::Ability_Slot_Q, ERTags::Pres_Sfx_SkillCast_Q, ERTags::Pres_Sfx_SkillHit_Q },
 			{ ERTags::Ability_Slot_W, ERTags::Pres_Sfx_SkillCast_W, ERTags::Pres_Sfx_SkillHit_W },
 			{ ERTags::Ability_Slot_E, ERTags::Pres_Sfx_SkillCast_E, ERTags::Pres_Sfx_SkillHit_E },
@@ -429,7 +472,7 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 		for (const FSlotSfx& S : SlotSfx)
 		{
 			const FGameplayTag SlotKey = bAttackCue ? S.Cast : S.Hit;
-			if (Params.AggregatedSourceTags.HasTagExact(S.Slot) && Source->HasKey(SlotKey))
+			if (SlotKey.IsValid() && Params.AggregatedSourceTags.HasTagExact(S.Slot) && Source->HasKey(SlotKey))
 			{
 				Key = SlotKey;
 				break;
@@ -449,7 +492,7 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 		Sound ? *Sound->GetName() : TEXT("없음"), From ? From->Source : TEXT("줄 없음"), *GetNameSafe(Instigator), *Key.ToString(), NetTag(GetOwner()));
 
 	// 타격 뒤 조금 늦게 한 번 더 (F19-02 매그너스 Q Impact · 사용자 2026-10-04 "Hit 보다 조금 느리게") — 같은 자리
-	if (!bAttackCue && !bAimCue && !bReadyCue && !bBasic && EventSlot == ERTags::Ability_Slot_Q && Source->HasKey(ERTags::Pres_Sfx_SkillHitLate_Q))
+	if (!bAttackCue && !bAimCue && !bReadyCue && !bLandCue && !bBasic && EventSlot == ERTags::Ability_Slot_Q && Source->HasKey(ERTags::Pres_Sfx_SkillHitLate_Q))
 	{
 		constexpr float LateSeconds = 0.15f;   // [자체] — 들어보고 조절
 		TWeakObjectPtr<USoundBase> Late = Source->PickSound(ERTags::Pres_Sfx_SkillHitLate_Q);
@@ -590,10 +633,16 @@ void UERPresentationComponent::PushModeToAnim()
 		UAnimSequenceBase* Idle = FindFirstAnim(ERTags::Pres_Anim_ModeIdle);
 		UAnimSequenceBase* Run = FindFirstAnim(ERTags::Pres_Anim_ModeRun);
 		UAnimSequenceBase* End = FindFirstAnim(ERTags::Pres_Anim_ModeEnd);
-		if (!Start || !Idle || !Run || !End)
+		// 대기 · 달리기는 꼭 있어야 한다 · 진입 · 해제는 없어도 된다 — 상태머신이 bModeHasStart/End 로 건너뛴다 (재키 전기톱 · Argument 66)
+		const FString ModeAnims = FString::Printf(TEXT("[연출] %s 모드 %s 애니 — Start %s · Idle %s · Run %s · End %s"),
+			*GetNameSafe(GetOwner()), *ActiveMode.ToString(), *GetNameSafe(Start), *GetNameSafe(Idle), *GetNameSafe(Run), *GetNameSafe(End));
+		if (!Idle || !Run)
 		{
-			UE_LOG(LogEternalReturn, Warning, TEXT("[연출] %s 모드 %s 애니가 비었다 — Start %s · Idle %s · Run %s · End %s (동작표에 모드 줄 Pres.Anim.Mode*)"),
-				*GetNameSafe(GetOwner()), *ActiveMode.ToString(), *GetNameSafe(Start), *GetNameSafe(Idle), *GetNameSafe(Run), *GetNameSafe(End));
+			UE_LOG(LogEternalReturn, Warning, TEXT("%s — ⚠ 대기 · 달리기가 비었다 (동작표에 모드 줄 Pres.Anim.ModeIdle/Run)"), *ModeAnims);
+		}
+		else
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("%s"), *ModeAnims);
 		}
 		Anim->SetModeAnims(Start, Idle, Run, End);
 	}
@@ -803,7 +852,7 @@ void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const 
 	UAnimMontage* Montage = nullptr;
 	if (UAnimMontage* Authored = Cast<UAnimMontage>(Anim))
 	{
-		if (!Authored->IsValidSlot(AnimSlotName))
+		if (!Authored->IsValidSlot(AnimSlotName) && !Authored->IsValidSlot(UpperBodySlotName))
 		{
 			UE_LOG(LogEternalReturn, Warning, TEXT("[연출] %s 몽타주 %s 에 슬롯 %s 트랙이 없다 — 재생해도 안 보인다 (몽타주 슬롯을 맞춘다)"),
 				*GetNameSafe(GetOwner()), *Authored->GetName(), *AnimSlotName.ToString());
@@ -838,8 +887,29 @@ void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const 
 		}
 		return;
 	}
-	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s %s 재생 %s (%s) ×%.2f%s (%s)"),
-		*GetNameSafe(GetOwner()), *Key.ToString(), *Anim->GetName(), R->Source, Rate, *MarkerNote, NetTag(GetOwner()));
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s %s 재생 %s (%s) ×%.2f%s · 슬롯 %s (%s)"),
+		*GetNameSafe(GetOwner()), *Key.ToString(), *Anim->GetName(), R->Source, Rate, *MarkerNote,
+		Montage->SlotAnimTracks.Num() > 0 ? *Montage->SlotAnimTracks[0].SlotName.ToString() : TEXT("없음"), NetTag(GetOwner()));
+	// 진단 (시셀라 Q 상체가 안 움직임 · 2026-10-06) — 상체 슬롯 몽타주면 0.15초 뒤 AnimBP 의 그 슬롯 가중치를 잰다.
+	//   0 이면 AnimGraph 에 Slot 'UpperBody' 노드가 없거나 · 연결이 안 됐거나 · Layered blend 뼈 이름이 틀렸다 (몽타주는 돌고 있는데 화면에 안 나온다)
+	if (Montage->IsValidSlot(UpperBodySlotName) && !Montage->IsValidSlot(AnimSlotName))
+	{
+		TWeakObjectPtr<UAnimMontage> WeakMontage(Montage);
+		FTimerHandle Unused;
+		GetWorld()->GetTimerManager().SetTimer(Unused, FTimerDelegate::CreateWeakLambda(this, [this, WeakMontage]()
+		{
+			const ACharacter* C = Cast<ACharacter>(GetOwner());
+			const UAnimInstance* AI = C && C->GetMesh() ? C->GetMesh()->GetAnimInstance() : nullptr;
+			if (!AI)
+			{
+				return;
+			}
+			UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 상체 몽타주 %s — 재생 중 %s · 위치 %.2f · 슬롯 가중치 UpperBody %.2f · DefaultSlot %.2f (%s)%s"),
+				*GetNameSafe(GetOwner()), *GetNameSafe(WeakMontage.Get()), AI->Montage_IsPlaying(WeakMontage.Get()) ? TEXT("O") : TEXT("X"),
+				AI->Montage_GetPosition(WeakMontage.Get()), AI->GetSlotNodeGlobalWeight(UpperBodySlotName), AI->GetSlotNodeGlobalWeight(AnimSlotName), NetTag(GetOwner()),
+				AI->GetSlotNodeGlobalWeight(UpperBodySlotName) <= 0.f ? TEXT(" ⚠ UpperBody 가중치 0 — AnimGraph 의 Slot 'UpperBody' 가 안 돌고 있다") : TEXT(""));
+		}), 0.15f, false);
+	}
 }
 
 void UERPresentationComponent::StopActionAnim()
@@ -847,6 +917,11 @@ void UERPresentationComponent::StopActionAnim()
 	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
 	UAnimMontage* Current = ASC ? ASC->GetCurrentMontage() : nullptr;
 	if (!Current)
+	{
+		return;
+	}
+	// 상체 슬롯 몽타주(움직이며 쓰는 스킬 — 시셀라 Q · Argument 69)는 다리가 걷기를 하므로 안 끊는다
+	if (!bDead && Current->IsValidSlot(UpperBodySlotName) && !Current->IsValidSlot(AnimSlotName))
 	{
 		return;
 	}
@@ -1044,7 +1119,7 @@ void UERPresentationComponent::RefreshLoopSfx(bool bPlayStart)
 	for (const FLoopSfx& L : LoopSfxTable())
 	{
 		const bool bWant = ASC && ASC->HasMatchingGameplayTag(L.Tag) && HasKey(L.Loop);
-		TObjectPtr<UAudioComponent>* Playing = LoopAudio.Find(L.Loop);
+		TObjectPtr<UAudioComponent>* Playing = LoopAudio.Find(L.Tag);   // 태그로 — 같은 키(SkillLoop.R)를 탑승 · 전기톱이 같이 쓴다
 		if (bWant && !Playing)
 		{
 			if (bPlayStart && L.Start.IsValid())
@@ -1060,7 +1135,7 @@ void UERPresentationComponent::RefreshLoopSfx(bool bPlayStart)
 			if (Audio)
 			{
 				Audio->OnAudioFinished.AddDynamic(this, &UERPresentationComponent::OnLoopAudioFinished);
-				LoopAudio.Add(L.Loop, Audio);
+				LoopAudio.Add(L.Tag, Audio);
 				UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 반복 소리 시작 %s (%s 동안 · %s)"), *GetNameSafe(GetOwner()),
 					*GetNameSafe(Audio->Sound), *L.Tag.ToString(), NetTag(GetOwner()));
 			}
@@ -1073,7 +1148,7 @@ void UERPresentationComponent::RefreshLoopSfx(bool bPlayStart)
 				Audio->Stop();
 				Audio->DestroyComponent();
 			}
-			LoopAudio.Remove(L.Loop);
+			LoopAudio.Remove(L.Tag);
 			UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 반복 소리 멈춤 (%s 빠짐 · %s)"), *GetNameSafe(GetOwner()), *L.Tag.ToString(), NetTag(GetOwner()));
 		}
 	}
@@ -1086,6 +1161,15 @@ void UERPresentationComponent::OnLoopAudioFinished()
 	{
 		if (UAudioComponent* Audio = P.Value.Get(); Audio && !Audio->IsPlaying())
 		{
+			// 변형이 여럿이면 매번 다시 고른다 (재키 전기톱 v1 · v2)
+			for (const FLoopSfx& L : LoopSfxTable())
+			{
+				if (L.Tag == P.Key)
+				{
+					if (USoundBase* Next = PickSound(L.Loop)) { Audio->SetSound(Next); }
+					break;
+				}
+			}
 			Audio->Play();
 		}
 	}

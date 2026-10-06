@@ -33,8 +33,58 @@ void UERPassiveAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	UAbilityTask_WaitGameplayEvent* Wait = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, ERTags::Event_Hit_Dealt, nullptr, /*OnlyTriggerOnce=*/false, /*OnlyMatchExact=*/true);
 	Wait->EventReceived.AddDynamic(this, &UERPassiveAbility::OnHitDealt);
 	Wait->ReadyForActivation();
-	UE_LOG(LogEternalReturn, Log, TEXT("[패시브] %s <- %s 켜짐 (Lv.%d · 적중 이벤트 듣기)"),
-		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(GetSkillData(Handle, ActorInfo)), GetAbilityLevel(Handle, ActorInfo));
+	UAbilityTask_WaitGameplayEvent* WaitKill = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, ERTags::Event_Kill_Dealt, nullptr, /*OnlyTriggerOnce=*/false, /*OnlyMatchExact=*/true);
+	WaitKill->EventReceived.AddDynamic(this, &UERPassiveAbility::OnKillDealt);
+	WaitKill->ReadyForActivation();
+	// 조각이 고른 이벤트 (시셀라 P 윌슨 합침) — 태그마다 하나
+	const UERSkillData* Skill = GetSkillData(Handle, ActorInfo);
+	TArray<FGameplayTag> Listened;
+	if (Skill)
+	{
+		for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
+		{
+			const FGameplayTag Tag = F ? F->GetPassiveEventTag() : FGameplayTag();
+			if (Tag.IsValid() && !Listened.Contains(Tag))
+			{
+				Listened.Add(Tag);
+				UAbilityTask_WaitGameplayEvent* WaitTag = UAbilityTask_WaitGameplayEvent::WaitGameplayEvent(this, Tag, nullptr, /*OnlyTriggerOnce=*/false, /*OnlyMatchExact=*/true);
+				WaitTag->EventReceived.AddDynamic(this, &UERPassiveAbility::OnPassiveEvent);
+				WaitTag->ReadyForActivation();
+			}
+		}
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[패시브] %s <- %s 켜짐 (Lv.%d · 적중 · 처치 이벤트 듣기%s)"),
+		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(Skill), GetAbilityLevel(Handle, ActorInfo),
+		Listened.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" · %s"), *FString::JoinBy(Listened, TEXT(" · "), [](const FGameplayTag& T) { return T.ToString(); })));
+	RefreshPassive();
+}
+
+void UERPassiveAbility::RefreshPassive()
+{
+	const UERSkillData* Skill = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
+	if (!Skill || !IsActive())
+	{
+		return;
+	}
+	FERSkillContext Ctx = MakeContext(Skill, 1.f);
+	for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
+	{
+		if (F) { F->OnPassiveStart(Ctx); }
+	}
+}
+
+void UERPassiveAbility::OnPassiveEvent(FGameplayEventData Payload)
+{
+	const UERSkillData* Skill = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
+	if (!Skill)
+	{
+		return;
+	}
+	FERSkillContext Ctx = MakeContext(Skill, 1.f);
+	for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
+	{
+		if (F && F->GetPassiveEventTag() == Payload.EventTag) { F->OnPassiveEvent(Ctx, Payload); }
+	}
 }
 
 void UERPassiveAbility::OnHitDealt(FGameplayEventData Payload)
@@ -49,5 +99,22 @@ void UERPassiveAbility::OnHitDealt(FGameplayEventData Payload)
 	for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
 	{
 		if (F) { F->OnHitDealt(Ctx, Target, Payload.InstigatorTags); }
+	}
+}
+
+void UERPassiveAbility::OnKillDealt(FGameplayEventData Payload)
+{
+	const UERSkillData* Skill = GetSkillData(CurrentSpecHandle, CurrentActorInfo);
+	AActor* Victim = const_cast<AActor*>(Payload.Target.Get());
+	if (!Skill)
+	{
+		return;
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[패시브] %s <- %s 처치 %s (막타 — 처치 관여 임시)"),
+		*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(Skill), *GetNameSafe(Victim));
+	FERSkillContext Ctx = MakeContext(Skill, 1.f);
+	for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
+	{
+		if (F) { F->OnKillDealt(Ctx, Victim); }
 	}
 }

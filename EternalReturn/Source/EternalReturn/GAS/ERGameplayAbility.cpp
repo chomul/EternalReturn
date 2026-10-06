@@ -193,6 +193,11 @@ void UERGameplayAbility::PlaySkillAnim(const UERSkillData& Skill, bool bExecuteP
 	const float AttackSpeed = Slot == ERTags::Ability_Slot_Attack ? ASC->GetNumericAttribute(UERAttributeSet::GetAttackSpeedAttribute()) : 0.f;
 	// 리캐스트(재입력) 발동이면 `<슬롯>.Recast` 를 먼저 — 동작표에 없으면 슬롯 키 (사용자 2026-09-29 단검 D)
 	FGameplayTag Key = Slot;
+	// 강화를 소비하는 평타 — 전용 애니가 있으면 그것 (재키 W skill02_attack · 모드 중이면 Saw_ · Argument 66 E1). 소리의 강화 판단과 같은 태그
+	if (Slot == ERTags::Ability_Slot_Attack && ASC->HasMatchingGameplayTag(ERTags::State_NextAttackBuff) && Pres->HasKey(ERTags::Pres_Anim_AttackEnhanced))
+	{
+		Key = ERTags::Pres_Anim_AttackEnhanced;
+	}
 	if (bActivatedByRecast)
 	{
 		static const TMap<FGameplayTag, FGameplayTag> RecastKeys = {
@@ -601,7 +606,7 @@ void UERGameplayAbility::ExecuteSkill()
 	Skill->Delivery->Deliver(*this, *Skill, Q, MakeShapeContext(*Skill, AimPoint, AimDirection, AimActor.Get()));
 }
 
-void UERGameplayAbility::ResolveInstantHits(const UERSkillData& SkillRef, const FTargetQuery& Q, const FTargetResult& Result)
+void UERGameplayAbility::ResolveInstantHits(const UERSkillData& SkillRef, const FTargetQuery& Q, const FTargetResult& Result, bool bAttackCue)
 {
 	const UERSkillData* Skill = &SkillRef;
 	AActor* Avatar = GetAvatarActorFromActorInfo();
@@ -637,7 +642,7 @@ void UERGameplayAbility::ResolveInstantHits(const UERSkillData& SkillRef, const 
 		//   ⏸ 소유자 공격음 예측은 GAS 예측을 켤 때 (CLAUDE.md §8). 타격음은 예측하지 않는다 — 서버 확정만.
 		if (HasAuthority(&CurrentActivationInfo))
 		{
-			SendPresCues(*Skill, Avatar, Targets, /*bWithAttack=*/!bExecutingOther);
+			SendPresCues(*Skill, Avatar, Targets, /*bWithAttack=*/bAttackCue && !bExecutingOther);
 			// 야생동물이 누굴 맞혔다 — 돌아다니는 종(위클라인)은 그 자리가 새 기준 (F12.6-06 · 사용자 2026-10-01)
 			if (!Targets.IsEmpty())
 			{
@@ -657,6 +662,7 @@ void UERGameplayAbility::ResolveInstantHits(const UERSkillData& SkillRef, const 
 
 void UERGameplayAbility::SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack, int32 ShotNumber, const FVector& FaceDirection) const
 {
+	bWithAttack = bWithAttack && !Skill.bNoCastCue;
 	FGameplayCueParameters Base;
 	Base.Instigator = Avatar;                       // 소리는 시전자의 무기 · 스킨에서 찾는다
 	Base.EffectCauser = Avatar;
@@ -787,6 +793,30 @@ void UERGameplayAbility::DrawPreview(const UERSkillData& SkillRef, const FVector
 	const float MaxUU = GetRangeMax(SkillRef) * 100.f;
 	FVector Aim = Origin + Dir * FMath::Clamp(Dist, SkillRef.GetMinReach() * 100.f, MaxUU);
 	Aim.Z = Origin.Z;
+	// 출발점이 시전자가 아닌 스킬 (시셀라 Q — 떨어진 윌슨에서 조준점으로) — 그 점 → 조준점 화살표 + 시전자 사거리 원
+	for (const TObjectPtr<UERSkillFragment>& F : SkillRef.Fragments)
+	{
+		FVector From;
+		bool bFullReach = false;
+		if (F && F->GetPreviewOrigin(Avatar, From, bFullReach))
+		{
+			From.Z = Origin.Z;
+			FVector To = Aim;
+			if (bFullReach)
+			{
+				// 윌슨에서 커서 쪽으로 사거리만큼 (E) — 시전자 사거리 원은 의미가 없다
+				FVector D = CursorPoint - From;
+				D.Z = 0.f;
+				To = From + (D.IsNearlyZero() ? Dir : D.GetSafeNormal()) * MaxUU;
+			}
+			else
+			{
+				DrawDebugCircle(World, Origin + FVector(0.f, 0.f, 20.f), MaxUU, 48, FColor(255, 255, 255, 120), false, 0.f, 0, 1.f, FVector::RightVector, FVector::ForwardVector, false);
+			}
+			DrawDebugDirectionalArrow(World, From + FVector(0.f, 0.f, 20.f), To + FVector(0.f, 0.f, 20.f), 60.f, FColor::Cyan, false, 0.f, 0, 4.f);
+			return;
+		}
+	}
 	const FTargetQuery Q = BuildQuery(SkillRef, Aim, Dir);
 	if (!SkillRef.Area)
 	{
@@ -1258,6 +1288,12 @@ void UERGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
 {
 	// ⚠ 서버만 — ApplyCooldown 과 같은 이유.
 	if (!ActorInfo || !ActorInfo->IsNetAuthority())
+	{
+		return;
+	}
+
+	// 리캐스트는 코스트를 다시 안 낸다 — 쿨다운과 같은 규칙 [자체] (시셀라 W 다시 눌러 터뜨리기에 체력 50 을 또 내지 않게 · 2026-10-06)
+	if (bActivatedByRecast)
 	{
 		return;
 	}

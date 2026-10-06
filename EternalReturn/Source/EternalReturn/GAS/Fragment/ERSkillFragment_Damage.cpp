@@ -2,6 +2,8 @@
 
 #include "GAS/Fragment/ERSkillFragment_Damage.h"
 
+#include "GAS/ERBleedEffect.h"
+
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
@@ -11,6 +13,8 @@
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERLifestealEffect.h"
 #include "GAS/ERSkillDamageEffect.h"
+#include "Core/ERPlayerState.h"
+#include "Growth/ERGrowthComponent.h"
 
 void UERSkillFragment_Damage::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
 {
@@ -20,7 +24,7 @@ void UERSkillFragment_Damage::OnTargetsResolved(FERSkillContext& Ctx, const TArr
 void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
 {
 	UERGameplayAbility* A = Ctx.Ability;
-	if (!A || !Ctx.bAuthority || Targets.IsEmpty() || DamageType == ESkillDamageType::None)
+	if (!A || !Ctx.bAuthority || (Targets.IsEmpty() && !bIncludeSelf) || DamageType == ESkillDamageType::None)
 	{
 		return;
 	}
@@ -59,6 +63,21 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 거리 비율 %.2f — 기본 %.1f → %.1f · 계수 %.2f → %.2f"),
 			*GetNameSafe(Ctx.Skill), T, Base0, Base, AP0, AP);
 	}
+	if (const float PerLevel = UERSkillData::LevelValue(PerCharLevel, Level); PerLevel != 0.f)
+	{
+		const UERGrowthComponent* Growth = Ctx.PlayerState ? Ctx.PlayerState->GetGrowth() : nullptr;
+		const int32 CharLevel = Growth ? Growth->GetLevel() : 0;
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 실험체 레벨 %d × %.1f → 기본 %.1f + %.1f"), *GetNameSafe(Ctx.Skill), CharLevel, PerLevel, Base, CharLevel * PerLevel);
+		Base += CharLevel * PerLevel;
+	}
+	if (const float PerLost = UERSkillData::LevelValue(PerCasterLostHPPercent, Level); PerLost != 0.f && Ctx.ASC)
+	{
+		const float MyHP = Ctx.ASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute());
+		const float MyMax = Ctx.ASC->GetNumericAttribute(UERAttributeSet::GetMaxHPAttribute());
+		const float LostPct = MyMax > 0.f ? FMath::Clamp(1.f - MyHP / MyMax, 0.f, 1.f) * 100.f : 0.f;
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 시전자 잃은 체력 %.1f%% × %.1f → 기본 %.1f + %.1f"), *GetNameSafe(Ctx.Skill), LostPct, PerLost, Base, LostPct * PerLost);
+		Base += LostPct * PerLost;
+	}
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_Base,          Base * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_APRatio,       AP * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_BonusAPRatio,  UERSkillData::LevelValue(BonusAPRatio, Level) * Scale);
@@ -82,6 +101,11 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 	{
 		Spec->AddDynamicAssetTag(ERTags::Damage_Shape_AoE);
 	}
+	// 한 번 때리면 적중 1번 (사용자 2026-10-05) — 평타에 얹힌 강화 피해(재키 W · 카티야 P)는 부가 피해: 적중 이벤트를 안 낸다 → 출혈 · 근성 · 아드레날린이 두 번 걸리지 않는다
+	if (Ctx.bEnhancement)
+	{
+		Spec->AddDynamicAssetTag(ERTags::Damage_Secondary);
+	}
 
 	// 도끼 D "입힌 피해의 60% 회복" — 실제로 깎인 HP 를 재려면 적용 전후 HP 가 필요하다 (서버 · Instant 라 동기).
 	const float HealRatio = UERSkillData::LevelValue(HealFromDamageRatio, Level);
@@ -97,9 +121,52 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 		}
 	}
 
+	// 자해 (시셀라 R) — 같은 계수의 사본 + 체력 하한. 대상 목록과 따로 (하한은 자신에게만)
+	if (bIncludeSelf && Ctx.Avatar)
+	{
+		const FGameplayEffectSpecHandle SelfHandle(new FGameplayEffectSpec(*Spec));
+		if (SelfHPFloor > 0.f)
+		{
+			SelfHandle.Data->SetSetByCallerMagnitude(ERTags::Data_Damage_HPFloor, SelfHPFloor);
+		}
+		A->ApplySpecToTargets(SelfHandle, UAbilitySystemBlueprintLibrary::AbilityTargetDataFromActorArray({ Ctx.Avatar }, false));
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 자해 (체력 하한 %.0f)"), *GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), SelfHPFloor);
+		if (Targets.IsEmpty())
+		{
+			return;
+		}
+	}
+
 	// ⭐ 판정 결과를 GAS 그릇에 담아 넘긴다. Source = 시전자, Target = 대상 (F03-01).
 	const FGameplayAbilityTargetDataHandle TargetData = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromActorArray(Targets, /*OneTargetPerHandle=*/false);
-	A->ApplySpecToTargets(SpecHandle, TargetData);
+	// 출혈 최대 대상은 배율을 단 사본으로 (재키 Q +30% · Argument 65). 대상마다 스펙이 하나라 무리를 나눈다
+	const float BleedBonus = UERSkillData::LevelValue(BonusVsMaxBleed, Level);
+	TArray<AActor*> BonusTargets;
+	TArray<AActor*> NormalTargets = Targets;
+	if (BleedBonus > 0.f)
+	{
+		NormalTargets.Reset();
+		for (AActor* T : Targets)
+		{
+			(UERBleedEffect::GetStacks(T, Ctx.ASC) >= UERBleedEffect::MaxStacks ? BonusTargets : NormalTargets).Add(T);
+		}
+	}
+	if (NormalTargets.Num() == Targets.Num())
+	{
+		A->ApplySpecToTargets(SpecHandle, TargetData);
+	}
+	else
+	{
+		if (!NormalTargets.IsEmpty())
+		{
+			A->ApplySpecToTargets(SpecHandle, UAbilitySystemBlueprintLibrary::AbilityTargetDataFromActorArray(NormalTargets, false));
+		}
+		const FGameplayEffectSpecHandle BonusHandle(new FGameplayEffectSpec(*Spec));
+		BonusHandle.Data->SetSetByCallerMagnitude(ERTags::Data_Damage_Multiplier, 1.f + BleedBonus);
+		A->ApplySpecToTargets(BonusHandle, UAbilitySystemBlueprintLibrary::AbilityTargetDataFromActorArray(BonusTargets, false));
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 출혈 최대 %d명 피해 +%.0f%%"),
+			*GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), BonusTargets.Num(), BleedBonus * 100.f);
+	}
 	Ctx.bHitAnything = true;
 
 	if (!HPBefore.IsEmpty())
@@ -136,6 +203,7 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 		{
 			FixedSpec->SetSetByCallerMagnitude(ERTags::Data_Damage_CurHPRatio, FixedRatio * Scale);
 			FixedSpec->AddDynamicAssetTag(ERTags::Damage_Type_True);
+			FixedSpec->AddDynamicAssetTag(ERTags::Damage_Secondary);   // 같은 스킬의 덧붙은 고정 피해 — 적중은 본 피해 한 번으로 (단검 D)
 			if (bAoE) { FixedSpec->AddDynamicAssetTag(ERTags::Damage_Shape_AoE); }
 			A->ApplySpecToTargets(FixedHandle, TargetData);
 			UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 고정 피해 현재체력 %.0f%%"), *GetNameSafe(A->GetOwningActorFromActorInfo()), *GetNameSafe(Ctx.Skill), FixedRatio * 100.f);

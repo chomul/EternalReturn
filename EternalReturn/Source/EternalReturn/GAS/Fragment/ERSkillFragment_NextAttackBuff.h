@@ -26,6 +26,17 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	TObjectPtr<const UERSkillData> BuffSkill;
 
+	/**
+	 * 평타 초기화 (재키 W · 사용자 2026-10-05 "평타 치다가 W 누르면 평타가 캔슬되면서 W 강화 평타가 나감") — [서버] 강화를 건 **바로 뒤**
+	 * **평타를 치고 있을 때만** (평타 진행 중 · 평타 간격 안): 진행 중 평타를 끊고 · 평타 쿨다운을 지우고 · 곧바로 평타를 친다 (강화를 소비).
+	 * 대상 = 치던 대상(마지막 평타 대상) → 없으면 커서 아래 적. 평타 중이 아니면 강화만 걸고 끝 — 다음 평타가 강화 (사용자 2026-10-05).
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	bool bAttackNow = false;
+
 	virtual void OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const override;
+
+	/** [서버] 강화 걸기 본체 — Source 의 피해 · 적중 조각을 다음 평타에 (Duration 0 = 만료 없음). 다른 조각도 부른다 (시셀라 P 윌슨 합침 · Argument 68) */
+	static bool Grant(FERSkillContext& Ctx, const UERSkillData* Source, int32 SourceLevel, float InDuration);
 	virtual FString GetDebugName() const override { return TEXT("다음 평타 강화"); }
 };

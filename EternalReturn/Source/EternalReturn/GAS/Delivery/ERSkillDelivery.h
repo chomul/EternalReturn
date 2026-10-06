@@ -59,8 +59,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "발사", meta = (ClampMin = "0", ClampMax = "180", EditCondition = "FanCount > 1", EditConditionHides))
 	float FanAngleDeg = 15.f;
 
+	/**
+	 * 판정을 N초 뒤에 (재키 E 습격 — 도약이 끝나 **착지하는 순간** · 사용자 2026-10-05). 0 = 바로.
+	 * 자리는 시전 때 정한 그대로 (조준점 원). 어빌리티는 먼저 끝나도 된다 — 투사체 적중처럼 늦게 적용 (서버).
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "발사", meta = (ClampMin = "0"))
+	float JudgeDelay = 0.f;
+
 	virtual void Deliver(UERGameplayAbility& Ability, const UERSkillData& Skill, const FTargetQuery& Q, const FERShapeContext& Ctx) const override;
 	virtual FString Describe() const override;
+
+private:
+	/** 판정 본체 — 바로 또는 JudgeDelay 뒤 */
+	void Resolve(UERGameplayAbility& Ability, const UERSkillData& Skill, const FTargetQuery& Q, const FERShapeContext& Ctx, bool bLanding = false) const;
 };
 
 /** 투사체를 어떻게 쏘나. */
@@ -103,6 +114,10 @@ public:
 	/** 따라가는 대상만 맞는다 — 길의 다른 적은 지나친다 (원거리 평타 · Argument 60 H1). 끄면 길에서 처음 닿은 적 (카티야 R) */
 	UPROPERTY(EditDefaultsOnly, Category = "발사", meta = (EditCondition = "bHoming"))
 	bool bHitOnlyTarget = false;
+
+	/** 사거리 대신 **조준점까지** 날고 멈춘다 (시셀라 Q — 조준점은 서버가 최소 · 최대 사거리로 자른 것) */
+	UPROPERTY(EditDefaultsOnly, Category = "발사")
+	bool bStopAtAimPoint = false;
 
 	/** 모습 · 비행 BP. 비우면 기본 (따라가면 AERProjectile_Homing · 아니면 AERProjectileBase) */
 	UPROPERTY(EditDefaultsOnly, Category = "발사")

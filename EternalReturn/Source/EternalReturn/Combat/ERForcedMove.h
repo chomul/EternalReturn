@@ -44,7 +44,7 @@ namespace ERForcedMove
 	 *
 	 * ⚠ 서버에서만 부른다. 실패하면 로그를 남긴다.
 	 */
-	bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU = 0.f);
+	bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU = 0.f, bool bThroughWalls = false);
 
 	/**
 	 * [서버] 자기 이동 (돌진 · 도약 · 백스텝, F07-06). ApplyForcedMove 와 **같은 몸통**이고
@@ -52,7 +52,7 @@ namespace ERForcedMove
 	 * 방향 · 거리 · 시간의 의미는 ApplyForcedMove 와 같다. 벽 감시도 같이 켜진다.
 	 * WallCrossExtraUU > 0 — 길이 벽에 막혔으면 [거리, 거리 + 여분] 안에서 캡슐이 들어가고 바닥이 있는 첫 자리로 **벽을 넘는다** (카티야 E · 사용자 2026-10-01). 없으면 보통처럼 벽에서 멈춤.
 	 */
-	bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns = false, float WallCrossExtraUU = 0.f);
+	bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns = false, float WallCrossExtraUU = 0.f, bool bThroughWalls = false);
 
 	/**
 	 * [모든 머신] 실제로 RootMotionSource 를 붙인다. **직접 부르지 않는다** —

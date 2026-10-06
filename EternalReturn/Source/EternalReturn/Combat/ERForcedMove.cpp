@@ -31,7 +31,7 @@ namespace
 	bool FindWallCrossLanding(const ACharacter* Target, const FVector& Dir, float DistUU, float ExtraUU, float& OutDistUU, FString& OutWall);
 }
 
-bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU)
+bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, float HeightUU, bool bThroughWalls)
 {
 	if (!Target)
 	{
@@ -56,11 +56,16 @@ bool ApplyForcedMove(ACharacter* Target, const FVector& Direction, float Distanc
 		}
 	}
 
-	return StartMove(Target, Direction, DistanceUU, Duration, HeightUU, false, TEXT("강제이동"));
+	return StartMove(Target, Direction, DistanceUU, Duration, HeightUU, false, TEXT("강제이동"), bThroughWalls);   // 벽 통과 = 시셀라 E 끌기 (목적지가 윌슨 · 시셀라 자리라 설 자리다)
 }
 
-bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns, float WallCrossExtraUU)
+bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns, float WallCrossExtraUU, bool bThroughWalls)
 {
+	if (bThroughWalls)
+	{
+		// 목적지를 부르는 쪽이 이미 안다 (시셀라 E — 윌슨 자리) · 벽을 그냥 지나간다
+		return StartMove(Target, Direction, DistanceUU, Duration, 0.f, bPassThroughPawns, TEXT("자기이동"), /*bThroughWalls=*/true);
+	}
 	// 면역 검사 없음 — 자기가 시작하는 이동은 "방해" 가 아니다.
 	if (Target && WallCrossExtraUU > 0.f)
 	{

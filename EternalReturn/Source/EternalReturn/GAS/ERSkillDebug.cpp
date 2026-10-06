@@ -17,6 +17,9 @@
 #include "GAS/ERGameplayAbility.h"
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERSkillData.h"
+#include "GAS/ERShield.h"
+#include "Combat/ERWilson.h"
+#include "GameFramework/Character.h"
 
 namespace
 {
@@ -207,6 +210,31 @@ void SkillHPCmd(const TArray<FString>& Args, UWorld* World) { SetVital(Args, Wor
 void SkillVPCmd(const TArray<FString>& Args, UWorld* World) { SetVital(Args, World, UERAttributeSet::GetVPAttribute(), TEXT("VP")); }
 
 // ─────────────────────────────────────────────────────────────
+// ER.Skill.Shield <양> [초] — 전원 보호막 (서버 창 · 시셀라 F19-04 · 기본 2.5초)
+// ER.Skill.Wilson [m]       — 전원 앞 N m 에 윌슨 떨어뜨리기 (서버 창 · 기본 3m) — Q 가 생기기 전 확인용
+// ─────────────────────────────────────────────────────────────
+void SkillShieldCmd(const TArray<FString>& Args, UWorld* World)
+{
+	const float Amount = Args.Num() > 0 ? FCString::Atof(*Args[0]) : 100.f;
+	const float Seconds = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 2.5f;
+	ForEachServerPlayer(World, [&](AERPlayerState* PS)
+	{
+		ERShield::Apply(PS->GetAbilitySystemComponent(), Amount, Seconds, TEXT("ER.Skill.Shield"));
+	});
+}
+void SkillWilsonCmd(const TArray<FString>& Args, UWorld* World)
+{
+	const float Meters = Args.Num() > 0 ? FCString::Atof(*Args[0]) : 3.f;
+	ForEachServerPlayer(World, [&](AERPlayerState* PS)
+	{
+		if (ACharacter* C = PS->GetPawn<ACharacter>())
+		{
+			AERWilson::Drop(C, C->GetActorLocation() + C->GetActorForwardVector() * Meters * 100.f);
+		}
+	});
+}
+
+// ─────────────────────────────────────────────────────────────
 // ER.Skill.Haste <값> — 스킬 가속을 직접 세팅 (서버 창에서)
 //   ⚠ 어트리뷰트 Base 를 바꾼다. 아이템 경로(F08)가 생기면 그쪽으로 검증한다.
 // ─────────────────────────────────────────────────────────────
@@ -261,6 +289,13 @@ static FAutoConsoleCommandWithWorldAndArgs GERSkillHPCmd(
 static FAutoConsoleCommandWithWorldAndArgs GERSkillVPCmd(
 	TEXT("ER.Skill.VP"), TEXT("[임시] 전원 VP 세팅 (서버 창). ER.Skill.VP <값>"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SkillVPCmd));
+
+static FAutoConsoleCommandWithWorldAndArgs GERSkillShieldCmd(
+	TEXT("ER.Skill.Shield"), TEXT("[임시] 전원 보호막 (서버 창). ER.Skill.Shield <양> [초=2.5]"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SkillShieldCmd));
+static FAutoConsoleCommandWithWorldAndArgs GERSkillWilsonCmd(
+	TEXT("ER.Skill.Wilson"), TEXT("[임시] 전원 앞에 윌슨 떨어뜨리기 (서버 창). ER.Skill.Wilson [m=3]"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SkillWilsonCmd));
 
 static FAutoConsoleCommandWithWorldAndArgs GERSkillCooldownCmd(
 	TEXT("ER.Skill.Cooldown"),

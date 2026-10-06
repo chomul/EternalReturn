@@ -20,6 +20,8 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(State_Unstoppable,    "State.Unstoppable");
 	UE_DEFINE_GAMEPLAY_TAG(State_Untargetable,   "State.Untargetable");
 	UE_DEFINE_GAMEPLAY_TAG(State_CCImmune,       "State.CCImmune");
+	UE_DEFINE_GAMEPLAY_TAG(State_Bleeding,       "State.Bleeding");
+	UE_DEFINE_GAMEPLAY_TAG(State_Adrenaline,     "State.Adrenaline");
 	UE_DEFINE_GAMEPLAY_TAG(State_Riding,         "State.Riding");
 	UE_DEFINE_GAMEPLAY_TAG(State_AnimHold,       "State.AnimHold");
 	UE_DEFINE_GAMEPLAY_TAG(State_Gathering,      "State.Gathering");
@@ -78,12 +80,17 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_BasicAttack, "Damage.Type.BasicAttack");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_Skill,       "Damage.Type.Skill");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_True,        "Damage.Type.True");
+	UE_DEFINE_GAMEPLAY_TAG(Damage_Secondary,        "Damage.Secondary");
 
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_CCDuration,           "SetByCaller.CCDuration");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Cooldown,             "SetByCaller.Cooldown");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Cost,                 "SetByCaller.Cost");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_PhaseDuration,        "SetByCaller.PhaseDuration");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_StateDuration,        "SetByCaller.StateDuration");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_LostHP_RegenMin,      "SetByCaller.LostHP.RegenMin");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_LostHP_RegenMax,      "SetByCaller.LostHP.RegenMax");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_LostHP_SkillAmpMin,   "SetByCaller.LostHP.SkillAmpMin");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_LostHP_SkillAmpMax,   "SetByCaller.LostHP.SkillAmpMax");
 
 	UE_DEFINE_GAMEPLAY_TAG(State_Casting,    "State.Casting");
 	UE_DEFINE_GAMEPLAY_TAG(State_Recovering, "State.Recovering");
@@ -91,8 +98,14 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(State_InCombat,   "State.InCombat");
 	UE_DEFINE_GAMEPLAY_TAG(State_ConsumeOnAttack, "State.ConsumeOnAttack");
 	UE_DEFINE_GAMEPLAY_TAG(State_NextAttackBuff, "State.NextAttackBuff");
+	UE_DEFINE_GAMEPLAY_TAG(State_Shielded,     "State.Shielded");
+	UE_DEFINE_GAMEPLAY_TAG(State_WilsonAway,   "State.Wilson.Away");
+	UE_DEFINE_GAMEPLAY_TAG(State_LostHPStats,  "State.Passive.LostHPStats");
+	UE_DEFINE_GAMEPLAY_TAG(State_Bubble,       "State.Sissela.Bubble");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Wilson_Joined, "Event.Wilson.Joined");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Input_Move, "Event.Input.Move");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Skill_Aim,  "Event.Skill.Aim");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Kill_Dealt, "Event.Kill.Dealt");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Hit_Dealt,  "Event.Hit.Dealt");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowPercent,          "SetByCaller.SlowPercent");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_OnHitMagnitude,       "SetByCaller.OnHitMagnitude");
@@ -142,6 +155,8 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_MaxHPRatio,       "Data.Damage.MaxHPRatio");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_CurHPRatio,       "Data.Damage.CurHPRatio");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_LostHPRatio,      "Data.Damage.LostHPRatio");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_HPFloor, "Data.Damage.HPFloor");
+	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_Multiplier, "Data.Damage.Multiplier");
 	UE_DEFINE_GAMEPLAY_TAG(Data_Damage_TargetLostHPScaleMax, "Data.Damage.TargetLostHPScaleMax");
 
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Shape_AoE,    "Damage.Shape.AoE");
@@ -182,19 +197,37 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_HitEnhanced, "Pres.Sfx.HitEnhanced");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_EnhanceReady, "Pres.Sfx.EnhanceReady");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillAim_R, "Pres.Sfx.SkillAim.R");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHit_P, "Pres.Sfx.SkillHit.P");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLoop_P, "Pres.Sfx.SkillLoop.P");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLoopStart_P, "Pres.Sfx.SkillLoopStart.P");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLand_E, "Pres.Sfx.SkillLand.E");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillHitLate_Q, "Pres.Sfx.SkillHitLate.Q");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLoop_W, "Pres.Sfx.SkillLoop.W");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLoop_R, "Pres.Sfx.SkillLoop.R");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLoopStart_R, "Pres.Sfx.SkillLoopStart.R");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillRecast_R, "Pres.Sfx.SkillRecast.R");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Join, "Pres.Sfx.Join");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillMove_Q, "Pres.Sfx.SkillMove.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLand_Q, "Pres.Sfx.SkillLand.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillBurst_W, "Pres.Sfx.SkillBurst.W");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillStun_E, "Pres.Sfx.SkillStun.E");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillPull_E, "Pres.Sfx.SkillPull.E");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillShield_E, "Pres.Sfx.SkillShield.E");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillCount_R, "Pres.Sfx.SkillCount.R");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLand_R, "Pres.Sfx.SkillLand.R");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Attack, "GameplayCue.Pres.Attack");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Hit, "GameplayCue.Pres.Hit");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Aim, "GameplayCue.Pres.Aim");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Land, "GameplayCue.Pres.Land");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Ready, "GameplayCue.Pres.Ready");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Sfx, "GameplayCue.Pres.Sfx");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_AttackEnhanced, "Pres.Anim.AttackEnhanced");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeStart, "Pres.Anim.ModeStart");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeIdle, "Pres.Anim.ModeIdle");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeRun, "Pres.Anim.ModeRun");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeEnd, "Pres.Anim.ModeEnd");
 	UE_DEFINE_GAMEPLAY_TAG(Mode, "Mode");
 	UE_DEFINE_GAMEPLAY_TAG(Mode_Sniper, "Mode.Sniper");
+	UE_DEFINE_GAMEPLAY_TAG(Mode_Bubble, "Mode.Bubble");
+	UE_DEFINE_GAMEPLAY_TAG(Mode_Chainsaw, "Mode.Chainsaw");
 }

@@ -8,6 +8,7 @@
 #include "GAS/ERAttributeSet.h"
 #include "GAS/ERCooldownEffect.h"
 #include "GAS/ERGameplayTags.h"
+#include "GAS/ERPassiveAbility.h"
 #include "GAS/ERSkillData.h"
 
 UERBasicAttackAbility::UERBasicAttackAbility()
@@ -94,6 +95,19 @@ void UERBasicAttackAbility::OnTargetsResolved(const FTargetResult& Result)
 		ApplyOnTargets(BuffSkill, Targets, 1.f, BuffLevel, GetExecSkill(), /*bEnhancement=*/true);
 		UE_LOG(LogEternalReturn, Log, TEXT("[평타] %s 강화 소비: %s Lv.%d"),
 			*GetNameSafe(GetOwningActorFromActorInfo()), *GetNameSafe(BuffSkill), BuffLevel);
+		// 강화의 주인이 **패시브**면 지금 그 쿨다운 (시셀라 P 2초 — 쿨 중엔 윌슨과 합쳐도 장전 안 됨 · 사용자 2026-10-06).
+		//   패시브가 아닌 스킬(재키 W)은 시전 때 이미 쿨이 돌았다 — 다시 걸지 않는다
+		for (const FGameplayAbilitySpec& S : ASC->GetActivatableAbilities())
+		{
+			if (S.SourceObject.Get() == BuffSkill)
+			{
+				if (UERPassiveAbility* Passive = Cast<UERPassiveAbility>(S.GetPrimaryInstance()); Passive && Passive->IsActive())
+				{
+					Passive->StartCooldownNow();
+				}
+				break;
+			}
+		}
 	}
 	// ⭐ 1회성 — 얹었으면 지운다. 여러 개였어도 전부 (같은 평타에 다 실린다).
 	if (Buffs.Num() > 0)

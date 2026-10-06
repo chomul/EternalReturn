@@ -99,6 +99,12 @@ public:
 	FGameplayTag GetRecastTag() const { return RecastTag; }
 	/** 조각용 — 쿨다운 태그(모드 반환) · 사거리(블링크 전제). 엔진 오버라이드는 protected 라 공개 접근자를 둔다. */
 	const FGameplayTagContainer& GetCooldownTagsForFragment() const { return CooldownTags; }
+	/** 마지막 조준 대상 (평타 = 마지막 평타 대상) — 조각용 (재키 W 평타 초기화 · 2026-10-05) */
+	AActor* GetAimActorForFragment() const { return AimActor.Get(); }
+	/** 이번 시전의 조준점 (서버 클램프 뒤) — 투사체 파생이 시작점을 바꿀 때 (시셀라 E 윌슨 자리 → 커서) */
+	FVector GetAimPointForFragment() const { return AimPoint; }
+	/** [서버] 지금 이 스킬의 쿨다운을 건다 — 활성 인스턴스에서 (패시브 강화 평타를 쓴 순간 · 시셀라 P · Argument 68) */
+	void StartCooldownNow() { ApplyCooldown(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo); }
 	float GetRangeMaxFor(const UERSkillData& Skill) const { return GetRangeMax(Skill); }
 	/** 조각용 공개 래퍼 — 엔진의 ApplyGameplayEffectSpecTo* 는 protected 다. */
 	void ApplySpecToTargets(const FGameplayEffectSpecHandle& Spec, const FGameplayAbilityTargetDataHandle& TargetData)
@@ -120,7 +126,8 @@ public:
 	/** 모양 문맥 — 조준 · 대상 칸 · 시전 시작 때 저장한 자리 · 사거리(평타 = 무기 사거리). */
 	FERShapeContext MakeShapeContext(const UERSkillData& Skill, const FVector& InAimPoint, const FVector& InAimDirection, AActor* Designated) const;
 	/** [서버] 즉시 판정의 끝 — 판정 로그 · 적중 조각 · 연출 큐 · OnTargetsResolved. */
-	void ResolveInstantHits(const UERSkillData& Skill, const FTargetQuery& Q, const FTargetResult& Result);
+	/** bAttackCue false = 공격(시전) 큐를 안 보낸다 — 늦춘 판정(착지)은 시전음을 뛰어오를 때 이미 냈다 */
+	void ResolveInstantHits(const UERSkillData& Skill, const FTargetQuery& Q, const FTargetResult& Result, bool bAttackCue = true);
 	/** [서버] 적중이 나중(투사체 도착)인 발사 — 적중과 무관한 조각만 지금("빗나감" 벌칙 보류) · bAttackCue 면 시전음도 지금. */
 	void BeginDeferredHits(const UERSkillData& Skill, bool bAttackCue);
 	/** [서버] 투사체 하나 (Deferred → InitLaunch → Finish). */
