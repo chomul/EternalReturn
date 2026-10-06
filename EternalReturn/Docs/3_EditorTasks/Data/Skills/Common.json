@@ -46,10 +46,18 @@
     },
     {
       "Asset": "DA_Skill_D_Pistol",
-      "_메모": "무기 D — 적만 (사용자 2026-10-02 \"무기 D 스킬들도 Enemy 로\" · 옛 TeamFilter All 이관 값)",
+      "_메모": "무기 D 권총 무빙 리로드 — 적만 (사용자 2026-10-02) · 조각은 F11 문서 값 그대로 옮김 (3_EditorTasks/F11_무기.md §2: 이속 1초 1.4/1.55/1.7 · 그 뒤 2회 공속 1.7 · 5초 [자체] · StartDelay 1) + 이속 효과에 Mode.MovingReload (달리기 NormalRun · 끝 Reload — Argument 71 D1 · 사용자 2026-10-07). ⏸ 이속 스증 1% 계수는 아직 없다",
       "Props": {
         "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
-      }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "Effects": "((Effect=@GE_MoveSpeedUp,Duration=(1,1,1),Magnitude=(1.4,1.55,1.7),GrantTag=(TagName=\"Mode.MovingReload\")),(Effect=@GE_AttackSpeedUp,Duration=(5,5,5),Magnitude=(1.7,1.7,1.7),Charges=2,StartDelay=(1,1,1)))"
+          }
+        }
+      ]
     },
     {
       "Asset": "DA_Skill_D_Shuriken",

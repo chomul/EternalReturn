@@ -103,6 +103,8 @@ public:
 	AActor* GetAimActorForFragment() const { return AimActor.Get(); }
 	/** 이번 시전의 조준점 (서버 클램프 뒤) — 투사체 파생이 시작점을 바꿀 때 (시셀라 E 윌슨 자리 → 커서) */
 	FVector GetAimPointForFragment() const { return AimPoint; }
+	/** 두 번째 조준 점 (bAimDirectionOnHold — 뗄 때의 커서 · 레니 R 날릴 방향). 없으면 false */
+	bool GetSecondAimPoint(FVector& Out) const { Out = SecondAimPoint; return bHasSecondAimPoint; }
 	/** [서버] 지금 이 스킬의 쿨다운을 건다 — 활성 인스턴스에서 (패시브 강화 평타를 쓴 순간 · 시셀라 P · Argument 68) */
 	void StartCooldownNow() { ApplyCooldown(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo); }
 	float GetRangeMaxFor(const UERSkillData& Skill) const { return GetRangeMax(Skill); }
@@ -136,7 +138,7 @@ public:
 	/** ER.Skill.DebugDraw 1 — 모양 테두리(초록) · 적중(빨강) 1.5초 */
 	void DebugDrawQuery(const UERSkillData& Skill, const FTargetQuery& Q, const FTargetResult& Result) const;
 	/** [서버] 연출 큐 (F12.5-05 · Argument 49 W2) — 판정 순간에 시전자 `GameplayCue.Pres.Attack` · 맞은 대상마다 `GameplayCue.Pres.Hit`. */
-	void SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack, int32 ShotNumber = 0, const FVector& FaceDirection = FVector::ZeroVector) const;
+	void SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& InTargets, bool bWithAttack, int32 ShotNumber = 0, const FVector& FaceDirection = FVector::ZeroVector) const;
 	/** [서버] 스킬 통 몽타주 섹션 넘기기 (K8 · Fire · Loop · End) — 다른 클라엔 복제 · 소유 클라는 같이 보내는 큐로. 통 몽타주가 아니면 아무것도 안 한다. */
 	void JumpSkillSection(const UERSkillData& Skill, FName Section) const;
 	/** [서버] 시전자 연출 사건 하나 (K8) — `GameplayCue.Pres.Aim` (순차 사격 다음 발 조준 · 발 번호) · `.Ready` (강화 걸림). 무엇을 틀지는 받는 쪽 키. */
@@ -269,6 +271,8 @@ private:
 
 	// [3] 확정된 조준. 매 발동마다 ResolveAim 이 덮어쓴다.
 	FVector AimPoint = FVector::ZeroVector;
+	FVector SecondAimPoint = FVector::ZeroVector;
+	bool bHasSecondAimPoint = false;
 	/** 모양이 시전 시작 때 저장한 자리 (PlayerCircles — 판정 순간 각 자리에 원). 서버만. */
 	TArray<FVector> CircleAimPoints;
 	FVector AimDirection = FVector::ForwardVector;

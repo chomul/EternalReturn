@@ -350,8 +350,36 @@ void UERPresentationComponent::SendSfxCue(AActor* Instigator, FGameplayTag SfxKe
 	ASC->ExecuteGameplayCue(ERTags::GameplayCue_Pres_Sfx, P);
 }
 
+void UERPresentationComponent::SendAnimCue(AActor* Instigator, FGameplayTag AnimKey)
+{
+	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Instigator);
+	if (!ASC || !AnimKey.IsValid() || !Instigator->HasAuthority())
+	{
+		return;
+	}
+	FGameplayCueParameters P;
+	P.Instigator = Instigator;
+	P.AggregatedSourceTags.AddTag(AnimKey);
+	ASC->ExecuteGameplayCue(ERTags::GameplayCue_Pres_Anim, P);
+}
+
 void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGameplayCueParameters& Params)
 {
+	// 동작표 키 하나 (레니 R 같이 날아감) — 이 머신에서 그 애니
+	if (CueTag == ERTags::GameplayCue_Pres_Anim)
+	{
+		for (const FGameplayTag& T : Params.AggregatedSourceTags)
+		{
+			if (T.MatchesTag(ERTags::Ability_Slot))
+			{
+				const FString Played = PlayEventPres(T, FGameplayTag());
+				UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 애니 큐 %s — %s (%s)"), *GetNameSafe(GetOwner()), *T.ToString(), *Played, NetTag(GetOwner()));
+				break;
+			}
+		}
+		return;
+	}
+
 	// 소리 키 그대로 (시셀라 · Audio/Sissela.md) — 슬롯 · 강화 판단 없이
 	if (CueTag == ERTags::GameplayCue_Pres_Sfx)
 	{
@@ -890,26 +918,6 @@ void UERPresentationComponent::PlayAbilityAnim(UGameplayAbility* Ability, const 
 	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s %s 재생 %s (%s) ×%.2f%s · 슬롯 %s (%s)"),
 		*GetNameSafe(GetOwner()), *Key.ToString(), *Anim->GetName(), R->Source, Rate, *MarkerNote,
 		Montage->SlotAnimTracks.Num() > 0 ? *Montage->SlotAnimTracks[0].SlotName.ToString() : TEXT("없음"), NetTag(GetOwner()));
-	// 진단 (시셀라 Q 상체가 안 움직임 · 2026-10-06) — 상체 슬롯 몽타주면 0.15초 뒤 AnimBP 의 그 슬롯 가중치를 잰다.
-	//   0 이면 AnimGraph 에 Slot 'UpperBody' 노드가 없거나 · 연결이 안 됐거나 · Layered blend 뼈 이름이 틀렸다 (몽타주는 돌고 있는데 화면에 안 나온다)
-	if (Montage->IsValidSlot(UpperBodySlotName) && !Montage->IsValidSlot(AnimSlotName))
-	{
-		TWeakObjectPtr<UAnimMontage> WeakMontage(Montage);
-		FTimerHandle Unused;
-		GetWorld()->GetTimerManager().SetTimer(Unused, FTimerDelegate::CreateWeakLambda(this, [this, WeakMontage]()
-		{
-			const ACharacter* C = Cast<ACharacter>(GetOwner());
-			const UAnimInstance* AI = C && C->GetMesh() ? C->GetMesh()->GetAnimInstance() : nullptr;
-			if (!AI)
-			{
-				return;
-			}
-			UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 상체 몽타주 %s — 재생 중 %s · 위치 %.2f · 슬롯 가중치 UpperBody %.2f · DefaultSlot %.2f (%s)%s"),
-				*GetNameSafe(GetOwner()), *GetNameSafe(WeakMontage.Get()), AI->Montage_IsPlaying(WeakMontage.Get()) ? TEXT("O") : TEXT("X"),
-				AI->Montage_GetPosition(WeakMontage.Get()), AI->GetSlotNodeGlobalWeight(UpperBodySlotName), AI->GetSlotNodeGlobalWeight(AnimSlotName), NetTag(GetOwner()),
-				AI->GetSlotNodeGlobalWeight(UpperBodySlotName) <= 0.f ? TEXT(" ⚠ UpperBody 가중치 0 — AnimGraph 의 Slot 'UpperBody' 가 안 돌고 있다") : TEXT(""));
-		}), 0.15f, false);
-	}
 }
 
 void UERPresentationComponent::StopActionAnim()
@@ -1077,6 +1085,15 @@ void UERPresentationComponent::RefreshMode()
 		return;
 	}
 	const FGameplayTag OldMode = ActiveMode;
+	// 모드가 끝날 때 한 번 (레니 D Reload) — 모드 층이 아직 있을 때 고른다
+	if (OldMode.IsValid() && HasKey(ERTags::Pres_Sfx_ModeEnd))
+	{
+		if (USoundBase* EndSound = PickSound(ERTags::Pres_Sfx_ModeEnd))
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, EndSound, GetOwner()->GetActorLocation());
+			UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 소리 %s ← 모드 %s 끝 (%s)"), *GetNameSafe(GetOwner()), *EndSound->GetName(), *OldMode.ToString(), NetTag(GetOwner()));
+		}
+	}
 	ActiveMode = NewMode;
 	Rebuild();   // 모드 층(사건 덮어쓰기) + AnimInstance bInMode — 진입 · 해제 포즈는 상태머신이 (Argument 42 ④ MB)
 	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 모드 %s → %s (%s)"), *GetNameSafe(GetOwner()),

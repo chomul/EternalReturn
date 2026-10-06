@@ -31,6 +31,14 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> Magnitude;
 
+	/** 시전자 스킬 증폭 1 당 크기 + 이 값 (레니 W 아군 이속 "스킬 증폭의 2.5%" — 배율이면 0.00025) */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> MagnitudePerSkillAmp;
+
+	/** 이만큼 뒤에 건다 (초) — 레니 W 아군: 0.15초 둔화 뒤 이속 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	float StartDelay = 0.f;
+
 	virtual void OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const override;
 	virtual FString GetDebugName() const override { return TEXT("적중 효과"); }
 	virtual bool IsHitEffect() const override { return true; }

@@ -102,7 +102,10 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(State_WilsonAway,   "State.Wilson.Away");
 	UE_DEFINE_GAMEPLAY_TAG(State_LostHPStats,  "State.Passive.LostHPStats");
 	UE_DEFINE_GAMEPLAY_TAG(State_Bubble,       "State.Sissela.Bubble");
+	UE_DEFINE_GAMEPLAY_TAG(State_Leni_Bear,    "State.Leni.Bear");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Wilson_Joined, "Event.Wilson.Joined");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Ally_SkillHit, "Event.Ally.SkillHit");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Leni_BearTriggered, "Event.Leni.BearTriggered");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Input_Move, "Event.Input.Move");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Skill_Aim,  "Event.Skill.Aim");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Kill_Dealt, "Event.Kill.Dealt");
@@ -207,6 +210,11 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLoopStart_R, "Pres.Sfx.SkillLoopStart.R");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillRecast_R, "Pres.Sfx.SkillRecast.R");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Join, "Pres.Sfx.Join");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_ModeEnd, "Pres.Sfx.ModeEnd");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_BearAppear, "Pres.Sfx.BearAppear");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_BearShot, "Pres.Sfx.BearShot");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillAlly_Q, "Pres.Sfx.SkillAlly.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillWall_R, "Pres.Sfx.SkillWall.R");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillMove_Q, "Pres.Sfx.SkillMove.Q");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillLand_Q, "Pres.Sfx.SkillLand.Q");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_SkillBurst_W, "Pres.Sfx.SkillBurst.W");
@@ -221,6 +229,7 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Land, "GameplayCue.Pres.Land");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Ready, "GameplayCue.Pres.Ready");
 	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Sfx, "GameplayCue.Pres.Sfx");
+	UE_DEFINE_GAMEPLAY_TAG(GameplayCue_Pres_Anim, "GameplayCue.Pres.Anim");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_AttackEnhanced, "Pres.Anim.AttackEnhanced");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeStart, "Pres.Anim.ModeStart");
 	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_ModeIdle, "Pres.Anim.ModeIdle");
@@ -229,5 +238,6 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Mode, "Mode");
 	UE_DEFINE_GAMEPLAY_TAG(Mode_Sniper, "Mode.Sniper");
 	UE_DEFINE_GAMEPLAY_TAG(Mode_Bubble, "Mode.Bubble");
+	UE_DEFINE_GAMEPLAY_TAG(Mode_MovingReload, "Mode.MovingReload");
 	UE_DEFINE_GAMEPLAY_TAG(Mode_Chainsaw, "Mode.Chainsaw");
 }

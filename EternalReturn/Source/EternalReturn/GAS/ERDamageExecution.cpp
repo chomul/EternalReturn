@@ -343,14 +343,6 @@ void UERDamageExecution::Execute_Implementation(
 	// ⚠ 상한(최대 체력 등) 클램프는 여기서 하지 않는다. F02-03 의 PreAttributeChange 가 한다.
 	Damage = FMath::Max(Damage, 0.f);
 
-	// 진단 (재키 출혈 · 2026-10-05) — 도트 틱의 중첩 수 · 계수 · 결과. 2중첩 5.8 → 3중첩 12.9 (2.22배)가 맞는지 본다
-	if (SpecTags.HasTag(ERTags::Damage_Secondary) && Spec.GetPeriod() > 0.f)
-	{
-		UE_LOG(LogEternalReturn, Log, TEXT("[도트] %s 틱 — 중첩 %d · 기본 %.2f · 공격력 계수 %.3f (공격력 %.1f) · 피해 %.1f"),
-			*GetNameSafe(ExecParams.GetTargetAbilitySystemComponent() ? ExecParams.GetTargetAbilitySystemComponent()->GetAvatarActor() : nullptr),
-			Stacks, Base, APRatio, AttackPower, Damage);
-	}
-
 	if (Damage > 0.f)
 	{
 		// ⭐ 체력이 아니라 IncomingDamage 에 넣는다. 받는 쪽은 F02-04 다.

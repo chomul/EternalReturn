@@ -10,6 +10,7 @@
 #include "AbilitySystemBlueprintLibrary.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
+#include "DrawDebugHelpers.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -149,6 +150,24 @@ void AERPlayerController::OnSkillSlotStarted(FGameplayTag SlotTag)
 		return;
 	}
 	PreviewSlot = SlotTag;
+	// 누른 자리 고정 스킬 (레니 R) — 지금 커서가 설치 자리 · 떼는 커서는 방향
+	HoldAnchorSlot = FGameplayTag();
+	if (const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPawn()))
+	{
+		const FGameplayTag Slot = ResolveModeSlot(*ASC, SlotTag);
+		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+		{
+			const UERSkillData* Skill = Spec.DynamicAbilityTags.HasTagExact(Slot) ? Cast<UERSkillData>(Spec.SourceObject.Get()) : nullptr;
+			FHitResult Hit;
+			if (Skill && Skill->bAimDirectionOnHold && GetHitResultUnderCursor(ECC_Visibility, false, Hit))
+			{
+				HoldAnchor = Hit.ImpactPoint;
+				HoldAnchorSlot = SlotTag;
+				UE_LOG(LogEternalReturn, Log, TEXT("[입력] %s 자리 고정 %s — 커서로 방향 · 떼면 발동"), *SlotTag.ToString(), *HoldAnchor.ToCompactString());
+				break;
+			}
+		}
+	}
 }
 
 void AERPlayerController::OnSkillSlotCompleted(FGameplayTag SlotTag)
@@ -180,7 +199,17 @@ void AERPlayerController::DrawSkillPreview()
 		FHitResult Hit;
 		if (Ability && Skill && GetHitResultUnderCursor(ECC_Visibility, /*bTraceComplex=*/false, Hit))
 		{
-			Ability->DrawPreview(*Skill, Hit.ImpactPoint);
+			if (HoldAnchorSlot.IsValid() && HoldAnchorSlot == PreviewSlot)
+			{
+				// 고정 자리 원 + 날릴 방향 화살표
+				Ability->DrawPreview(*Skill, HoldAnchor);
+				const FVector Up(0.f, 0.f, 30.f);
+				DrawDebugDirectionalArrow(GetWorld(), HoldAnchor + Up, FVector(Hit.ImpactPoint.X, Hit.ImpactPoint.Y, HoldAnchor.Z) + Up, 80.f, FColor::Yellow, false, 0.f, 0, 5.f);
+			}
+			else
+			{
+				Ability->DrawPreview(*Skill, Hit.ImpactPoint);
+			}
 		}
 		return;
 	}
@@ -240,16 +269,6 @@ void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
 				*GetNameSafe(Spec.SourceObject.Get()), Spec.Level, Spec.IsActive() ? TEXT(" 활성 중") : TEXT(""), Instance ? TEXT("") : TEXT(" CDO"),
 				bCooldown ? TEXT("OK") : TEXT("✘"), CD ? *CD->ToStringSimple() : TEXT("-"), bCost ? TEXT("OK") : TEXT("✘"), bTags ? TEXT("OK") : TEXT("✘"),
 				*Owned.ToStringSimple());
-			// 진단 (2026-10-05 재키 R 뒤 State.Block.BasicAttack 이 2분 남음 · 클라) — 태그 실패면 아직 활성인 어빌리티 (안 끝난 스킬이 소유 태그를 들고 있나)
-			if (!bTags)
-			{
-				FString Active;
-				for (const FGameplayAbilitySpec& S : ASC->GetActivatableAbilities())
-				{
-					if (S.IsActive()) { Active += FString::Printf(TEXT("%s%s"), Active.IsEmpty() ? TEXT("") : TEXT(", "), *GetNameSafe(S.SourceObject.Get())); }
-				}
-				UE_LOG(LogEternalReturn, Log, TEXT("[입력]   └ 활성 어빌리티 [%s]"), *Active);
-			}
 			return;
 		}
 
@@ -279,6 +298,18 @@ void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
 		{
 			Aim = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(Hit);
 		}
+		// 누른 자리 고정 스킬 (레니 R) — [0] = 누른 자리 · [1] = 지금 커서 (방향)
+		if (HoldAnchorSlot.IsValid() && HoldAnchorSlot == SlotTag && Aim.Num() > 0)
+		{
+			FHitResult AnchorHit;
+			AnchorHit.Location = AnchorHit.ImpactPoint = HoldAnchor;
+			AnchorHit.bBlockingHit = true;
+			FGameplayAbilityTargetDataHandle Two = UAbilitySystemBlueprintLibrary::AbilityTargetDataFromHitResult(AnchorHit);
+			Two.Append(Aim);
+			Aim = Two;
+			UE_LOG(LogEternalReturn, Log, TEXT("[입력] %s 발동 — 자리 %s · 방향 점 %s"), *SlotTag.ToString(), *HoldAnchor.ToCompactString(), *Hit.ImpactPoint.ToCompactString());
+		}
+		HoldAnchorSlot = FGameplayTag();
 
 		ServerActivateSkill(SlotTag, Aim);
 		UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] %s -> 발동 요청 (조준 %s)"),

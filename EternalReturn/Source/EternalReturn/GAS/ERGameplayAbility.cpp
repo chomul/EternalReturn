@@ -17,6 +17,7 @@
 #include "Abilities/GameplayAbilityTargetTypes.h"
 #include "DrawDebugHelpers.h"
 #include "GAS/Fragment/ERSkillFragment.h"
+#include "GAS/Fragment/ERSkillFragment_TeamSplit.h"
 #include "GAS/Delivery/ERSkillDelivery.h"
 #include "GAS/Shape/ERSkillShape.h"
 #include "Presentation/ERPresentationComponent.h"
@@ -496,6 +497,17 @@ void UERGameplayAbility::ResolveAim(const FGameplayEventData* TriggerEventData, 
 				AimActor = Hit->GetActor();
 			}
 		}
+		// 두 번째 점 (누른 자리 고정 · 방향 — 레니 R)
+		bHasSecondAimPoint = false;
+		if (TriggerEventData->TargetData.Num() > 1)
+		{
+			const FGameplayAbilityTargetData* Second = TriggerEventData->TargetData.Get(1);
+			if (Second && Second->HasEndPoint())
+			{
+				SecondAimPoint = Second->GetEndPoint();
+				bHasSecondAimPoint = true;
+			}
+		}
 	}
 
 	// ⭐ 서버 클램프 — 클라가 보낸 좌표를 믿지 않는다 (§4.2 "클램프 없으면 사거리 핵").
@@ -660,8 +672,14 @@ void UERGameplayAbility::ResolveInstantHits(const UERSkillData& SkillRef, const 
 	OnTargetsResolved(Result);
 }
 
-void UERGameplayAbility::SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& Targets, bool bWithAttack, int32 ShotNumber, const FVector& FaceDirection) const
+void UERGameplayAbility::SendPresCues(const UERSkillData& Skill, AActor* Avatar, const TArray<AActor*>& InTargets, bool bWithAttack, int32 ShotNumber, const FVector& FaceDirection) const
 {
+	// 적 · 아군 나누기 스킬 (레니) — 타격음은 적에게만 · 조각이 허락하면 아군도 (E 보호막 · 사용자 2026-10-07)
+	TArray<AActor*> Targets = InTargets;
+	if (const UERSkillFragment_TeamSplit* Split = Skill.FindFragment<UERSkillFragment_TeamSplit>(); Split && !Split->bAllyHitCue && Avatar)
+	{
+		Targets.RemoveAll([Avatar](const AActor* T) { return T == Avatar || !ERTeamStatics::IsHostile(Avatar, T); });
+	}
 	bWithAttack = bWithAttack && !Skill.bNoCastCue;
 	FGameplayCueParameters Base;
 	Base.Instigator = Avatar;                       // 소리는 시전자의 무기 · 스킨에서 찾는다

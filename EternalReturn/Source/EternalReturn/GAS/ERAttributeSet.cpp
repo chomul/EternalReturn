@@ -170,6 +170,26 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 		Hit.EventMagnitude = Damage;
 		Data.EffectSpec.GetAllAssetTags(Hit.InstigatorTags);   // Damage.Type.BasicAttack / Skill / True
 		SourceASC->HandleGameplayEvent(ERTags::Event_Hit_Dealt, &Hit);
+
+		// 곰돌이 (레니 P · Argument 70 B1) — 가해자에게 곰돌이가 있으면 **곰돌이 주인**(레니)에게도 알린다. 주인이 소모 · 추가 피해 · 쿨 감소
+		if (SourceASC->HasMatchingGameplayTag(ERTags::State_Leni_Bear))
+		{
+			FGameplayTagContainer Bear; Bear.AddTag(ERTags::State_Leni_Bear);
+			for (const FActiveGameplayEffectHandle& H : SourceASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(Bear)))
+			{
+				const FActiveGameplayEffect* AE = SourceASC->GetActiveGameplayEffect(H);
+				UAbilitySystemComponent* Owner = AE ? AE->Spec.GetContext().GetInstigatorAbilitySystemComponent() : nullptr;
+				if (Owner && Owner != SourceASC)
+				{
+					FGameplayEventData B;
+					B.EventTag = ERTags::Event_Leni_BearTriggered;
+					B.Instigator = SourceASC->GetAvatarActor();
+					B.Target = Data.Target.AbilityActorInfo->AvatarActor.Get();
+					Owner->HandleGameplayEvent(ERTags::Event_Leni_BearTriggered, &B);
+				}
+				break;
+			}
+		}
 	}
 
 	// 사망 정의는 "0 **이하**"다. 0 미만이 아니다 - 클램프가 이미 0 에서 잘라내므로

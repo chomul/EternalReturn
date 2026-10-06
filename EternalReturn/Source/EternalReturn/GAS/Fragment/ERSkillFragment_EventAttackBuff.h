@@ -22,7 +22,7 @@ public:
 	UPROPERTY(EditDefaultsOnly, meta = (Categories = "Event"))
 	FGameplayTag EventTag;
 
-	virtual FGameplayTag GetPassiveEventTag() const override { return EventTag; }
+	virtual void GetPassiveEventTags(FGameplayTagContainer& OutTags) const override { OutTags.AddTag(EventTag); }
 	virtual void OnPassiveEvent(FERSkillContext& Ctx, const FGameplayEventData& Payload) const override;
 	virtual FString GetDebugName() const override { return TEXT("이벤트 때 다음 평타 강화"); }
 };

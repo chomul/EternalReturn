@@ -443,6 +443,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "시전")
 	bool bCastWhileMoving = false;
 
+	/** 누르는 순간 커서 = **자리 고정** · 누르고 있는 동안 커서 = **방향** · 떼면 발동 (레니 R · 사용자 2026-10-07). 방향 점은 어빌리티 GetSecondAimPoint */
+	UPROPERTY(EditDefaultsOnly, Category = "시전")
+	bool bAimDirectionOnHold = false;
+
 	/**
 	 * 선딜 중 이동 입력이 시전을 **취소**하는가. false 면 선딜 중 이동이 **차단**된다(State.Block.Movement).
 	 * ⚠ 자체 결정값 — 원작은 "채널링 중 이동 가능 여부 (미확인)" (역기획서 §5). 스킬마다 정한다 (§5.1 bCancelableByMove).

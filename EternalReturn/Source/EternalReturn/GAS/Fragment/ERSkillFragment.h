@@ -49,10 +49,10 @@ public:
 	/** [서버] 패시브가 켜질 때 · **레벨이 바뀔 때** (UERPassiveAbility) — 상시 효과 걸기 (시셀라 P 잃은 체력 비례 스탯). 다시 불려도 되게 (이전 것 지우고 다시). */
 	virtual void OnPassiveStart(FERSkillContext& Ctx) const {}
 
-	/** 패시브가 들을 게임플레이 이벤트 (없으면 빈 태그) — 시셀라 P `Event.Wilson.Joined` (Argument 68) */
-	virtual FGameplayTag GetPassiveEventTag() const { return FGameplayTag(); }
+	/** 패시브가 들을 게임플레이 이벤트들 — 시셀라 P `Event.Wilson.Joined` (Argument 68) · 레니 P 아군 적중 · 곰돌이 발동 (Argument 70) */
+	virtual void GetPassiveEventTags(FGameplayTagContainer& OutTags) const {}
 
-	/** [서버] GetPassiveEventTag 의 이벤트가 왔다 — 패시브 어빌리티만 부른다 */
+	/** [서버] GetPassiveEventTags 의 이벤트가 왔다 (Payload.EventTag 로 구분) — 패시브 어빌리티만 부른다 */
 	virtual void OnPassiveEvent(FERSkillContext& Ctx, const FGameplayEventData& Payload) const {}
 
 	/**

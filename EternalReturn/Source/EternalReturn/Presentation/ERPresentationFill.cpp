@@ -357,6 +357,25 @@ namespace
 			{ TEXT("sissela_skill04_explosion"), ERTags::Pres_Sfx_SkillLand_R }, // 판정 순간 (늦춘 판정 착지 큐)
 			{ TEXT("sissela_skill04_hit"), ERTags::Pres_Sfx_SkillHit_R },
 			{ TEXT("sissela_wilson_death"), FGameplayTag() },                     // 안 씀 (사용자 2026-10-06)
+			// 레니 (Audio/Leni.md · 사용자 2026-10-07)
+			{ TEXT("leni_pistol_normalattack"), ERTags::Pres_Sfx_Attack },          // 권총 공용 대신
+			{ TEXT("leni_pistol_normalattack_hit"), ERTags::Pres_Sfx_Hit },
+			{ TEXT("leni_pistol_passive_bearappear"), ERTags::Pres_Sfx_BearAppear },
+			{ TEXT("leni_pistol_passive_bearshot"), ERTags::Pres_Sfx_BearShot },
+			{ TEXT("leni_pistol_passive_hit"), ERTags::Pres_Sfx_SkillHit_P },       // 곰돌이 적중
+			{ TEXT("leni_pistol_reload"), ERTags::Pres_Sfx_ModeEnd, ERTags::Mode_MovingReload },   // D 끝 — 재장전
+			{ TEXT("leni_pistol_skill01_shot"), ERTags::Pres_Sfx_SkillCast_Q },
+			{ TEXT("leni_pistol_skill01_boom"), ERTags::Pres_Sfx_SkillLand_Q },     // 폭발 (맞힌 사람 없어도)
+			{ TEXT("leni_pistol_skill01_hit"), ERTags::Pres_Sfx_SkillHit_Q },       // 적만
+			{ TEXT("leni_pistol_skill01_recovery"), ERTags::Pres_Sfx_SkillAlly_Q }, // 아군 회복
+			{ TEXT("leni_pistol_skill02_jump"), ERTags::Pres_Sfx_SkillCast_W },
+			{ TEXT("leni_pistol_skill02_hit"), ERTags::Pres_Sfx_SkillHit_W },       // 적만
+			{ TEXT("leni_pistol_skill03_shot"), ERTags::Pres_Sfx_SkillCast_E },
+			{ TEXT("leni_pistol_skill03_hit"), ERTags::Pres_Sfx_SkillHit_E },       // 적 · 아군 둘 다
+			{ TEXT("leni_pistol_skill04_whistle"), ERTags::Pres_Sfx_SkillCast_R },  // 떼는 순간 (설치)
+			{ TEXT("leni_pistol_skill04_spring"), ERTags::Pres_Sfx_SkillLand_R },   // 터질 때
+			{ TEXT("leni_pistol_skill04_hit"), ERTags::Pres_Sfx_SkillHit_R },
+			{ TEXT("leni_pistol_skill04_wallhit"), ERTags::Pres_Sfx_SkillWall_R },
 		};
 		return Rules;
 	}
@@ -456,6 +475,12 @@ namespace
 			{ TEXT("common"), TEXT("skill02_start"), ERTags::Mode_Bubble, { ERTags::Pres_Anim_ModeStart },   TEXT("sissela"), true },
 			{ TEXT("common"), TEXT("skill02_idle"),  ERTags::Mode_Bubble, { ERTags::Pres_Anim_ModeIdle, ERTags::Pres_Anim_ModeRun }, TEXT("sissela"), true },
 			{ TEXT("common"), TEXT("skill02_end"),   ERTags::Mode_Bubble, { ERTags::Pres_Anim_ModeEnd },     TEXT("sissela"), true },
+			// 레니 (Argument 71 D1 · 사용자 2026-10-07) — D 무빙 리로드 1초 = 모드 (달리기 NormalRun · 끝 Reload) · R 같이 날아감 = Skill04_Jump · Back 은 모름 (안 씀)
+			{ TEXT("pistol"), TEXT("normalweaponskill"), FGameplayTag(), { ERTags::Ability_Slot_D },        TEXT("leni") },
+			{ TEXT("pistol"), TEXT("normalrun"),   ERTags::Mode_MovingReload, { ERTags::Pres_Anim_ModeIdle, ERTags::Pres_Anim_ModeRun }, TEXT("leni") },
+			{ TEXT("pistol"), TEXT("reload"),      ERTags::Mode_MovingReload, { ERTags::Pres_Anim_ModeEnd },  TEXT("leni") },
+			{ TEXT("pistol"), TEXT("skill04_jump"), FGameplayTag(), { ERTags::Ability_Slot_R_Execute },      TEXT("leni") },
+			{ TEXT("pistol"), TEXT("skill04_back"), FGameplayTag(), {},                                       TEXT("leni") },
 			{ TEXT("axe"), TEXT("skill01"),       FGameplayTag(), {},                                         TEXT("jackie") },   // 옛 도끼 Q — 01 · 02 와 크기가 달라 무엇인지 (미확인) · 안 쓴다 (번갈아 틀지 않게)
 		};
 		return Rules;

@@ -127,6 +127,9 @@ public:
 	/** [서버] 소리 키 하나를 Instigator 의 소리 표에서 골라 Location 에 (모든 클라 · GameplayCue.Pres.Sfx). 어빌리티 밖(윌슨 액터 · 투사체 · 지연 타이머)에서 쓴다 */
 	static void SendSfxCue(AActor* Instigator, FGameplayTag SfxKey, const FVector& Location);
 
+	/** [서버] 동작표 키 하나를 Instigator 에게 — 각 머신이 자기 화면에 (레니 R 같이 날아감 · GameplayCue.Pres.Anim) */
+	static void SendAnimCue(AActor* Instigator, FGameplayTag AnimKey);
+
 	/**
 	 * 이 키 줄의 소리 하나 (각 클라 로컬 · 복제 안 함). 없으면 nullptr.
 	 * ShotNumber > 0 (순차 사격 몇 번째 발 · 카티야 R) 이면 **그 순서의 소리** (`_Shot` → `_02` → `_03` · 모자라면 마지막) · 0 이면 무작위 (r1 · r2 변형).

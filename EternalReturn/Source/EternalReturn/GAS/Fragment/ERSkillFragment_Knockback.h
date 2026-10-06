@@ -39,6 +39,25 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	bool bCasterLeft = false;
 
+	/**
+	 * **조준점 → 두 번째 조준 점** 방향으로 민다 (스킬 데이터 bAimDirectionOnHold — 누를 때 자리 · 뗄 때 커서 · 레니 R · 사용자 2026-10-07).
+	 * 두 번째 점이 없거나 조준점 바로 위면 시전자 → 조준점
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	bool bSecondAimDirection = false;
+
+	/** 시전자도 **조준점에서 이 반경(m) 안**이면 같은 방향 · 거리로 같이 날아간다 (레니 R "레니도 같이 · 트랩 위에 있을 때만" · 사용자 2026-10-07). 0 = 끔 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	float CasterAlsoInRadius = 0.f;
+
+	/** 시전자가 같이 날아갈 때 틀 동작표 키 (레니 R Skill04_Jump → Ability.Slot.R.Execute) */
+	UPROPERTY(EditDefaultsOnly, meta = (Categories = "Ability.Slot"))
+	FGameplayTag CasterAnimKey;
+
+	/** 벽 충돌 소리 키 (대상 자리 · 레니 WallHit → Pres.Sfx.SkillWall.R) */
+	UPROPERTY(EditDefaultsOnly, meta = (Categories = "Pres.Sfx"))
+	FGameplayTag WallSfx;
+
 	/** 벽 충돌 시 대상에게 실행할 데이터 (피해 · 적중 효과 조각만 쓴다). */
 	UPROPERTY(EditDefaultsOnly)
 	TObjectPtr<UERSkillData> WallImpactSkill;

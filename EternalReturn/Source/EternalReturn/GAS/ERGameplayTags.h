@@ -109,15 +109,19 @@ namespace ERTags
 	// ── 시셀라 (F19-04 · Argument 68) ─────────────────────────
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Shielded);          // 보호막 지속 중 — 끝나면 Shield 어트리뷰트를 0 으로 (ERShield)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_WilsonAway);        // 윌슨이 떨어져 있다 (AERWilson 이 있는 동안 · 복제 루즈 태그)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_LostHPStats);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Bubble);            // 시셀라 W 감싸는 중 (피해 면역 · 이속 GE 에 같이) — 터질 때 이걸로 지운다       // 잃은 체력 비례 스탯 GE (상시 1개 — 레벨이 바뀌면 이걸로 찾아 지우고 다시)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_LostHPStats);   // 잃은 체력 비례 스탯 GE (상시 1개 — 레벨이 바뀌면 이걸로 찾아 지우고 다시)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Bubble);   // 시셀라 W 감싸는 중 (피해 면역 · 이속 GE 에 같이) — 터질 때 이걸로 지운다
+	// ── 레니 (F19-05 · Argument 70) ─────────────────────────
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Leni_Bear);   // 곰돌이 — 아군에게 5초 · GE 출처 = 레니 ASC (어트리뷰트셋이 주인을 찾는다)
 
 	// ── 게임플레이 이벤트 ──────────────────────────────────────
 	// 입력 → 어빌리티. PC 가 어빌리티 내부를 모르게 하는 통로 (SendGameplayEventToActor).
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Input_Move);        // 이동 명령이 서버에서 수락됨
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Skill_Aim);         // 스킬 발동 요청에 실린 조준 데이터 (Docs/4_Argument/18)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Kill_Dealt);        // 내가 적 실험체를 처치했다 (막타 — F14 전 임시 "처치 관여") — 플레이어 스테이트가 처치자 ASC 에 · 패시브가 듣는다 (Argument 65)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Wilson_Joined);     // 윌슨과 하나가 됐다 (줍기 · 거리 복귀 · E · W) — AERWilson 이 시셀라 ASC 에 · 패시브가 듣는다 (Argument 68)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Wilson_Joined);   // 윌슨과 하나가 됐다 (줍기 · 거리 복귀 · E · W) — AERWilson 이 시셀라 ASC 에 · 패시브가 듣는다 (Argument 68)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ally_SkillHit);       // 내 스킬이 아군(자신 제외)에게 맞았다 — 적 · 아군 나누기 조각이 시전자 ASC 에 (Target = 아군)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Leni_BearTriggered);  // 곰돌이 아군이 적을 때렸다 — 어트리뷰트셋이 곰돌이 주인(레니) ASC 에 (Instigator = 아군 · Target = 적)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Hit_Dealt);         // 내 피해가 들어갔다 — 어트리뷰트셋이 가해자에게 (Target = 맞은 쪽 · InstigatorTags = Damage.Type.*) · 패시브가 듣는다 (Argument 61 E1)
 
 	// ── 어빌리티 형태 ──────────────────────────────────────────
@@ -362,8 +366,13 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoop_W);      // W 도는 동안 반복 (State.AnimHold 동안 · 매그너스 Skill02_Attack)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoop_R);      // R 탄 동안 반복 (State.Riding 동안 · 매그너스 Skill04_Drive)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLoopStart_R); // R 반복이 시작될 때 한 번 (시동 · 매그너스 Skill04_GoActive)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillRecast_R);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillRecast_R);   // R 재사용의 공격음 (평소 SkillCast.R 대신 · 매그너스 Skill04_Attack 바이크 발사)
 	// 시셀라 (Audio/Sissela.md · 사용자 2026-10-06) — 소리 큐(GameplayCue.Pres.Sfx)로 바로 튼다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_ModeEnd);         // 모드가 끝날 때 한 번 (레니 D Reload — 모드 줄 소리)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_BearAppear);      // 레니 곰돌이가 아군에게 붙을 때
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_BearShot);        // 레니 곰돌이가 날아갈 때 (아군 자리)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillAlly_Q);     // Q 아군 효과 (레니 회복 · 아군마다)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillWall_R);     // R 넉백 벽 충돌 (레니 WallHit · 대상 자리)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Join);             // 윌슨과 합칠 때 (Passive_Union)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillMove_Q);      // Q 윌슨이 날기 시작할 때 한 번 (Skill01_Move)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLand_Q);      // Q 착지 폭발 (Skill01_Hit2 · 맞힌 사람 없어도)
@@ -372,15 +381,16 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillPull_E);      // E 끌어올 때 (Skill03_Take — 적 · 시셀라)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillShield_E);    // E 시셀라 적중 — 보호막 (Skill03_Shield)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCount_R);     // R 카운트 (Skill04_Count · 한 번)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLand_R);      // R 늦춘 판정 순간 폭발 (Skill04_Explosion · 착지 큐의 R 몫)    // R 재사용의 공격음 (평소 SkillCast.R 대신 · 매그너스 Skill04_Attack 바이크 발사)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLand_R);      // R 늦춘 판정 순간 폭발 (Skill04_Explosion · 착지 큐의 R 몫)
 
 	// 연출 큐 (F12.5-05 · Argument 49) — 네트워크 사건. 무엇을 틀지는 키가 정한다 (큐 ≠ 키)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Attack);   // 시전자 — 공격이 나갔다 (판정 시점)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Hit);      // 대상 — 맞았다 (서버 확정)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Aim);      // 시전자 — 순차 사격 다음 발 조준 시작 (발 번호 · K8)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Land);     // 시전자 — 늦춘 판정 순간 (도약 착지 · 재키 E · JudgeDelay)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Ready);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Sfx);      // 시전자 — 소리 키 하나를 그대로 (키 = AggregatedSourceTags 의 Pres.Sfx.* · 위치 = Location · UERPresentationComponent::SendSfxCue)    // 시전자 — 다음 평타 강화가 걸렸다 (K8)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Ready);   // 시전자 — 다음 평타 강화가 걸렸다 (K8)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Anim);     // 시전자 — 동작표 키 하나를 각 머신에서 (키 = AggregatedSourceTags 의 Ability.Slot.* · 레니 R 같이 날아감 Skill04_Jump)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Sfx);      // 시전자 — 소리 키 하나를 그대로 (키 = AggregatedSourceTags 의 Pres.Sfx.* · 위치 = Location · UERPresentationComponent::SendSfxCue)
 	// 모드 상태 애니 (Argument 42 ⑥ A2) — 모드 칸이 있는 줄에만 쓴다. C++ 가 해석해 AnimInstance 에 넘기고 상태머신이 튼다
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_AttackEnhanced);   // 강화를 소비하는 평타 (재키 W skill02_attack) — 없으면 평소 평타 (Argument 66 E1)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeStart);
@@ -391,6 +401,7 @@ namespace ERTags
 	// ── 연출 모드 (Argument 42) ── 서버가 복제 loose 태그로 붙인다. 각 머신의 연출 컴포넌트가 부모(Mode)를 구독해 모드 세트를 고른다.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode);              // 부모 — 구독용
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_Sniper);       // 저격총 D (카티야)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_Chainsaw);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_Bubble);   // 시셀라 W 감싸기 1.5초 — 감싸기 GE 에 같이 (Argument 69 B1)     // 전기톱 살인마 R (재키) — R 버프 GE 의 동적 태그 = "R 중" · 처치 +5초도 이 태그로 (Argument 66 M1)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_Chainsaw);   // 전기톱 살인마 R (재키) — R 버프 GE 의 동적 태그 = "R 중" · 처치 +5초도 이 태그로 (Argument 66 M1)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_MovingReload);   // 권총 D 무빙 리로드 1초 (이속 GE 에 같이 · 레니 NormalRun → 해제 Reload · Argument 71 D1)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode_Bubble);   // 시셀라 W 감싸기 1.5초 — 감싸기 GE 에 같이 (Argument 69 B1)
 }

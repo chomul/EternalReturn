@@ -237,4 +237,8 @@ private:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "입력", meta = (ClampMin = "100.0"))
 	float MaxClickDistance = 5000.f;
+
+	// 누른 자리 고정 · 방향은 커서 (bAimDirectionOnHold — 레니 R · 사용자 2026-10-07) — 누를 때 잡고 뗄 때 두 점을 보낸다
+	FVector HoldAnchor = FVector::ZeroVector;
+	FGameplayTag HoldAnchorSlot;
 };

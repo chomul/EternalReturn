@@ -41,9 +41,13 @@ void UERPassiveAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle,
 	TArray<FGameplayTag> Listened;
 	if (Skill)
 	{
+		FGameplayTagContainer Wanted;
 		for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
 		{
-			const FGameplayTag Tag = F ? F->GetPassiveEventTag() : FGameplayTag();
+			if (F) { F->GetPassiveEventTags(Wanted); }
+		}
+		for (const FGameplayTag& Tag : Wanted)
+		{
 			if (Tag.IsValid() && !Listened.Contains(Tag))
 			{
 				Listened.Add(Tag);
@@ -83,7 +87,9 @@ void UERPassiveAbility::OnPassiveEvent(FGameplayEventData Payload)
 	FERSkillContext Ctx = MakeContext(Skill, 1.f);
 	for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
 	{
-		if (F && F->GetPassiveEventTag() == Payload.EventTag) { F->OnPassiveEvent(Ctx, Payload); }
+		FGameplayTagContainer Wanted;
+		if (F) { F->GetPassiveEventTags(Wanted); }
+		if (F && Wanted.HasTagExact(Payload.EventTag)) { F->OnPassiveEvent(Ctx, Payload); }
 	}
 }
 

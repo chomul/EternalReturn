@@ -1,0 +1,443 @@
+{
+  "_설명": "ER.Skill.ImportJson Leni — 형식은 Sissela.json 과 같다. 근거 Docs/0_GameDesign/Characters/06_레니.md §3 게임 툴팁 (사용자 2026-10-07) · §6.1 검색 · §6.2 사용자 결정 · Argument 70 T2 · B1. \"레벨\" = 레니 실험체 레벨 (PerCharLevel). 적 · 아군이 갈리는 스킬은 본체(판정 팀 All) + 적 데이터 + 아군 데이터 (적 · 아군 나누기 조각). D 는 무기 공용 권총 (Common.json DA_Skill_D_Pistol).",
+  "Folder": "/Game/ERCharacter/CharData/Skill/Leni",
+  "Character": "DA_Char_Leni",
+  "Skills": [
+    {
+      "Asset": "DA_Skill_Leni_P",
+      "_메모": "P 곰돌이! 공격 — 레니 스킬이 아군 실험체(레니 제외)에 맞으면 곰돌이 5초 · 곰돌이 아군의 공격이 적에게 맞으면 곰돌이가 날아가 추가 스킬 피해 15/25/35 (+레벨 × 2 · 스증 10%) — 레니가 준 피해 · 레니 Q · W · E 쿨 −0.5/0.75/1초 · 곰돌이는 한 번 쓰면 사라짐 (사용자 2026-10-07)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.P\")",
+        "AbilityClass": "/Script/EternalReturn.ERPassiveAbility",
+        "MaxLevel": 3,
+        "InitialLevel": 1,
+        "Cooldowns": "(0,0,0)",
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Bear",
+          "Props": {
+            "Duration": 5,
+            "CooldownCut": "(0.5,0.75,1)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(15,25,35)",
+            "PerCharLevel": "(2)",
+            "SkillAmpRatio": "(0.1)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_Q_Enemy",
+      "_메모": "Q 폭발 — 적: 50/70/90/110/130 (+레벨 × 8 · 스증 60%)",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(50,70,90,110,130)",
+            "PerCharLevel": "(8)",
+            "SkillAmpRatio": "(0.6)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_Q_Ally",
+      "_메모": "Q 폭발 — 아군 (레니도 범위 안이면): 회복 10/20/30/40/50 (+레벨 × 2 · 스증 20%)",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Heal",
+          "Props": {
+            "Amount": "(Base=(10,20,30,40,50),PerCharLevel=(2),SkillAmpRatio=(0.2))",
+            "HitSfx": "(TagName=\"Pres.Sfx.SkillAlly.Q\")"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_Q_Blast",
+      "_메모": "Q 폭발 판정 (반경 2.5m · 적 · 아군 나누기) — 투사체 AERProjectile_Explode 가 쓴다",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_TeamSplit",
+          "Props": {
+            "EnemySkill": "@DA_Skill_Leni_Q_Enemy",
+            "AllySkill": "@DA_Skill_Leni_Q_Ally",
+            "SelfRule": "None"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_Q",
+      "_메모": "Q 당근! 바주카 — 쿨 12→8 · 7.5m 직선 투사체 · 첫 적 · 아군 또는 사거리 끝에서 폭발 2.5m · 쏘며 뒤로 1m [자체] · 속도 20 m/s · 반경 0.4 [자체] · 발사 · 반동 = 애니 노티파이 순간 (CastTime @Marker — 사용자 2026-10-07)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.Q\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(12,11,10,9,8)",
+        "CastTime": "@Marker(Leni_Pistol_Skill01)",
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Line",
+        "Props": {
+          "Length": 7.5,
+          "Width": 1.5
+        }
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Single",
+          "Speed": 20,
+          "Radius": 0.4,
+          "bPierce": false,
+          "ProjectileClass": "/Script/EternalReturn.ERProjectile_Explode"
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfMove",
+          "Props": {
+            "Mode": "AwayFromAim",
+            "Distance": 1,
+            "Duration": 0.15
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Explode",
+          "Props": {
+            "ExplodeSkill": "@DA_Skill_Leni_Q_Blast",
+            "Radius": 2.5,
+            "bIncludeCaster": true
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_W_Enemy",
+      "_메모": "W 바깥 적: 20/45/70/95/120 (+레벨 × 10 · 스증 35%) · 둔화 40% 1.2초",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(20,45,70,95,120)",
+            "PerCharLevel": "(10)",
+            "SkillAmpRatio": "(0.35)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(1.2)",
+            "SlowPercent": "(0.4)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_W_EnemyInner",
+      "_메모": "W 중앙 적 (1.25m): 같은 피해 · 둔화 80% 1.2초",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(20,45,70,95,120)",
+            "PerCharLevel": "(10)",
+            "SkillAmpRatio": "(0.35)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(1.2)",
+            "SlowPercent": "(0.8)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_W_Ally",
+      "_메모": "W 아군 (아군을 맞히면 레니도): 0.15초 40% 둔화 → 0.15초 뒤 1.5초 이속 +12/14/16/18/20% (+스증 2.5% — 스증 1 당 0.00025)",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(0.15)",
+            "SlowPercent": "(0.4)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_Wild_MoveSpeedUp",
+            "Duration": "(1.5)",
+            "Magnitude": "(1.12,1.14,1.16,1.18,1.2)",
+            "MagnitudePerSkillAmp": "(0.00025)",
+            "StartDelay": 0.15
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_W",
+      "_메모": "W 뿅! 망치 — 쿨 16→12 · 4.5m 안 지정 위치로 뛰어올라 (0.33초 — 0.4초의 1.2배 빠르게 · 사용자 2026-10-07) 착지 때 2.25m 판정 · 중앙 1.25m 80% / 바깥 40% · 아군 이속 (레니도)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.W\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(16,15,14,13,12)",
+        "CastTime": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "ShapeOrigin": "AimPoint",
+          "AimRange": 4.5,
+          "Radius": 2.25
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {
+          "JudgeDelay": 0.33
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfMove",
+          "Props": {
+            "Mode": "ToAimPoint",
+            "Duration": 0.33
+          }
+        },
+        {
+          "Class": "ERSkillFragment_TeamSplit",
+          "Props": {
+            "EnemySkill": "@DA_Skill_Leni_W_Enemy",
+            "EnemyInnerSkill": "@DA_Skill_Leni_W_EnemyInner",
+            "InnerRadius": 1.25,
+            "AllySkill": "@DA_Skill_Leni_W_Ally",
+            "SelfRule": "IfAnyAlly"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_E_Enemy",
+      "_메모": "E 적: 20/40/60/80/100 (+레벨 × 5 · 스증 55%) · 기절 0.5초",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(20,40,60,80,100)",
+            "PerCharLevel": "(5)",
+            "SkillAmpRatio": "(0.55)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Stun",
+            "Duration": "(0.5)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_E_Ally",
+      "_메모": "E 아군 (아군을 맞히면 레니도): 보호막 50/65/80/95/110 (+레벨 × 3 · 스증 25%) 2.5초",
+      "Props": {
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Shield",
+          "Props": {
+            "Amount": "(Base=(50,65,80,95,110),PerCharLevel=(3),SkillAmpRatio=(0.25))",
+            "Duration": 2.5
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_E",
+      "_메모": "E 에어 호른! 건 — 쿨 9 고정 · 부채꼴 60° 4.5m (나무위키 · 사용자 2026-10-07) · 적 기절 / 아군 보호막 (레니도)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.E\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 5,
+        "InitialLevel": 0,
+        "Cooldowns": "(9,9,9,9,9)",
+        "CastTime": 0,
+        "Targets": "(Team=All,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Cone",
+        "Props": {
+          "Length": 4.5,
+          "AngleDeg": 60
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_TeamSplit",
+          "Props": {
+            "EnemySkill": "@DA_Skill_Leni_E_Enemy",
+            "AllySkill": "@DA_Skill_Leni_E_Ally",
+            "SelfRule": "IfAnyAlly",
+            "bAllyHitCue": true
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_R_Wall",
+      "_메모": "R 벽 충돌: 40/80/120 (+스증 20% · 대상 최대 체력 8%) · 둔화 80% 1.5초",
+      "Props": {
+        "MaxLevel": 3,
+        "InitialLevel": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(40,80,120)",
+            "PerCharLevel": "(0)",
+            "SkillAmpRatio": "(0.2)",
+            "MaxHPRatio": "(0.08)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(1.5)",
+            "SlowPercent": "(0.8)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Leni_R",
+      "_메모": "R 스프링! 트랩 — 쿨 20/18/16 · 7m 안 지정 위치에 1.5m 원 → 0.5초 [자체] 뒤 터지듯 (사용자 2026-10-07) · 100/150/200 (+레벨 × 8 · 스증 55%) · **R 누르는 순간 커서 = 설치 자리 고정 · 누르고 있는 동안 커서 = 날릴 방향 · 떼면 발동** (bAimDirectionOnHold · 사용자 2026-10-07) 5m [자체] · 벽 충돌 R_Wall · 레니도 원 안이면 같이 날아감 (사용자 2026-10-07) · 날아가는 동안 에어본 0.4초 (넉백 시간과 같다 · 높이 1m [자체] · 사용자 2026-10-07)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.R\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 3,
+        "InitialLevel": 0,
+        "MinCharacterLevel": "(6,11,16)",
+        "Cooldowns": "(20,18,16)",
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)",
+        "bAimDirectionOnHold": true
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "ShapeOrigin": "AimPoint",
+          "AimRange": 7,
+          "Radius": 1.5
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {
+          "JudgeDelay": 0.5
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(100,150,200)",
+            "PerCharLevel": "(8)",
+            "SkillAmpRatio": "(0.55)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Airborne",
+            "Duration": "(0.4)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Knockback",
+          "Props": {
+            "Distance": 5,
+            "Duration": 0.4,
+            "CasterAlsoInRadius": 1.5,
+            "WallImpactSkill": "@DA_Skill_Leni_R_Wall",
+            "bSecondAimDirection": true,
+            "Height": 1,
+            "CasterAnimKey": "(TagName=\"Ability.Slot.R.Execute\")",
+            "WallSfx": "(TagName=\"Pres.Sfx.SkillWall.R\")"
+          }
+        }
+      ]
+    }
+  ]
+}
