@@ -20,14 +20,7 @@ void AERProjectile_Explode::EndFlight(const TCHAR* Why)
 		if (A && Caster && Ex && Ex->ExplodeSkill)
 		{
 			const FVector Here = GetActorLocation();
-			FTargetQuery Q = Filter;
-			Q.Shape = ESkillTargeting::GroundCircle;
-			Q.Origin = FVector(Here.X, Here.Y, Caster->GetActorLocation().Z);
-			Q.RadiusOuter = Ex->Radius;
-			Q.IgnoredActors.Reset();
-			Q.IgnoredActors.Add(Caster);
-			TArray<AActor*> Targets;
-			for (AActor* T : ERTargeting::Query(GetWorld(), Q).HitActors) { if (T) { Targets.Add(T); } }
+			TArray<AActor*> Targets = ERTargeting::QueryCircleAt(GetWorld(), Filter, Here, Ex->Radius, Caster);
 			if (Ex->bIncludeCaster && FVector::Dist2D(Caster->GetActorLocation(), Here) <= Ex->Radius * 100.f)
 			{
 				Targets.Add(Caster);

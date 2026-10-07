@@ -36,6 +36,8 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 	virtual void PlayerTick(float DeltaTime) override;
+	/** 로컬 PC — 소리 감쇠 거리를 카메라가 아니라 **내 캐릭터**에서 잰다 (탑다운 카메라 2천cm 위 · 음성 3D · Argument 73). 방향(좌우)은 카메라 그대로 */
+	virtual void SetPawn(APawn* InPawn) override;
 
 	/** 입력 액션 묶음. 에디터에서 지정한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "입력")
@@ -76,6 +78,8 @@ private:
 	float LastChaseTime = -1.f;
 	/** 같은 평타를 핑 동안 여러 번 보내지 않게 (쿨다운 복제 전) `[자체]` */
 	float LastAttackRequestTime = -1.f;
+	/** 판 시작 뒤 첫 이동 음성을 했나 (Argument 73 · 소유 클라만) */
+	bool bSaidFirstMove = false;
 
 	/**
 	 * [클라 -> 서버] 슬롯 스킬 발동 요청 + 조준 (F07-05).

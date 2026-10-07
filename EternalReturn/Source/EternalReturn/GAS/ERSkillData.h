@@ -546,6 +546,12 @@ struct FERGrantedSkillHandles
 namespace ERSkill
 {
 	/**
+	 * [서버] Tags 쿨다운의 남은 시간을 Seconds 만큼 줄인다 (시작 시각을 앞당김 — 복제 · 클라 표시는 엔진이). 음수면 늘린다.
+	 * 적중 쿨 감소 · 곰돌이 · 윌슨 E 가 같이 쓴다 (Argument 72 A3). 반환 = 건드린 GE 수
+	 */
+	int32 ShiftCooldown(UAbilitySystemComponent* ASC, const FGameplayTagContainer& Tags, float Seconds);
+
+	/**
 	 * [서버] 스킬 목록을 ASC 에 부여한다.
 	 *
 	 * ⭐ 각 어빌리티 스펙에 세 가지를 심는다:

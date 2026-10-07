@@ -58,6 +58,12 @@ public:
 	void EndGather();
 	APlayerState* GetGatherer() const { return Gatherer.Get(); }
 
+	/** [서버] 실험체 시체를 만든 처치자 (시체 수색 음성 · Argument 73). 상자 · 채집물 · 야생동물 시체는 비어 있다 */
+	void SetKiller(APlayerState* InKiller) { Killer = InKiller; }
+	APlayerState* GetKiller() const { return Killer.Get(); }
+	/** 실험체 시체 = 루트 행 없음 (SpawnDeathDrop). 야생동물 시체는 행이 있다 */
+	bool IsPlayerCorpse() const { return LootRow.IsNone(); }
+
 	/** 서버가 발급하는 다음 번호. 시체 · 상자 공용. */
 	static int32 NextDropId();
 
@@ -89,6 +95,8 @@ protected:
 
 	/** 서버 전용. 지금 캐고 있는 사람 — 한 번에 한 명 (원작 확인). 복제 안 함 — 표시는 F17. */
 	TWeakObjectPtr<APlayerState> Gatherer;
+	/** 서버 전용. 실험체 시체의 처치자 — 복제 안 함 */
+	TWeakObjectPtr<APlayerState> Killer;
 	FTimerHandle GatherTimer;
 	/** 캐는 사람 ASC 에 State.Gathering(복제 loose)을 붙였나 — 뗄 때 짝을 맞춘다 (F12.5-04 · Argument 46). */
 	bool bGatherTagged = false;

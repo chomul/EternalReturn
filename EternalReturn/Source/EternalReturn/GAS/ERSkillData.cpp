@@ -504,6 +504,21 @@ bool LevelUpSkill(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int
 	return true;
 }
 
+int32 ShiftCooldown(UAbilitySystemComponent* ASC, const FGameplayTagContainer& Tags, float Seconds)
+{
+	if (!ASC || Tags.IsEmpty() || Seconds == 0.f)
+	{
+		return 0;
+	}
+	int32 N = 0;
+	for (const FActiveGameplayEffectHandle& H : ASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(Tags)))
+	{
+		ASC->ModifyActiveEffectStartTime(H, -Seconds);
+		++N;
+	}
+	return N;
+}
+
 bool SetSkillLevel(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int32 NewLevel, const TCHAR* Reason)
 {
 	if (!ASC || !ASC->IsOwnerActorAuthoritative())

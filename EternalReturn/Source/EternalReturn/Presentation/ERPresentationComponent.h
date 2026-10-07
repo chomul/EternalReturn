@@ -129,6 +129,13 @@ public:
 
 	/** [서버] 동작표 키 하나를 Instigator 에게 — 각 머신이 자기 화면에 (레니 R 같이 날아감 · GameplayCue.Pres.Anim) */
 	static void SendAnimCue(AActor* Instigator, FGameplayTag AnimKey);
+	/** [서버] 음성 키 하나를 주변 모두에게 (GameplayCue.Pres.Voice · Argument 73 V-B 주변) — 스킬 시전 */
+	static void SendVoiceCue(AActor* Instigator, FGameplayTag VoiceKey);
+	/**
+	 * 음성 (Argument 73) — 이 캐릭터의 음성 키 하나를 **이 머신에서**. 규칙(확률 · 간격 · 끊기)은 기본 DA 의 VoiceRules.
+	 * bSelf = 본인 화면만 2D (혼잣말) · 아니면 몸에 붙여 3D (VoiceInnerRadius ~ VoiceFalloff). 한 캐릭터는 한 번에 한 대사 (G-A). 데디 서버는 안 튼다.
+	 */
+	void PlayVoice(FGameplayTag VoiceKey, bool bSelf);
 
 	/**
 	 * 이 키 줄의 소리 하나 (각 클라 로컬 · 복제 안 함). 없으면 nullptr.
@@ -195,6 +202,9 @@ private:
 	void ApplyWeaponLayer();
 	/** @param bModePass false = 모드 칸이 빈 줄만 · true = 모드 칸 == 지금 모드인 줄만 (Argument 42 ⑤) */
 	void AddLayer(const TArray<FERPresentationEntry>& Entries, const TCHAR* Source, bool bFilterWeapon, bool bRequireWeaponMatch, bool bModePass);
+	/** DA 의 애니 · 소리 · 음성 칸 전부 (Argument 74) */
+	void AddLayers(const UERPresentationData& DA, const TCHAR* Source, bool bFilterWeapon, bool bRequireWeaponMatch, bool bModePass);
+	void AddLayers(const UERSkinData& DA, const TCHAR* Source, bool bFilterWeapon, bool bRequireWeaponMatch, bool bModePass);
 
 	UPROPERTY()
 	TObjectPtr<UERPresentationData> Base;
@@ -262,4 +272,17 @@ private:
 
 	/** 재생 실패 Warning 은 액터당 한 번 (AnimBP 없는 야생동물이 평타마다 찍었다 — 2026-09-27 로그). */
 	bool bWarnedPlayFail = false;
+
+	/** 주변 음성 감쇠 — 이 거리까지는 그대로 · 그 뒤 VoiceFalloff 만큼 줄어 0 (cm). [자체] 들어보고 고친다 (Argument 73) */
+	UPROPERTY(EditDefaultsOnly, Category = "음성", meta = (ClampMin = "0"))
+	float VoiceInnerRadius = 500.f;
+	UPROPERTY(EditDefaultsOnly, Category = "음성", meta = (ClampMin = "1"))
+	float VoiceFalloff = 2000.f;
+	/** 위 값으로 만든 감쇠 (이 머신 · 처음 3D 음성 때) */
+	UPROPERTY(Transient)
+	TObjectPtr<class USoundAttenuation> VoiceAttenuation;
+	/** 지금 말하는 음성 (한 번에 한 대사 · G-A) */
+	TWeakObjectPtr<class UAudioComponent> VoiceAudio;
+	/** 키 → 마지막으로 말한 시각 (간격) */
+	TMap<FGameplayTag, double> VoiceLastTime;
 };

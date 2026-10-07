@@ -18,6 +18,7 @@
 #include "GAS/ERGameplayAbility.h"
 #include "GAS/ERAttributeSet.h"
 #include "Combat/ERTargeting.h"
+#include "Core/ERGameState.h"
 #include "Core/ERTeamStatics.h"
 #include "GAS/ERSkillData.h"
 #include "NavigationSystem.h"
@@ -413,6 +414,23 @@ void AERPlayerController::PlayerTick(float DeltaTime)
 	ApplyCameraOffset();
 }
 
+void AERPlayerController::SetPawn(APawn* InPawn)
+{
+	Super::SetPawn(InPawn);
+	if (!IsLocalController())
+	{
+		return;
+	}
+	if (InPawn && InPawn->GetRootComponent())
+	{
+		SetAudioListenerAttenuationOverride(InPawn->GetRootComponent(), FVector::ZeroVector);
+	}
+	else
+	{
+		ClearAudioListenerAttenuationOverride();
+	}
+}
+
 void AERPlayerController::SetCameraZoom(float Scale, const FVector& WorldOffset)
 {
 	TargetZoomScale = FMath::Max(Scale, 0.1f);
@@ -594,7 +612,14 @@ void AERPlayerController::OnMoveToCursor()
 		const UAbilitySystemComponent* ClickedASC = Clicked ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Clicked) : nullptr;
 		if (ClickedASC && GetPawn() && ERTeamStatics::IsHostile(GetPawn(), Clicked) && ClickedASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 0.f)
 		{
+			// 적 실험체를 새로 찍으면 혼잣말 (Argument 73 · 본인 · 클라 로컬 — 네트워크 없음). 확률 · 간격은 _Voice.json
+			UERPresentationComponent* Pres = Clicked != AttackTarget.Get() && Clicked->IsA<AERCharacterBase>()
+				? GetPawn()->FindComponentByClass<UERPresentationComponent>() : nullptr;
 			SetAttackTarget(Clicked, TEXT("적 우클릭"));
+			if (Pres)
+			{
+				Pres->PlayVoice(ERTags::Pres_Voice_TargetOn, /*bSelf=*/true);
+			}
 			return;
 		}
 	}
@@ -611,6 +636,17 @@ void AERPlayerController::OnMoveToCursor()
 	// ⭐ 클라가 **먼저 로컬에서** 움직인다. 서버 응답을 기다리면 클릭할 때마다 지연이 보인다.
 	//   서버가 목적지를 거부하면 CMC 의 보정이 위치를 되돌린다.
 	StartMoveTo(Destination);
+
+	// 판 시작 뒤 첫 이동 (Argument 73 · 본인 · 클라 로컬). 판 시작 = 첫 낮 단계가 복제된 뒤
+	const AERGameState* GS = GetWorld() ? GetWorld()->GetGameState<AERGameState>() : nullptr;
+	if (!bSaidFirstMove && GS && GS->GetPhaseIndex() >= 0)
+	{
+		bSaidFirstMove = true;
+		if (UERPresentationComponent* Pres = GetPawn() ? GetPawn()->FindComponentByClass<UERPresentationComponent>() : nullptr)
+		{
+			Pres->PlayVoice(ERTags::Pres_Voice_FirstMove, /*bSelf=*/true);
+		}
+	}
 
 	// 움직이면 액션 모션을 끊는다 (§5.1 "후딜 중 이동 = 애니메이션 캔슬"). 소유 클라가 로컬로 재생한 몫이라 여기서 — 서버 몫은 ServerSetDestination.
 	//   ⚠ 없으면 평타 모션이 끝까지 돌며 미끄러진다 (2026-09-27 사용자 "움직이면서 때린다").

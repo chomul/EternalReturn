@@ -156,6 +156,23 @@ void UERGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 	// 연출 — 선딜 시작(또는 즉발) 순간. 판정 타이머와 따로 돈다 (Argument 36 "판정은 애니에 걸지 않는다").
 	PlaySkillAnim(*Skill);
 
+	// 스킬 음성 (Argument 73 V-B 주변) — 시작 순간 한 번. 판정 큐는 스킬마다 여러 번이거나 없어서 여기서. 리캐스트 · 평타 · D 는 대사 없음
+	if (HasAuthority(&ActivationInfo) && !bActivatedByRecast)
+	{
+		static const TPair<FGameplayTag, FGameplayTag> SkillVoice[] = {
+			{ ERTags::Ability_Slot_Q, ERTags::Pres_Voice_Skill_Q }, { ERTags::Ability_Slot_W, ERTags::Pres_Voice_Skill_W },
+			{ ERTags::Ability_Slot_E, ERTags::Pres_Voice_Skill_E }, { ERTags::Ability_Slot_R, ERTags::Pres_Voice_Skill_R },
+		};
+		for (const TPair<FGameplayTag, FGameplayTag>& V : SkillVoice)
+		{
+			if (Skill->SlotTag == V.Key)
+			{
+				UERPresentationComponent::SendVoiceCue(GetAvatarActorFromActorInfo(), V.Value);
+				break;
+			}
+		}
+	}
+
 	if (Skill->CastTime > 0.f)
 	{
 		// 조각 OnCastStart — 충전 중 자기 효과 (F12.6-06 「격리」). 서버만

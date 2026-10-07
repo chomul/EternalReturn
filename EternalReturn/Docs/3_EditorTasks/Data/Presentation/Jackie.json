@@ -1,0 +1,258 @@
+{
+  "_설명": "ER.Pres.Fill 규칙 (Argument 72 A1 — C++ 에서 옮김 2026-10-07). AnimRules = 파일명 토큰(무기 · 모드 · common · *) + 동작 → (모드 · 키) · Keys 비면 그 애니는 안 씀. SoundRules = 소리 이름(소문자 정확히) → (키 · 모드 · 무기) · Key 비면 안 씀. 태그는 문자열 · 고치면 에디터에서 ER.Pres.Fill <캐릭터> Force (빌드 불필요) · 캐릭터 Jackie 전용",
+  "AnimRules": [
+    {
+      "Token": "saw",
+      "Act": "atk01",
+      "Mode": "Mode.Chainsaw",
+      "Keys": [
+        "Ability.Slot.Attack"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "saw",
+      "Act": "atk02",
+      "Mode": "Mode.Chainsaw",
+      "Keys": [
+        "Ability.Slot.Attack"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "saw",
+      "Act": "wait",
+      "Mode": "Mode.Chainsaw",
+      "Keys": [
+        "Pres.Anim.ModeIdle"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "saw",
+      "Act": "run",
+      "Mode": "Mode.Chainsaw",
+      "Keys": [
+        "Pres.Anim.ModeRun"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "*",
+      "Act": "skill02",
+      "Keys": []
+    },
+    {
+      "Token": "saw",
+      "Act": "skill02",
+      "Keys": []
+    },
+    {
+      "Token": "saw",
+      "Act": "skill03",
+      "Mode": "Mode.Chainsaw",
+      "Keys": [
+        "Ability.Slot.E"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "*",
+      "Act": "skill03_start",
+      "Keys": []
+    },
+    {
+      "Token": "saw",
+      "Act": "skill03_start",
+      "Keys": []
+    },
+    {
+      "Token": "common",
+      "Act": "skill04_end",
+      "Keys": [
+        "Ability.Slot.R.Recast"
+      ],
+      "bToBase": true,
+      "_메모": "학살 (사용자 2026-10-05) · 해제 동작은 없다"
+    },
+    {
+      "Token": "*",
+      "Act": "saw_skill02_attack",
+      "Mode": "Mode.Chainsaw",
+      "Keys": [
+        "Pres.Anim.AttackEnhanced"
+      ],
+      "_메모": "모드 중 W 강화 평타 (무기별)"
+    },
+    {
+      "Token": "*",
+      "Act": "skill02_attack",
+      "Keys": [
+        "Pres.Anim.AttackEnhanced"
+      ],
+      "_메모": "W 강화 평타 (무기별 · E1)"
+    },
+    {
+      "Token": "*",
+      "Act": "skill01_01",
+      "Keys": [
+        "Ability.Slot.Q"
+      ]
+    },
+    {
+      "Token": "*",
+      "Act": "skill01_02",
+      "Keys": [
+        "Ability.Slot.Q.Recast"
+      ]
+    },
+    {
+      "Token": "saw",
+      "Act": "skill01_01",
+      "Mode": "Mode.Chainsaw",
+      "Keys": [
+        "Ability.Slot.Q"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "saw",
+      "Act": "skill01_02",
+      "Mode": "Mode.Chainsaw",
+      "Keys": [
+        "Ability.Slot.Q.Recast"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "axe",
+      "Act": "skill01",
+      "Keys": [],
+      "_메모": "옛 도끼 Q — 01 · 02 와 크기가 달라 무엇인지 (미확인) · 안 쓴다 (번갈아 틀지 않게)"
+    }
+  ],
+  "SoundRules": [
+    {
+      "Name": "jackie_chainsaw_attack_v1",
+      "Key": "Pres.Sfx.Attack",
+      "Mode": "Mode.Chainsaw"
+    },
+    {
+      "Name": "jackie_chainsaw_attack_v2",
+      "Key": "Pres.Sfx.Attack",
+      "Mode": "Mode.Chainsaw"
+    },
+    {
+      "Name": "jackie_chainsaw_hit_v1",
+      "Key": "Pres.Sfx.Hit",
+      "Mode": "Mode.Chainsaw"
+    },
+    {
+      "Name": "jackie_chainsaw_hit_v2",
+      "Key": "Pres.Sfx.Hit",
+      "Mode": "Mode.Chainsaw"
+    },
+    {
+      "Name": "jackie_passive_activation",
+      "Key": "Pres.Sfx.SkillHit.P"
+    },
+    {
+      "Name": "jackie_passive_maxstart",
+      "Key": "Pres.Sfx.SkillLoopStart.P"
+    },
+    {
+      "Name": "jackie_passive_maxloop",
+      "Key": "Pres.Sfx.SkillLoop.P"
+    },
+    {
+      "Name": "jackie_skill02_activation",
+      "Key": "",
+      "_메모": "안 씀"
+    },
+    {
+      "Name": "jackie_skill02_start",
+      "Key": "Pres.Sfx.EnhanceReady"
+    },
+    {
+      "Name": "jackie_skill02_attack_1hand",
+      "Key": "Pres.Sfx.AttackEnhanced",
+      "Weapon": "Dagger"
+    },
+    {
+      "Name": "jackie_skill02_attack_2hand",
+      "Key": "Pres.Sfx.AttackEnhanced",
+      "Weapon": "TwoHandSword"
+    },
+    {
+      "Name": "jackie_skill02attack_axe",
+      "Key": "Pres.Sfx.AttackEnhanced",
+      "Weapon": "Axe"
+    },
+    {
+      "Name": "jackie_skill02attack_dual",
+      "Key": "Pres.Sfx.AttackEnhanced",
+      "Weapon": "DualSword"
+    },
+    {
+      "Name": "jackie_skill02attack_saw",
+      "Key": "Pres.Sfx.AttackEnhanced",
+      "Mode": "Mode.Chainsaw"
+    },
+    {
+      "Name": "jackie_skill02attack_hit",
+      "Key": "Pres.Sfx.HitEnhanced"
+    },
+    {
+      "Name": "jackie_skill03_jump",
+      "Key": "",
+      "_메모": "안 씀"
+    },
+    {
+      "Name": "jackie_skill03_jumping",
+      "Key": "Pres.Sfx.SkillCast.E",
+      "_메모": "E 누를 때 (뛰어오를 때 시전 큐 · 사용자 2026-10-06 — 노티파이 대신)"
+    },
+    {
+      "Name": "jackie_skill03_bump",
+      "Key": "Pres.Sfx.SkillLand.E",
+      "_메모": "착지 큐 (판정 순간)"
+    },
+    {
+      "Name": "jackie_skill04_activation_start",
+      "Key": "",
+      "_메모": "안 씀"
+    },
+    {
+      "Name": "jackie_skill04_activation_loop",
+      "Key": "",
+      "_메모": "안 씀 (ChainSaw_v1 · v2 가 대신)"
+    },
+    {
+      "Name": "jackie_skill04_activation_v1",
+      "Key": "Pres.Sfx.SkillCast.R",
+      "_메모": "전기톱 시동"
+    },
+    {
+      "Name": "jackie_skill04_activation_v2",
+      "Key": "Pres.Sfx.SkillCast.R"
+    },
+    {
+      "Name": "jackie_skill04_chainsaw_v1",
+      "Key": "Pres.Sfx.SkillLoop.R",
+      "_메모": "R 동안 반복"
+    },
+    {
+      "Name": "jackie_skill04_chainsaw_v2",
+      "Key": "Pres.Sfx.SkillLoop.R"
+    },
+    {
+      "Name": "jackie_skill04_finish_v1",
+      "Key": "Pres.Sfx.SkillRecast.R",
+      "_메모": "학살"
+    },
+    {
+      "Name": "jackie_skill04_finish_v2",
+      "Key": "Pres.Sfx.SkillRecast.R"
+    }
+  ]
+}

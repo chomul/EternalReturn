@@ -1,0 +1,833 @@
+{
+	"_설명": "ER.Skill.ExportJson Common — 지금 DA 그대로 (기본값과 다른 칸만 · 경로는 전체 경로). 원본 JSON 에 합친 뒤 지운다 (Argument 72 A5)",
+	"Skills": [
+		{
+			"Asset": "DA_BasicAttack_Throw",
+			"Folder": "/Game/GAS/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Attack\")",
+				"AbilityClass": "/Script/CoreUObject.Class'/Script/EternalReturn.ERBasicAttackAbility'",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Single",
+				"Props":
+				{
+					"Range": "3.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Projectile",
+				"Props":
+				{
+					"Radius": "0.200000",
+					"bHoming": "True",
+					"bHitOnlyTarget": "True"
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"DamageType": "BasicAttack",
+						"BaseDamage": "(50.000000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_BasicAttack_SniperRifle",
+			"Folder": "/Game/GAS/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Attack\")",
+				"AbilityClass": "/Script/CoreUObject.Class'/Script/EternalReturn.ERBasicAttackAbility'",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Single",
+				"Props":
+				{
+					"Range": "3.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Projectile",
+				"Props":
+				{
+					"Speed": "40.000000",
+					"Radius": "0.200000",
+					"bHoming": "True",
+					"bHitOnlyTarget": "True"
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"DamageType": "BasicAttack",
+						"BaseDamage": "(50.000000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_BasicAttack_Shuriken",
+			"Folder": "/Game/GAS/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Attack\")",
+				"AbilityClass": "/Script/CoreUObject.Class'/Script/EternalReturn.ERBasicAttackAbility'",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Single",
+				"Props":
+				{
+					"Range": "3.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Projectile",
+				"Props":
+				{
+					"Speed": "25.000000",
+					"Radius": "0.200000",
+					"bHoming": "True",
+					"bHitOnlyTarget": "True"
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"DamageType": "BasicAttack",
+						"BaseDamage": "(50.000000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_BasicAttack_Pistol",
+			"Folder": "/Game/GAS/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Attack\")",
+				"AbilityClass": "/Script/CoreUObject.Class'/Script/EternalReturn.ERBasicAttackAbility'",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Single",
+				"Props":
+				{
+					"Range": "3.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Projectile",
+				"Props":
+				{
+					"Speed": "35.000000",
+					"Radius": "0.200000",
+					"bHoming": "True",
+					"bHitOnlyTarget": "True"
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"DamageType": "BasicAttack",
+						"BaseDamage": "(50.000000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_BasicAttack",
+			"Folder": "/Game/GAS/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Attack\")",
+				"AbilityClass": "/Script/CoreUObject.Class'/Script/EternalReturn.ERBasicAttackAbility'",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Single",
+				"Props":
+				{
+					"Range": "3.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"DamageType": "BasicAttack",
+						"BaseDamage": "(50.000000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Throw_2nd",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(25.000000,25.000000,25.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"CastTime": "0.150000"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"ShapeOrigin": "AimPoint",
+					"AimRange": "7.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(60.000000,90.000000,120.000000)",
+						"BonusAPRatio": "(0.700000,0.700000,0.700000)",
+						"SkillAmpRatio": "(0.250000,0.250000,0.250000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(1.000000,1.000000,1.000000)",
+						"SlowPercent": "(0.300000,0.350000,0.400000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Throw",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(25.000000,25.000000,25.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"CastTime": "0.350000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.Throw\")"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": "1.500000",
+					"ShapeOrigin": "AimPoint",
+					"AimRange": "7.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(80.000000,120.000000,160.000000)",
+						"BonusAPRatio": "(0.800000,1.000000,1.200000)",
+						"SkillAmpRatio": "(0.350000,0.450000,0.550000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(1.000000,1.000000,1.000000)",
+						"SlowPercent": "(0.400000,0.500000,0.600000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_FollowUp",
+					"Props":
+					{
+						"Skill": "/Script/EternalReturn.ERSkillData'/Game/GAS/Skill/WeaponSkill/DA_Skill_D_Throw_2nd.DA_Skill_D_Throw_2nd'"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Sniper_Stop",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Attack\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"bIgnoreCooldownReduction": "True",
+				"Targets": "(MaxTargets=1)",
+				"CastTime": "0.050000",
+				"RecoveryTime": "0.300000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Line",
+				"Props":
+				{
+					"Length": "20.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(100.000000,200.000000,300.000000)",
+						"BonusAPRatio": "(1.400000,1.400000,1.400000)",
+						"SkillAmpRatio": "(0.250000,0.300000,0.350000)",
+						"TargetLostHPScaleMax": "(1.000000,1.000000,1.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(0.500000,0.500000,0.500000)",
+						"SlowPercent": "(0.800000,0.800000,0.800000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Sniper_Deadeye",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Attack\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"bIgnoreCooldownReduction": "True",
+				"Targets": "(MaxTargets=1)",
+				"CastTime": "0.050000",
+				"RecoveryTime": "0.300000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Line",
+				"Props":
+				{
+					"Length": "20.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(150.000000,300.000000,450.000000)",
+						"BonusAPRatio": "(1.800000,1.800000,1.800000)",
+						"SkillAmpRatio": "(0.400000,0.450000,0.500000)",
+						"TargetLostHPScaleMax": "(1.000000,1.000000,1.000000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Sniper",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(35.000000,30.000000,25.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"bNoCastCue": "True",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.SniperRifle\")"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": ""
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Mode",
+					"Props":
+					{
+						"Mode": "(Duration=10.000000,Shots=3,AttackData=\"/Script/EternalReturn.ERSkillData'/Game/GAS/Skill/WeaponSkill/DA_Skill_D_Sniper_Stop.DA_Skill_D_Sniper_Stop'\",FinalAttackData=\"/Script/EternalReturn.ERSkillData'/Game/GAS/Skill/WeaponSkill/DA_Skill_D_Sniper_Deadeye.DA_Skill_D_Sniper_Deadeye'\",bCancelOnMove=True,UnusedCooldownRefund=0.500000,CameraZoomScale=1.400000,CameraAimOffset=3.000000,AimHalfAngleDeg=30.000000,bStopMovementOnEnter=True,PresentationMode=(TagName=\"Mode.Sniper\"))"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(1.000000,1.000000,1.000000)",
+						"SlowPercent": "(0.400000,0.500000,0.600000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Shuriken",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(25.000000,25.000000,25.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"Costs": "(100.000000)",
+				"CastTime": "0.300000",
+				"RecoveryTime": "0.300000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.Shuriken\")"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": "5.000000",
+					"ShapeOrigin": "AimPoint",
+					"AimRange": "5.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Area",
+					"Props":
+					{
+						"DamageDecay": "0.450000"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(60.000000,90.000000,120.000000)",
+						"BonusAPRatio": "(0.650000,0.650000,0.650000)",
+						"SkillAmpRatio": "(0.250000,0.300000,0.350000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(1.500000,1.500000,1.500000)",
+						"SlowPercent": "(0.300000,0.400000,0.500000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Pistol",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(35.000000,30.000000,25.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"Costs": "(100.000000)",
+				"RecoveryTime": "0.300000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.Pistol\")"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": ""
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_SelfBuff",
+					"Props":
+					{
+						"Effects": "((Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_MoveSpeedUp.GE_MoveSpeedUp_C'\",Duration=(1.000000,1.000000,1.000000),Magnitude=(1.400000,1.550000,1.700000),GrantTag=(TagName=\"Mode.MovingReload\")),(Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_AttackSpeedUp.GE_AttackSpeedUp_C'\",Duration=(5.000000,5.000000,5.000000),Magnitude=(1.700000,1.700000,1.700000),Charges=2,StartDelay=(1.000000,1.000000,1.000000)))"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Hammer",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(30.000000,25.000000,20.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"Costs": "(100.000000)",
+				"CastTime": "0.500000",
+				"RecoveryTime": "0.300000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.Hammer\")"
+			},
+			"Area":
+			{
+				"Type": "Line",
+				"Props":
+				{
+					"Length": "4.000000",
+					"Width": "2.800000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(250.000000,350.000000,449.000000)",
+						"APRatio": "(0.000000)",
+						"BonusAPRatio": "(0.700000,1.000000,1.300000)",
+						"SkillAmpRatio": "(0.700000,0.700000,0.700000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_ArmorBreak.GE_ArmorBreak_C'",
+						"Duration": "(5.000000,5.000000,5.000000)",
+						"Magnitude": "(0.900000,0.850000,0.800000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Dagger_Recast",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Targets": "(AimAssistRadius=1.000000)",
+				"CastTime": "0.200000"
+			},
+			"Area":
+			{
+				"Type": "Single",
+				"Props":
+				{
+					"Range": "2.500000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_SelfMove",
+					"Props":
+					{
+						"Mode": "BlinkBehindTarget",
+						"Distance": "1.500000",
+						"Duration": "0.010000"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(10.000000,30.000000,50.000000)",
+						"BonusAPRatio": "(0.500000,0.500000,0.500000)",
+						"SkillAmpRatio": "(0.250000,0.250000,0.250000)",
+						"FixedCurHPRatio": "(0.080000,0.080000,0.080000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(1.000000)",
+						"SlowPercent": "(0.200000,0.250000,0.300000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Dagger",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(30.000000,25.000000,20.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.Dagger\")"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": ""
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_SelfBuff",
+					"Props":
+					{
+						"Effects": "((Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_MoveSpeedUp.GE_MoveSpeedUp_C'\",Duration=(1.000000,1.000000,1.000000),Magnitude=(1.300000,1.350000,1.400000)))"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Recast",
+					"Props":
+					{
+						"bOnHitOnly": "",
+						"RecastSkill": "/Script/EternalReturn.ERSkillData'/Game/GAS/Skill/WeaponSkill/DA_Skill_D_Dagger_Recast.DA_Skill_D_Dagger_Recast'"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Bat",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(25.000000,25.000000,25.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"Costs": "(100.000000)",
+				"CastTime": "0.420000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.Bat\")"
+			},
+			"Area":
+			{
+				"Type": "Cone",
+				"Props":
+				{
+					"Length": "2.000000",
+					"AngleDeg": "180.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(100.000000,200.000000,300.000000)",
+						"BonusAPRatio": "(1.100000,1.100000,1.100000)",
+						"SkillAmpRatio": "(0.200000,0.350000,0.500000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Knockback",
+					"Props":
+					{
+						"WallImpactSkill": "/Script/EternalReturn.ERSkillData'/Game/GAS/Skill/WeaponSkill/DA_Skill_D_Bat_Wall.DA_Skill_D_Bat_Wall'"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Axe",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(7.000000,6.000000,5.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"Costs": "(100.000000)",
+				"CastTime": "0.300000",
+				"RecoveryTime": "0.300000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.Axe\")"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": "2.600000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_SelfMove",
+					"Props":
+					{
+						"Distance": "1.000000",
+						"Duration": "0.200000"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(50.000000,75.000000,100.000000)",
+						"APRatio": "(0.000000)",
+						"BonusAPRatio": "(0.500000,0.650000,0.800000)",
+						"SkillAmpRatio": "(0.250000,0.250000,0.250000)",
+						"MaxHPRatio": "(0.060000,0.060000,0.060000)",
+						"HealFromDamageRatio": "(0.600000,0.600000,0.600000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_ArmorBreak.GE_ArmorBreak_C'",
+						"Duration": "(5.000000,5.000000,5.000000)",
+						"Magnitude": "(0.900000,0.850000,0.800000)"
+					}
+				}
+			]
+		}
+	]
+}

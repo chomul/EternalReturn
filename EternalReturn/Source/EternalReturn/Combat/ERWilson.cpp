@@ -19,6 +19,8 @@ AERWilson::AERWilson()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
+	// 서 있는 액터 — 움직이는 건 Q 착지(Drop) 때뿐이라 복제 검사를 줄이고 옮길 때 바로 보낸다 (Argument 72 B3)
+	NetUpdateFrequency = 10.f;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("Root")));
 }
 
@@ -32,6 +34,7 @@ AERWilson* AERWilson::Drop(ACharacter* Sissela, const FVector& Location, TSubcla
 	{
 		Existing->SetActorLocation(Location);
 		Existing->SetInFlight(false);
+		Existing->ForceNetUpdate();
 		UE_LOG(LogEternalReturn, Log, TEXT("[윌슨] %s 이미 떨어져 있음 — 옮김 %s%s"), *GetNameSafe(Sissela), *Location.ToCompactString(),
 			Existing->bPullingOwner ? TEXT(" · 끌려가는 중 → 새 자리로 다시") : TEXT(""));
 		if (Existing->bPullingOwner)
@@ -173,6 +176,7 @@ void AERWilson::SetInFlight(bool bInFlight)
 	{
 		bFlying = bInFlight;
 		SetActorHiddenInGame(bInFlight);
+		ForceNetUpdate();
 	}
 }
 

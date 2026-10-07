@@ -32,6 +32,12 @@ public:
 	 */
 	static TArray<AActor*> SweepSegment(const UWorld* World, const FVector& From, const FVector& To, float RadiusUU, const FTargetQuery& Q);
 
+	/**
+	 * Center 반경 RadiusM(m) 원 — 필터(팀 등)는 Filter 그대로 · 무시 목록은 Caster 하나만 (길에서 맞은 대상도 다시 맞는다).
+	 * 투사체가 끝난 자리 판정 (시셀라 Q 착지 · 레니 Q 폭발 · Argument 72 A4)
+	 */
+	static TArray<AActor*> QueryCircleAt(const UWorld* World, const FTargetQuery& Filter, const FVector& Center, float RadiusM, AActor* Caster);
+
 	/** 지정한 액터 하나가 사거리·필터를 통과하는지 */
 	static FTargetResult QuerySingleTarget(const UWorld* World, const FTargetQuery& Q);
 

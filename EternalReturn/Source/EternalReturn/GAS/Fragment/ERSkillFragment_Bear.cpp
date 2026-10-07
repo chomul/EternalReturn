@@ -16,7 +16,7 @@
 void UERSkillFragment_Bear::GetPassiveEventTags(FGameplayTagContainer& OutTags) const
 {
 	OutTags.AddTag(ERTags::Event_Ally_SkillHit);
-	OutTags.AddTag(ERTags::Event_Leni_BearTriggered);
+	OutTags.AddTag(ERTags::Event_Mark_Triggered);
 }
 
 void UERSkillFragment_Bear::OnPassiveEvent(FERSkillContext& Ctx, const FGameplayEventData& Payload) const
@@ -25,7 +25,7 @@ void UERSkillFragment_Bear::OnPassiveEvent(FERSkillContext& Ctx, const FGameplay
 	{
 		return;
 	}
-	FGameplayTagContainer BearTag; BearTag.AddTag(ERTags::State_Leni_Bear);
+	FGameplayTagContainer BearTag; BearTag.AddTag(ERTags::State_Mark_LeniBear);
 
 	// ① 아군 실험체에게 곰돌이
 	if (Payload.EventTag == ERTags::Event_Ally_SkillHit)
@@ -38,7 +38,7 @@ void UERSkillFragment_Bear::OnPassiveEvent(FERSkillContext& Ctx, const FGameplay
 		}
 		AllyASC->RemoveActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(BearTag));
 		FGameplayEffectSpec Spec(GetDefault<UERTimedTagEffect>(), Ctx.ASC->MakeEffectContext(), 1.f);   // 출처 = 레니 — 어트리뷰트셋이 주인을 찾는다
-		Spec.DynamicGrantedTags.AddTag(ERTags::State_Leni_Bear);
+		Spec.DynamicGrantedTags.AddTag(ERTags::State_Mark_LeniBear);
 		Spec.SetSetByCallerMagnitude(ERTags::SetByCaller_StateDuration, Duration);
 		Ctx.ASC->ApplyGameplayEffectSpecToTarget(Spec, AllyASC);
 		UE_LOG(LogEternalReturn, Log, TEXT("[곰돌이] %s → %s 곰돌이 %.0f초"), *GetNameSafe(Ctx.Avatar), *GetNameSafe(Ally), Duration);
@@ -47,7 +47,7 @@ void UERSkillFragment_Bear::OnPassiveEvent(FERSkillContext& Ctx, const FGameplay
 	}
 
 	// ② 곰돌이 아군이 적을 때렸다 — 소모 · 추가 피해 (레니 몫) · 쿨 감소
-	if (Payload.EventTag == ERTags::Event_Leni_BearTriggered)
+	if (Payload.EventTag == ERTags::Event_Mark_Triggered && Payload.InstigatorTags.HasTagExact(ERTags::State_Mark_LeniBear))
 	{
 		UAbilitySystemComponent* AllyASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Payload.Instigator.Get());
 		AActor* Enemy = const_cast<AActor*>(Payload.Target.Get());
@@ -63,15 +63,9 @@ void UERSkillFragment_Bear::OnPassiveEvent(FERSkillContext& Ctx, const FGameplay
 		}
 		UERPresentationComponent::SendSfxCue(Ctx.Avatar, ERTags::Pres_Sfx_SkillHit_P, Enemy->GetActorLocation());
 		const float Cut = UERSkillData::LevelValue(CooldownCut, Ctx.Level);
-		if (Cut > 0.f)
-		{
-			FGameplayTagContainer CD;
-			CD.AddTag(ERTags::Cooldown_Slot_Q); CD.AddTag(ERTags::Cooldown_Slot_W); CD.AddTag(ERTags::Cooldown_Slot_E);
-			for (const FActiveGameplayEffectHandle& H : Ctx.ASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(CD)))
-			{
-				Ctx.ASC->ModifyActiveEffectStartTime(H, -Cut);
-			}
-		}
+		FGameplayTagContainer CD;
+		CD.AddTag(ERTags::Cooldown_Slot_Q); CD.AddTag(ERTags::Cooldown_Slot_W); CD.AddTag(ERTags::Cooldown_Slot_E);
+		ERSkill::ShiftCooldown(Ctx.ASC, CD, Cut);
 		UE_LOG(LogEternalReturn, Log, TEXT("[곰돌이] %s 의 곰돌이 → %s 추가 피해 · 레니 Q · W · E 쿨 −%.2f초 · 곰돌이 사라짐"),
 			*GetNameSafe(Payload.Instigator.Get()), *GetNameSafe(Enemy), Cut);
 	}

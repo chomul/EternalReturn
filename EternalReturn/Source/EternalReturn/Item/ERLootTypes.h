@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+#include "GameplayTagContainer.h"
 #include "ERLootTypes.generated.h"
 
 /** 루트 항목 하나. Weight 0 은 안 나온다. */
@@ -73,4 +74,8 @@ struct FERLootRow : public FTableRowBase
 	/** 채집물만. 한 번 캐는 데 걸리는 초 — 이 동안 **다른 사람은 못 캔다** (원작 확인: 한 번에 한 명). 0 = 즉시. 원작 **2초 [확인]** (사용자 2026-09-19). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0", EditCondition = "bInfinite"))
 	float GatherSeconds = 0.f;
+
+	/** 채집물만. 캐기 시작할 때 캐는 사람 혼잣말 (Pres.Voice.Gather.* · Argument 73). 비면 없음 — 상자는 행과 무관하게 Pres.Voice.Box */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (Categories = "Pres.Voice", EditCondition = "bInfinite"))
+	FGameplayTag Voice;
 };

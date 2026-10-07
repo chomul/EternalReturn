@@ -1,0 +1,127 @@
+{
+  "_설명": "ER.Pres.Fill 규칙 (Argument 72 A1 — C++ 에서 옮김 2026-10-07). AnimRules = 파일명 토큰(무기 · 모드 · common · *) + 동작 → (모드 · 키) · Keys 비면 그 애니는 안 씀. SoundRules = 소리 이름(소문자 정확히) → (키 · 모드 · 무기) · Key 비면 안 씀. 태그는 문자열 · 고치면 에디터에서 ER.Pres.Fill <캐릭터> Force (빌드 불필요) · 캐릭터 Sissela 전용",
+  "AnimRules": [
+    {
+      "Token": "common",
+      "Act": "skill02_start",
+      "Mode": "Mode.Bubble",
+      "Keys": [
+        "Pres.Anim.ModeStart"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "common",
+      "Act": "skill02_idle",
+      "Mode": "Mode.Bubble",
+      "Keys": [
+        "Pres.Anim.ModeIdle",
+        "Pres.Anim.ModeRun"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "common",
+      "Act": "skill02_end",
+      "Mode": "Mode.Bubble",
+      "Keys": [
+        "Pres.Anim.ModeEnd"
+      ],
+      "bToBase": true
+    }
+  ],
+  "SoundRules": [
+    {
+      "Name": "sissela_passive_union",
+      "Key": "Pres.Sfx.Join",
+      "_메모": "윌슨과 합칠 때"
+    },
+    {
+      "Name": "sissela_passive_buff",
+      "Key": "Pres.Sfx.EnhanceReady",
+      "_메모": "강화 평타 장전"
+    },
+    {
+      "Name": "sissela_passive_hit",
+      "Key": "Pres.Sfx.HitEnhanced",
+      "_메모": "강화 평타 적중"
+    },
+    {
+      "Name": "sissela_skill01_fire",
+      "Key": "Pres.Sfx.SkillCast.Q"
+    },
+    {
+      "Name": "sissela_skill01_hit",
+      "Key": "Pres.Sfx.SkillHit.Q",
+      "_메모": "길 적중"
+    },
+    {
+      "Name": "sissela_skill01_hit2",
+      "Key": "Pres.Sfx.SkillLand.Q",
+      "_메모": "착지 폭발"
+    },
+    {
+      "Name": "sissela_skill01_move",
+      "Key": "Pres.Sfx.SkillMove.Q",
+      "_메모": "날기 시작 — 한 번"
+    },
+    {
+      "Name": "sissela_skill02_start",
+      "Key": "Pres.Sfx.SkillCast.W"
+    },
+    {
+      "Name": "sissela_skill02_end",
+      "Key": "Pres.Sfx.SkillBurst.W",
+      "_메모": "터짐"
+    },
+    {
+      "Name": "sissela_skill02_hit",
+      "Key": "Pres.Sfx.SkillHit.W"
+    },
+    {
+      "Name": "sissela_skill03_fire",
+      "Key": "Pres.Sfx.SkillCast.E"
+    },
+    {
+      "Name": "sissela_skill03_hit",
+      "Key": "Pres.Sfx.SkillHit.E"
+    },
+    {
+      "Name": "sissela_skill03_stun",
+      "Key": "Pres.Sfx.SkillStun.E",
+      "_메모": "타격음과 겹쳐도 됨"
+    },
+    {
+      "Name": "sissela_skill03_take",
+      "Key": "Pres.Sfx.SkillPull.E"
+    },
+    {
+      "Name": "sissela_skill03_shield",
+      "Key": "Pres.Sfx.SkillShield.E"
+    },
+    {
+      "Name": "sissela_skill04_start",
+      "Key": "Pres.Sfx.SkillCast.R",
+      "_메모": "누를 때 (소리 조각 · 시전 큐는 끔)"
+    },
+    {
+      "Name": "sissela_skill04_count",
+      "Key": "Pres.Sfx.SkillCount.R",
+      "_메모": "집중 끝 — 카운트 한 번"
+    },
+    {
+      "Name": "sissela_skill04_explosion",
+      "Key": "Pres.Sfx.SkillLand.R",
+      "_메모": "판정 순간 (늦춘 판정 착지 큐)"
+    },
+    {
+      "Name": "sissela_skill04_hit",
+      "Key": "Pres.Sfx.SkillHit.R"
+    },
+    {
+      "Name": "sissela_wilson_death",
+      "Key": "",
+      "_메모": "안 씀 (사용자 2026-10-06)"
+    }
+  ]
+}

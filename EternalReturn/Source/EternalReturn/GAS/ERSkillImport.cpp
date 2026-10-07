@@ -29,6 +29,8 @@
 #include "Presentation/ERAnimNotify_HitMarker.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
+#include "Misc/PackageName.h"
 #include "Sound/SoundBase.h"
 #include "UObject/Package.h"
 
@@ -480,6 +482,121 @@ namespace
 		UE_LOG(LogEternalReturn, Log, TEXT("[스킬 이관] 끝 — 스킬 DA %d · 이관 · 저장 %d %s · 검사 실패 %d"),
 			Assets.Num(), Touched.Num(), bSaved ? TEXT("✅") : TEXT("⚠ 저장 실패 — Save All 로"), Invalid);
 	}
+
+	// ── 내보내기 (Argument 72 A5) — 지금 DA → JSON. 가져오기의 반대 (손으로 옮기지 않고 원본으로 삼는다) ──
+
+	/** 기본값(클래스 CDO)과 다른 편집 칸만 엔진 텍스트로. Skip = 따로 내보내는 칸 (Area · Delivery · Fragments · 옛 Shape) */
+	TSharedPtr<FJsonObject> ExportProps(const UObject* Obj, const TSet<FName>& Skip)
+	{
+		TSharedPtr<FJsonObject> Out = MakeShared<FJsonObject>();
+		const UObject* CDO = Obj->GetClass()->GetDefaultObject();
+		for (TFieldIterator<FProperty> It(Obj->GetClass()); It; ++It)
+		{
+			const FProperty* P = *It;
+			if (!P->HasAnyPropertyFlags(CPF_Edit) || P->HasAnyPropertyFlags(CPF_Transient | CPF_Deprecated) || Skip.Contains(P->GetFName()))
+			{
+				continue;
+			}
+			if (P->Identical_InContainer(Obj, CDO))
+			{
+				continue;
+			}
+			FString V;
+			P->ExportText_InContainer(0, V, Obj, nullptr, nullptr, PPF_None);
+			Out->SetStringField(P->GetName(), V);
+		}
+		return Out;
+	}
+
+	TSharedPtr<FJsonObject> ExportTyped(const UObject* Obj, const TCHAR* Prefix)
+	{
+		TSharedPtr<FJsonObject> O = MakeShared<FJsonObject>();
+		O->SetStringField(TEXT("Type"), Obj->GetClass()->GetName().Replace(Prefix, TEXT("")));
+		O->SetObjectField(TEXT("Props"), ExportProps(Obj, {}));
+		return O;
+	}
+
+	TSharedPtr<FJsonObject> ExportSkill(const UERSkillData* D)
+	{
+		TSharedPtr<FJsonObject> S = MakeShared<FJsonObject>();
+		S->SetStringField(TEXT("Asset"), D->GetName());
+		S->SetStringField(TEXT("Folder"), FPackageName::GetLongPackagePath(D->GetPackage()->GetName()));
+		S->SetObjectField(TEXT("Props"), ExportProps(D, { TEXT("Area"), TEXT("Delivery"), TEXT("Fragments"), TEXT("Shape") }));
+		if (D->Area) { S->SetObjectField(TEXT("Area"), ExportTyped(D->Area, TEXT("ERShape_"))); }
+		if (D->Delivery) { S->SetObjectField(TEXT("Delivery"), ExportTyped(D->Delivery, TEXT("ERDelivery_"))); }
+		TArray<TSharedPtr<FJsonValue>> Frags;
+		for (const TObjectPtr<UERSkillFragment>& F : D->Fragments)
+		{
+			if (!F) { continue; }
+			TSharedPtr<FJsonObject> FO = MakeShared<FJsonObject>();
+			FO->SetStringField(TEXT("Class"), F->GetClass()->GetName());
+			FO->SetObjectField(TEXT("Props"), ExportProps(F, {}));
+			Frags.Add(MakeShared<FJsonValueObject>(FO));
+		}
+		S->SetArrayField(TEXT("Fragments"), Frags);
+		return S;
+	}
+
+	/** JSON 파일들에 적힌 Asset 이름 (Which = 파일 하나 · 비면 전부) */
+	TSet<FString> AssetsInJson(const FString& Dir, const FString& OnlyFile)
+	{
+		TSet<FString> Names;
+		TArray<FString> Files;
+		IFileManager::Get().FindFiles(Files, *(Dir / TEXT("*.json")), true, false);
+		for (const FString& F : Files)
+		{
+			if (!OnlyFile.IsEmpty() && !F.Equals(OnlyFile + TEXT(".json"), ESearchCase::IgnoreCase)) { continue; }
+			FString Text;
+			TSharedPtr<FJsonObject> Root;
+			const TArray<TSharedPtr<FJsonValue>>* Skills = nullptr;
+			if (!FFileHelper::LoadFileToString(Text, *(Dir / F)) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid()
+				|| !Root->TryGetArrayField(TEXT("Skills"), Skills))
+			{
+				continue;
+			}
+			for (const TSharedPtr<FJsonValue>& V : *Skills)
+			{
+				FString N;
+				if (V->AsObject().IsValid() && V->AsObject()->TryGetStringField(TEXT("Asset"), N)) { Names.Add(N); }
+			}
+		}
+		return Names;
+	}
+
+	/** ER.Skill.ExportJson <JSON 파일 이름 | Missing> → Docs/3_EditorTasks/Data/Skills/_export/<이름>.json */
+	void ExportSkillJson(const TArray<FString>& Args)
+	{
+		const FString Dir = FPaths::Combine(FPaths::ProjectDir(), TEXT("Docs/3_EditorTasks/Data/Skills"));
+		const FString Which = Args.IsEmpty() ? FString(TEXT("Missing")) : Args[0];
+		TArray<FAssetData> All;
+		FAssetRegistryModule::GetRegistry().GetAssetsByClass(UERSkillData::StaticClass()->GetClassPathName(), All, true);
+		const bool bMissing = Which.Equals(TEXT("Missing"), ESearchCase::IgnoreCase);
+		const TSet<FString> Listed = AssetsInJson(Dir, bMissing ? FString() : Which);
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FAssetData& A : All)
+		{
+			const FString Name = A.AssetName.ToString();
+			if (bMissing ? Listed.Contains(Name) : !Listed.Contains(Name)) { continue; }
+			if (const UERSkillData* D = Cast<UERSkillData>(A.GetAsset()))
+			{
+				Out.Add(MakeShared<FJsonValueObject>(ExportSkill(D)));
+			}
+		}
+		TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("_설명"), FString::Printf(TEXT("ER.Skill.ExportJson %s — 지금 DA 그대로 (기본값과 다른 칸만 · 경로는 전체 경로). 원본 JSON 에 합친 뒤 지운다 (Argument 72 A5)"), *Which));
+		Root->SetArrayField(TEXT("Skills"), Out);
+		FString Text;
+		const TSharedRef<TJsonWriter<>> W = TJsonWriterFactory<>::Create(&Text);
+		FJsonSerializer::Serialize(Root.ToSharedRef(), W);
+		const FString Path = Dir / TEXT("_export") / (Which + TEXT(".json"));
+		const bool bOk = FFileHelper::SaveStringToFile(Text, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬 내보내기] %s — 스킬 %d · %s %s"), *Which, Out.Num(), *Path, bOk ? TEXT("✅") : TEXT("⚠ 저장 실패"));
+	}
+
+	FAutoConsoleCommand GExportSkillJsonCmd(
+		TEXT("ER.Skill.ExportJson"),
+		TEXT("[에디터] 스킬 DA → Docs/3_EditorTasks/Data/Skills/_export/<이름>.json. ER.Skill.ExportJson <JSON 파일 이름(그 파일의 DA) | Missing(어느 JSON 에도 없는 DA)>"),
+		FConsoleCommandWithArgsDelegate::CreateStatic(&ExportSkillJson));
 
 	FAutoConsoleCommand GResaveSkillsCmd(
 		TEXT("ER.Skill.Resave"),

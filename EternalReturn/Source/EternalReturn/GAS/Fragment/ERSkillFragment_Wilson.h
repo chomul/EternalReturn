@@ -79,7 +79,7 @@ public:
 
 /**
  * W 어디있어 윌슨? — 윌슨이 **떨어져 있으면** 합침 ("W" → 패시브 장전). 붙어 있으면 아무것도 (사용자 2026-10-06 결정 4 — 장전 없음).
- * 리캐스트(다시 눌러 터뜨리기)로 다시 돌 때는 안 한다.
+ * (W 다시 누르기는 없앴다 — 사용자 2026-10-06 · 리캐스트 검사는 남겨 둬도 무해)
  */
 UCLASS(DisplayName = "윌슨 합치기")
 class ETERNALRETURN_API UERSkillFragment_WilsonJoin : public UERSkillFragment

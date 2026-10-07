@@ -26,7 +26,9 @@
 #include "Serialization/JsonSerializer.h"
 #include "EternalReturn.h"
 #include "GAS/ERGameplayTags.h"
+#include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
+#include "Internationalization/Regex.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Presentation/ERPresentationData.h"
@@ -44,6 +46,7 @@ namespace
 		int32 Written = 0;
 		int32 Kept = 0;
 		TArray<FString> Unmatched;
+		TSet<UObject*> Touched;   // 줄을 쓰거나 본 DA — 끝에 TidyAll 이 칸 정리 · 정렬 (Argument 74)
 	};
 
 	IAssetRegistry& Registry()
@@ -108,6 +111,88 @@ namespace
 		}
 		++Stats.Written;
 		return true;
+	}
+
+	/** 키 뿌리 → 칸 (Argument 74): Pres.Voice → 음성 · Pres.Sfx → 소리 · 나머지(Ability.Slot · Pres.Anim) → 애니 */
+	enum class EListKind : uint8 { Anim, Sound, Voice };
+	EListKind KindOf(const FGameplayTag& Key)
+	{
+		return Key.MatchesTag(ERTags::Pres_Voice) ? EListKind::Voice : Key.MatchesTag(ERTags::Pres_Sfx) ? EListKind::Sound : EListKind::Anim;
+	}
+	TArray<FERPresentationEntry>* ListOf(UERPresentationData& DA, EListKind K) { return K == EListKind::Voice ? &DA.Voices : K == EListKind::Sound ? &DA.Sounds : &DA.Entries; }
+	TArray<FERPresentationEntry>* ListOf(UERSkinData& DA, EListKind K) { return K == EListKind::Voice ? &DA.OverrideVoices : K == EListKind::Sound ? &DA.OverrideSounds : &DA.Overrides; }
+
+	/**
+	 * 잘못된 칸에 있는 줄을 제 칸으로 (Argument 74 — 예전 DA 는 전부 Entries · Overrides 에 있었다). 제 칸에 같은 (모드, 무기, 키) 줄이 이미 있으면 옛 줄은 지운다.
+	 * 그다음 칸마다 키 → 모드 → 무기 순으로 정렬 (보기용 — 조회는 키로 하고 한 층 안에 같은 키 줄은 하나라 순서는 결과와 무관). 반환: 옮긴 줄 수
+	 */
+	template <typename TDA>
+	int32 Tidy(TDA& DA)
+	{
+		int32 Moved = 0, Dropped = 0;
+		for (EListKind From : { EListKind::Anim, EListKind::Sound, EListKind::Voice })
+		{
+			TArray<FERPresentationEntry>& Src = *ListOf(DA, From);
+			for (int32 i = Src.Num() - 1; i >= 0; --i)
+			{
+				const EListKind To = KindOf(Src[i].Key);
+				if (To == From || !Src[i].Key.IsValid())
+				{
+					continue;
+				}
+				TArray<FERPresentationEntry>& Dst = *ListOf(DA, To);
+				const FERPresentationEntry& E = Src[i];
+				if (Dst.ContainsByPredicate([&E](const FERPresentationEntry& D) { return D.Mode == E.Mode && D.Weapon == E.Weapon && D.Key == E.Key; }))
+				{
+					++Dropped;
+				}
+				else
+				{
+					Dst.Add(E);
+					++Moved;
+				}
+				Src.RemoveAt(i);
+			}
+		}
+		for (EListKind K : { EListKind::Anim, EListKind::Sound, EListKind::Voice })
+		{
+			ListOf(DA, K)->StableSort([](const FERPresentationEntry& A, const FERPresentationEntry& B)
+			{
+				if (A.Key != B.Key) { return A.Key.GetTagName().LexicalLess(B.Key.GetTagName()); }
+				if (A.Mode != B.Mode) { return A.Mode.GetTagName().LexicalLess(B.Mode.GetTagName()); }
+				return static_cast<uint8>(A.Weapon) < static_cast<uint8>(B.Weapon);
+			});
+		}
+		if (Moved + Dropped > 0)
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기] %s — 칸 나누기: 옮김 %d · 중복 지움 %d (애니 %d · 소리 %d · 음성 %d)"), *DA.GetName(), Moved, Dropped,
+				ListOf(DA, EListKind::Anim)->Num(), ListOf(DA, EListKind::Sound)->Num(), ListOf(DA, EListKind::Voice)->Num());
+		}
+		return Moved;
+	}
+
+	/** 키에 맞는 칸에 쓴다 (Argument 74). 쓰기 전에 그 DA 를 정리해 옛 칸의 같은 줄을 찾게 한다 — Force 가 아니면 손댄 줄을 지킨다 */
+	template <typename TDA>
+	bool WriteEntry(TDA& DA, EERWeaponType Weapon, FGameplayTag Key, const TArray<UObject*>& Assets, bool bForce, FFillStats& Stats, FGameplayTag Mode = FGameplayTag())
+	{
+		bool bAlready = false;
+		Stats.Touched.Add(&DA, &bAlready);
+		if (!bAlready)
+		{
+			DA.Modify();
+			Tidy(DA);
+		}
+		return WriteEntry(*ListOf(DA, KindOf(Key)), Weapon, Key, Assets, bForce, Stats, Mode);
+	}
+
+	/** Fill 끝 — 손댄 DA 마다 다시 정리 · 정렬 */
+	void TidyAll(FFillStats& Stats)
+	{
+		for (UObject* O : Stats.Touched)
+		{
+			if (UERPresentationData* P = Cast<UERPresentationData>(O)) { Tidy(*P); P->MarkPackageDirty(); }
+			else if (UERSkinData* K = Cast<UERSkinData>(O)) { Tidy(*K); K->MarkPackageDirty(); }
+		}
 	}
 
 	TArray<FAssetData> FindAssets(const FString& Path, UClass* Class)
@@ -296,88 +381,184 @@ namespace
 	}
 
 	/**
-	 * 캐릭터 소리 **명시 표** (배치표 `Docs/3_EditorTasks/Audio/<캐릭터>.md` 의 거울) — 이름이 규칙과 안 맞는 소리 (재키: `ChainSaw_Attack_v1` · `skill02attack_Axe` …).
-	 * 이름(소문자 · 정확히) → (무기 · 모드 · 키). 키가 비면 "안 씀 · 노티파이" (규칙 밖 목록에 이유를 남긴다). 같은 키 여러 줄 = 무작위 변형.
+	 * 연출 채우기 규칙 — **데이터** `Docs/3_EditorTasks/Data/Presentation/*.json` (Argument 72 A1 · 2026-10-07 C++ 에서 옮김). 고치면 Fill 만 다시 (빌드 · 재시작 불필요).
+	 * AnimRules  : 파일명 토큰(무기 · 모드 · common · *) + 동작 → 모드 · 키들. Keys 가 비면 그 애니는 안 씀 (규칙 밖 목록에 남김)
+	 * SoundRules : 소리 이름(소문자 정확히) → 키 · 모드 · 무기 (배치표 `Audio/<캐릭터>.md` 의 거울). Key 가 비면 안 씀 · 같은 키 여러 줄 = 무작위 변형
+	 * 파일 이름 = 캐릭터 (그 캐릭터만) · `_` 로 시작하면 누구나 (카티야 저격 D 처럼 무기 규칙)
 	 */
+	struct FModeRule
+	{
+		FString Token;
+		FString Act;
+		FGameplayTag Mode;            // 비면 모드 아닌 줄
+		TArray<FGameplayTag> Keys;
+		FString Char;                 // 비면 누구나
+		bool bToBase = false;         // 기본 표로 (무기 무관) — 아니면 그 무기 세트
+		bool bAlsoNormal = false;     // 규칙을 쓰고도 평소 규칙도 탄다
+	};
 	struct FCharSound
 	{
-		const TCHAR* Name;
+		FString Name;
 		FGameplayTag Key;
 		FGameplayTag Mode;
 		EERWeaponType Weapon = EERWeaponType::None;
 	};
-	const TArray<FCharSound>& CharSoundRules()
+	TArray<FModeRule> GModeRules;
+	TArray<FCharSound> GCharSounds;
+	const TArray<FModeRule>& ModeRules() { return GModeRules; }
+	const TArray<FCharSound>& CharSoundRules() { return GCharSounds; }
+
+	/**
+	 * 음성 규칙 (Argument 73) — `VoiceRules` 칸. 상황 키(`<캐릭터>_<상황키>_<n>_ko[_k]` 의 가운데)를 정규식 Match 로 → 음성 키 · 재생 규칙.
+	 * bWeaponFromMatch = 첫 괄호가 무기 이름 (learnweaponskill_Pistol) → 그 무기 세트 DA 에. `VoiceWeaponAlias` = 원작 무기 이름 → EERWeaponType 이름
+	 */
+	struct FVoiceFillRule
 	{
-		static const TArray<FCharSound> Rules = {
-			// 재키 (Audio/Jackie.md · 사용자 2026-10-06)
-			{ TEXT("jackie_chainsaw_attack_v1"), ERTags::Pres_Sfx_Attack, ERTags::Mode_Chainsaw },
-			{ TEXT("jackie_chainsaw_attack_v2"), ERTags::Pres_Sfx_Attack, ERTags::Mode_Chainsaw },
-			{ TEXT("jackie_chainsaw_hit_v1"), ERTags::Pres_Sfx_Hit, ERTags::Mode_Chainsaw },
-			{ TEXT("jackie_chainsaw_hit_v2"), ERTags::Pres_Sfx_Hit, ERTags::Mode_Chainsaw },
-			{ TEXT("jackie_passive_activation"), ERTags::Pres_Sfx_SkillHit_P },
-			{ TEXT("jackie_passive_maxstart"), ERTags::Pres_Sfx_SkillLoopStart_P },
-			{ TEXT("jackie_passive_maxloop"), ERTags::Pres_Sfx_SkillLoop_P },
-			{ TEXT("jackie_skill02_activation"), FGameplayTag() },   // 안 씀
-			{ TEXT("jackie_skill02_start"), ERTags::Pres_Sfx_EnhanceReady },
-			{ TEXT("jackie_skill02_attack_1hand"), ERTags::Pres_Sfx_AttackEnhanced, FGameplayTag(), EERWeaponType::Dagger },
-			{ TEXT("jackie_skill02_attack_2hand"), ERTags::Pres_Sfx_AttackEnhanced, FGameplayTag(), EERWeaponType::TwoHandSword },
-			{ TEXT("jackie_skill02attack_axe"), ERTags::Pres_Sfx_AttackEnhanced, FGameplayTag(), EERWeaponType::Axe },
-			{ TEXT("jackie_skill02attack_dual"), ERTags::Pres_Sfx_AttackEnhanced, FGameplayTag(), EERWeaponType::DualSword },
-			{ TEXT("jackie_skill02attack_saw"), ERTags::Pres_Sfx_AttackEnhanced, ERTags::Mode_Chainsaw },
-			{ TEXT("jackie_skill02attack_hit"), ERTags::Pres_Sfx_HitEnhanced },
-			{ TEXT("jackie_skill03_jump"), FGameplayTag() },          // 안 씀
-			{ TEXT("jackie_skill03_jumping"), ERTags::Pres_Sfx_SkillCast_E },   // E 누를 때 (뛰어오를 때 시전 큐 · 사용자 2026-10-06 — 노티파이 대신)
-			{ TEXT("jackie_skill03_bump"), ERTags::Pres_Sfx_SkillLand_E },      // 착지 큐 (판정 순간)
-			{ TEXT("jackie_skill04_activation_start"), FGameplayTag() },   // 안 씀
-			{ TEXT("jackie_skill04_activation_loop"), FGameplayTag() },    // 안 씀 (ChainSaw_v1 · v2 가 대신)
-			{ TEXT("jackie_skill04_activation_v1"), ERTags::Pres_Sfx_SkillCast_R },   // 전기톱 시동
-			{ TEXT("jackie_skill04_activation_v2"), ERTags::Pres_Sfx_SkillCast_R },
-			{ TEXT("jackie_skill04_chainsaw_v1"), ERTags::Pres_Sfx_SkillLoop_R },    // R 동안 반복
-			{ TEXT("jackie_skill04_chainsaw_v2"), ERTags::Pres_Sfx_SkillLoop_R },
-			{ TEXT("jackie_skill04_finish_v1"), ERTags::Pres_Sfx_SkillRecast_R },    // 학살
-			{ TEXT("jackie_skill04_finish_v2"), ERTags::Pres_Sfx_SkillRecast_R },
-			// 시셀라 (Audio/Sissela.md · 사용자 2026-10-06)
-			{ TEXT("sissela_passive_union"), ERTags::Pres_Sfx_Join },            // 윌슨과 합칠 때
-			{ TEXT("sissela_passive_buff"), ERTags::Pres_Sfx_EnhanceReady },     // 강화 평타 장전
-			{ TEXT("sissela_passive_hit"), ERTags::Pres_Sfx_HitEnhanced },       // 강화 평타 적중
-			{ TEXT("sissela_skill01_fire"), ERTags::Pres_Sfx_SkillCast_Q },
-			{ TEXT("sissela_skill01_hit"), ERTags::Pres_Sfx_SkillHit_Q },        // 길 적중
-			{ TEXT("sissela_skill01_hit2"), ERTags::Pres_Sfx_SkillLand_Q },      // 착지 폭발
-			{ TEXT("sissela_skill01_move"), ERTags::Pres_Sfx_SkillMove_Q },      // 날기 시작 — 한 번
-			{ TEXT("sissela_skill02_start"), ERTags::Pres_Sfx_SkillCast_W },
-			{ TEXT("sissela_skill02_end"), ERTags::Pres_Sfx_SkillBurst_W },      // 터짐
-			{ TEXT("sissela_skill02_hit"), ERTags::Pres_Sfx_SkillHit_W },
-			{ TEXT("sissela_skill03_fire"), ERTags::Pres_Sfx_SkillCast_E },
-			{ TEXT("sissela_skill03_hit"), ERTags::Pres_Sfx_SkillHit_E },
-			{ TEXT("sissela_skill03_stun"), ERTags::Pres_Sfx_SkillStun_E },      // 타격음과 겹쳐도 됨
-			{ TEXT("sissela_skill03_take"), ERTags::Pres_Sfx_SkillPull_E },
-			{ TEXT("sissela_skill03_shield"), ERTags::Pres_Sfx_SkillShield_E },
-			{ TEXT("sissela_skill04_start"), ERTags::Pres_Sfx_SkillCast_R },     // 누를 때 (소리 조각 · 시전 큐는 끔)
-			{ TEXT("sissela_skill04_count"), ERTags::Pres_Sfx_SkillCount_R },    // 집중 끝 — 카운트 한 번
-			{ TEXT("sissela_skill04_explosion"), ERTags::Pres_Sfx_SkillLand_R }, // 판정 순간 (늦춘 판정 착지 큐)
-			{ TEXT("sissela_skill04_hit"), ERTags::Pres_Sfx_SkillHit_R },
-			{ TEXT("sissela_wilson_death"), FGameplayTag() },                     // 안 씀 (사용자 2026-10-06)
-			// 레니 (Audio/Leni.md · 사용자 2026-10-07)
-			{ TEXT("leni_pistol_normalattack"), ERTags::Pres_Sfx_Attack },          // 권총 공용 대신
-			{ TEXT("leni_pistol_normalattack_hit"), ERTags::Pres_Sfx_Hit },
-			{ TEXT("leni_pistol_passive_bearappear"), ERTags::Pres_Sfx_BearAppear },
-			{ TEXT("leni_pistol_passive_bearshot"), ERTags::Pres_Sfx_BearShot },
-			{ TEXT("leni_pistol_passive_hit"), ERTags::Pres_Sfx_SkillHit_P },       // 곰돌이 적중
-			{ TEXT("leni_pistol_reload"), ERTags::Pres_Sfx_ModeEnd, ERTags::Mode_MovingReload },   // D 끝 — 재장전
-			{ TEXT("leni_pistol_skill01_shot"), ERTags::Pres_Sfx_SkillCast_Q },
-			{ TEXT("leni_pistol_skill01_boom"), ERTags::Pres_Sfx_SkillLand_Q },     // 폭발 (맞힌 사람 없어도)
-			{ TEXT("leni_pistol_skill01_hit"), ERTags::Pres_Sfx_SkillHit_Q },       // 적만
-			{ TEXT("leni_pistol_skill01_recovery"), ERTags::Pres_Sfx_SkillAlly_Q }, // 아군 회복
-			{ TEXT("leni_pistol_skill02_jump"), ERTags::Pres_Sfx_SkillCast_W },
-			{ TEXT("leni_pistol_skill02_hit"), ERTags::Pres_Sfx_SkillHit_W },       // 적만
-			{ TEXT("leni_pistol_skill03_shot"), ERTags::Pres_Sfx_SkillCast_E },
-			{ TEXT("leni_pistol_skill03_hit"), ERTags::Pres_Sfx_SkillHit_E },       // 적 · 아군 둘 다
-			{ TEXT("leni_pistol_skill04_whistle"), ERTags::Pres_Sfx_SkillCast_R },  // 떼는 순간 (설치)
-			{ TEXT("leni_pistol_skill04_spring"), ERTags::Pres_Sfx_SkillLand_R },   // 터질 때
-			{ TEXT("leni_pistol_skill04_hit"), ERTags::Pres_Sfx_SkillHit_R },
-			{ TEXT("leni_pistol_skill04_wallhit"), ERTags::Pres_Sfx_SkillWall_R },
-		};
-		return Rules;
+		FString Match;
+		FGameplayTag Key;
+		FERVoiceRule Rule;
+		bool bWeaponFromMatch = false;
+	};
+	TArray<FVoiceFillRule> GVoiceRules;
+	TMap<FString, FString> GVoiceWeaponAlias;   // 소문자 → enum 이름
+
+	FGameplayTag RuleTag(const FString& S, const FString& Who, int32& Errors)
+	{
+		if (S.IsEmpty())
+		{
+			return FGameplayTag();
+		}
+		const FGameplayTag T = FGameplayTag::RequestGameplayTag(*S, /*ErrorIfNotFound=*/false);
+		if (!T.IsValid())
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[연출 규칙] %s — 태그 '%s' 가 없다"), *Who, *S);
+			++Errors;
+		}
+		return T;
+	}
+
+	/** 매 Fill 마다 다시 읽는다. 반환: 에러 수 */
+	int32 LoadFillRules()
+	{
+		GModeRules.Reset();
+		GCharSounds.Reset();
+		GVoiceRules.Reset();
+		GVoiceWeaponAlias.Reset();
+		const FString Dir = FPaths::Combine(FPaths::ProjectDir(), TEXT("Docs/3_EditorTasks/Data/Presentation"));
+		TArray<FString> Files;
+		IFileManager::Get().FindFiles(Files, *(Dir / TEXT("*.json")), /*Files=*/true, /*Directories=*/false);
+		int32 Errors = 0;
+		for (const FString& F : Files)
+		{
+			FString Text;
+			TSharedPtr<FJsonObject> Root;
+			if (!FFileHelper::LoadFileToString(Text, *(Dir / F)) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Root) || !Root.IsValid())
+			{
+				UE_LOG(LogEternalReturn, Error, TEXT("[연출 규칙] %s — JSON 을 못 읽었다"), *F);
+				++Errors;
+				continue;
+			}
+			const FString BaseName = FPaths::GetBaseFilename(F);
+			const FString Char = BaseName.StartsWith(TEXT("_")) ? FString() : BaseName.ToLower();
+			const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+			if (Root->TryGetArrayField(TEXT("AnimRules"), Arr))
+			{
+				for (const TSharedPtr<FJsonValue>& V : *Arr)
+				{
+					const TSharedPtr<FJsonObject> O = V->AsObject();
+					if (!O.IsValid()) { continue; }
+					FModeRule R;
+					O->TryGetStringField(TEXT("Token"), R.Token);
+					O->TryGetStringField(TEXT("Act"), R.Act);
+					R.Token = R.Token.ToLower();
+					R.Act = R.Act.ToLower();
+					const FString Who = F + TEXT(" ") + R.Token + TEXT("_") + R.Act;
+					FString ModeName;
+					O->TryGetStringField(TEXT("Mode"), ModeName);
+					R.Mode = RuleTag(ModeName, Who, Errors);
+					const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
+					if (O->TryGetArrayField(TEXT("Keys"), Keys))
+					{
+						for (const TSharedPtr<FJsonValue>& K : *Keys)
+						{
+							const FGameplayTag T = RuleTag(K->AsString(), Who, Errors);
+							if (T.IsValid()) { R.Keys.Add(T); }
+						}
+					}
+					R.Char = Char;
+					O->TryGetBoolField(TEXT("bToBase"), R.bToBase);
+					O->TryGetBoolField(TEXT("bAlsoNormal"), R.bAlsoNormal);
+					GModeRules.Add(R);
+				}
+			}
+			if (Root->TryGetArrayField(TEXT("SoundRules"), Arr))
+			{
+				for (const TSharedPtr<FJsonValue>& V : *Arr)
+				{
+					const TSharedPtr<FJsonObject> O = V->AsObject();
+					if (!O.IsValid()) { continue; }
+					FCharSound C;
+					O->TryGetStringField(TEXT("Name"), C.Name);
+					C.Name = C.Name.ToLower();
+					const FString Who = F + TEXT(" ") + C.Name;
+					FString KeyName, ModeName, WeaponName;
+					O->TryGetStringField(TEXT("Key"), KeyName);
+					O->TryGetStringField(TEXT("Mode"), ModeName);
+					C.Key = RuleTag(KeyName, Who, Errors);
+					C.Mode = RuleTag(ModeName, Who, Errors);
+					if (O->TryGetStringField(TEXT("Weapon"), WeaponName) && !WeaponName.IsEmpty())
+					{
+						const int64 W = StaticEnum<EERWeaponType>()->GetValueByNameString(WeaponName);
+						if (W == INDEX_NONE)
+						{
+							UE_LOG(LogEternalReturn, Error, TEXT("[연출 규칙] %s — 무기 '%s' 가 없다"), *Who, *WeaponName);
+							++Errors;
+						}
+						else
+						{
+							C.Weapon = static_cast<EERWeaponType>(W);
+						}
+					}
+					GCharSounds.Add(C);
+				}
+			}
+			if (Root->TryGetArrayField(TEXT("VoiceRules"), Arr))
+			{
+				for (const TSharedPtr<FJsonValue>& V : *Arr)
+				{
+					const TSharedPtr<FJsonObject> O = V->AsObject();
+					if (!O.IsValid()) { continue; }
+					FVoiceFillRule R;
+					O->TryGetStringField(TEXT("Match"), R.Match);
+					FString KeyName;
+					O->TryGetStringField(TEXT("Key"), KeyName);
+					R.Key = RuleTag(KeyName, F + TEXT(" ") + R.Match, Errors);
+					if (R.Match.IsEmpty() || !R.Key.IsValid() || !R.Key.MatchesTag(ERTags::Pres_Voice))
+					{
+						UE_LOG(LogEternalReturn, Error, TEXT("[연출 규칙] %s 음성 '%s' — Match 가 비었거나 Key 가 Pres.Voice.* 가 아니다"), *F, *R.Match);
+						++Errors;
+						continue;
+					}
+					double Num = 0.0;
+					if (O->TryGetNumberField(TEXT("Chance"), Num)) { R.Rule.Chance = FMath::Clamp(static_cast<float>(Num), 0.f, 1.f); }
+					if (O->TryGetNumberField(TEXT("Cooldown"), Num)) { R.Rule.Cooldown = FMath::Max(0.f, static_cast<float>(Num)); }
+					O->TryGetBoolField(TEXT("bInterrupt"), R.Rule.bInterrupt);
+					O->TryGetBoolField(TEXT("bWeaponFromMatch"), R.bWeaponFromMatch);
+					GVoiceRules.Add(R);
+				}
+			}
+			const TSharedPtr<FJsonObject>* AliasJ = nullptr;
+			if (Root->TryGetObjectField(TEXT("VoiceWeaponAlias"), AliasJ))
+			{
+				for (const TPair<FString, TSharedPtr<FJsonValue>>& KV : (*AliasJ)->Values)
+				{
+					if (!KV.Key.StartsWith(TEXT("_"))) { GVoiceWeaponAlias.Add(KV.Key.ToLower(), KV.Value->AsString()); }
+				}
+			}
+		}
+		UE_LOG(LogEternalReturn, Log, TEXT("[연출 규칙] %s — 파일 %d · 애니 규칙 %d · 소리 %d · 음성 %d%s"), *Dir, Files.Num(), GModeRules.Num(), GCharSounds.Num(), GVoiceRules.Num(),
+			Errors > 0 ? *FString::Printf(TEXT(" · ⚠ 에러 %d"), Errors) : TEXT(""));
+		return Errors;
 	}
 
 	/** (무기, 키) → 소리들. 이름순이라 r1 → r2. */
@@ -428,63 +609,6 @@ namespace
 
 	using FKeyGroups = TMap<TPair<EERWeaponType, FGameplayTag>, TArray<UObject*>>;
 
-	/**
-	 * 모드 애니 규칙 (Argument 42 ⑥ A2) — "이 무기 토큰 · 이 동작" 은 "이 모드의 이 키들". 모드가 생길 때 한 줄씩 (F19: 재키 Saw · 매그너스 bike · 다니엘 mask).
-	 * 동작표에 { 모드 · 키 · 애니 } 줄로 들어간다 — 무기 모드는 무기 세트에.
-	 */
-	struct FModeRule
-	{
-		const TCHAR* Token;           // 파일명 두 번째 토큰 (소문자) — 무기 토큰 · "saw" 같은 모드 토큰 · "common" · "*" (아무 무기)
-		const TCHAR* Act;             // 나머지 (소문자)
-		FGameplayTag Mode;            // 비면 모드 아닌 줄 (캐릭터별 예외 규칙)
-		TArray<FGameplayTag> Keys;
-		const TCHAR* Char = nullptr;  // 이 캐릭터만 (nullptr = 누구나)
-		bool bToBase = false;         // 기본 표로 (무기 무관) — 아니면 그 무기 세트
-		bool bAlsoNormal = false;     // 규칙을 쓰고도 평소 규칙도 탄다 (재키 도끼 Q — 도끼 세트에도)
-	};
-	const TArray<FModeRule>& ModeRules()
-	{
-		static const TArray<FModeRule> Rules = {
-			// 카티야 저격 D — Katja_Sniperrifle_Skill_{Start,Loop,Shot,End}
-			{ TEXT("sniperrifle"), TEXT("skill_start"), ERTags::Mode_Sniper, { ERTags::Pres_Anim_ModeStart } },
-			{ TEXT("sniperrifle"), TEXT("skill_loop"),  ERTags::Mode_Sniper, { ERTags::Pres_Anim_ModeIdle, ERTags::Pres_Anim_ModeRun } },
-			{ TEXT("sniperrifle"), TEXT("skill_shot"),  ERTags::Mode_Sniper, { ERTags::Ability_Slot_Attack } },
-			{ TEXT("sniperrifle"), TEXT("skill_end"),   ERTags::Mode_Sniper, { ERTags::Pres_Anim_ModeEnd } },
-			// 재키 R 전기톱 (Argument 66 M1 · 사용자 2026-10-05) — 무기 공통 Saw = 기본 표 모드 줄 · 무기별 Saw = 무기 세트 모드 줄
-			{ TEXT("saw"), TEXT("atk01"),         ERTags::Mode_Chainsaw, { ERTags::Ability_Slot_Attack },    TEXT("jackie"), true },
-			{ TEXT("saw"), TEXT("atk02"),         ERTags::Mode_Chainsaw, { ERTags::Ability_Slot_Attack },    TEXT("jackie"), true },
-			{ TEXT("saw"), TEXT("wait"),          ERTags::Mode_Chainsaw, { ERTags::Pres_Anim_ModeIdle },     TEXT("jackie"), true },
-			{ TEXT("saw"), TEXT("run"),           ERTags::Mode_Chainsaw, { ERTags::Pres_Anim_ModeRun },      TEXT("jackie"), true },
-			// W 시전 애니는 없다 — 강화 평타 스킬이라 소리 · 이펙트만 (사용자 2026-10-05) · 강화 평타는 skill02_attack
-			{ TEXT("*"), TEXT("skill02"),         FGameplayTag(), {},                                         TEXT("jackie") },
-			{ TEXT("saw"), TEXT("skill02"),       FGameplayTag(), {},                                         TEXT("jackie") },
-			{ TEXT("saw"), TEXT("skill03"),       ERTags::Mode_Chainsaw, { ERTags::Ability_Slot_E },         TEXT("jackie"), true },
-			// E 습격 = skill03 하나 (= _start + _end 를 합친 것 · 사용자 2026-10-05 A) — _start 는 빼야 skill03 과 번갈아 틀지 않는다 (_end 는 원래 규칙 밖)
-			{ TEXT("*"), TEXT("skill03_start"),   FGameplayTag(), {},                                         TEXT("jackie") },
-			{ TEXT("saw"), TEXT("skill03_start"), FGameplayTag(), {},                                         TEXT("jackie") },
-			// 진입 Common_skill04_start 는 규칙 없이 **R 스킬 애니(몽타주)** 로 — 상태머신 진입 상태는 전신이라 걸으면 다리가 멈췄다 · 몽타주면 속도 조절 · 이동 끊기 (사용자 2026-10-05)
-			{ TEXT("common"), TEXT("skill04_end"), FGameplayTag(), { ERTags::Ability_Slot_R_Recast },        TEXT("jackie"), true },   // 학살 (사용자 2026-10-05) · 해제 동작은 없다
-			{ TEXT("*"), TEXT("saw_skill02_attack"), ERTags::Mode_Chainsaw, { ERTags::Pres_Anim_AttackEnhanced }, TEXT("jackie") },   // 모드 중 W 강화 평타 (무기별)
-			{ TEXT("*"), TEXT("skill02_attack"),  FGameplayTag(), { ERTags::Pres_Anim_AttackEnhanced },      TEXT("jackie") },          // W 강화 평타 (무기별 · E1)
-			// Q 연참 = 시전 01 · 재사용 02 (무기별 · 전기톱 모드 — 사용자가 애니를 다시 채움 2026-10-05). 단검도 자기 Q 가 생겨 "도끼 Q 같이 쓰기" 는 뺐다
-			{ TEXT("*"), TEXT("skill01_01"),      FGameplayTag(), { ERTags::Ability_Slot_Q },                TEXT("jackie") },
-			{ TEXT("*"), TEXT("skill01_02"),      FGameplayTag(), { ERTags::Ability_Slot_Q_Recast },         TEXT("jackie") },
-			{ TEXT("saw"), TEXT("skill01_01"),    ERTags::Mode_Chainsaw, { ERTags::Ability_Slot_Q },         TEXT("jackie"), true },
-			{ TEXT("saw"), TEXT("skill01_02"),    ERTags::Mode_Chainsaw, { ERTags::Ability_Slot_Q_Recast },  TEXT("jackie"), true },
-			// 시셀라 W 감싸기 = 모드 (Argument 69 B1 · 사용자 2026-10-06) — 공통 애니 → 기본 표 모드 줄. 움직여도 감싼 자세 (대기 = 달리기)
-			{ TEXT("common"), TEXT("skill02_start"), ERTags::Mode_Bubble, { ERTags::Pres_Anim_ModeStart },   TEXT("sissela"), true },
-			{ TEXT("common"), TEXT("skill02_idle"),  ERTags::Mode_Bubble, { ERTags::Pres_Anim_ModeIdle, ERTags::Pres_Anim_ModeRun }, TEXT("sissela"), true },
-			{ TEXT("common"), TEXT("skill02_end"),   ERTags::Mode_Bubble, { ERTags::Pres_Anim_ModeEnd },     TEXT("sissela"), true },
-			// 레니 (Argument 71 D1 · 사용자 2026-10-07) — D 무빙 리로드 1초 = 모드 (달리기 NormalRun · 끝 Reload) · R 같이 날아감 = Skill04_Jump · Back 은 모름 (안 씀)
-			{ TEXT("pistol"), TEXT("normalweaponskill"), FGameplayTag(), { ERTags::Ability_Slot_D },        TEXT("leni") },
-			{ TEXT("pistol"), TEXT("normalrun"),   ERTags::Mode_MovingReload, { ERTags::Pres_Anim_ModeIdle, ERTags::Pres_Anim_ModeRun }, TEXT("leni") },
-			{ TEXT("pistol"), TEXT("reload"),      ERTags::Mode_MovingReload, { ERTags::Pres_Anim_ModeEnd },  TEXT("leni") },
-			{ TEXT("pistol"), TEXT("skill04_jump"), FGameplayTag(), { ERTags::Ability_Slot_R_Execute },      TEXT("leni") },
-			{ TEXT("pistol"), TEXT("skill04_back"), FGameplayTag(), {},                                       TEXT("leni") },
-			{ TEXT("axe"), TEXT("skill01"),       FGameplayTag(), {},                                         TEXT("jackie") },   // 옛 도끼 Q — 01 · 02 와 크기가 달라 무엇인지 (미확인) · 안 쓴다 (번갈아 틀지 않게)
-		};
-		return Rules;
-	}
 	using FModeGroups = TMap<TPair<FGameplayTag, FGameplayTag>, TArray<UObject*>>;   // (모드, 키) → 애니
 
 	/** 이름이 LayerName 인 AnimBP 가 있으면 Pres.AnimLayer 에 (비어 있거나 Force 일 때). 없으면 규칙 밖 목록에. */
@@ -686,6 +810,157 @@ namespace
 		}
 	}
 
+	/** 음성 스킨 표 (Data/Presentation/VoiceSkin.csv — ER_Asset/03_Log/보이스_스킨.csv 사본): 애셋 이름(소문자) → S0nn */
+	TMap<FString, FString> LoadVoiceSkins()
+	{
+		TMap<FString, FString> Out;
+		const FString Path = FPaths::Combine(FPaths::ProjectDir(), TEXT("Docs/3_EditorTasks/Data/Presentation/VoiceSkin.csv"));
+		TArray<FString> Lines;
+		if (!FFileHelper::LoadFileToStringArray(Lines, *Path))
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[연출 채우기] 음성 — %s 를 못 읽었다 · 음성 건너뜀"), *Path);
+			return Out;
+		}
+		for (int32 i = 1; i < Lines.Num(); ++i)   // 0 = 머리줄 (캐릭터,파일,스킨,원래경로,길이차초)
+		{
+			TArray<FString> Cols;
+			Lines[i].ParseIntoArray(Cols, TEXT(","), /*InCullEmpty=*/false);
+			if (Cols.Num() >= 3)
+			{
+				Out.Add(FPaths::GetBaseFilename(Cols[1]).ToLower(), Cols[2].TrimStartAndEnd().ToUpper());
+			}
+		}
+		return Out;
+	}
+
+	/**
+	 * 음성 (Argument 73) — `/Game/ER/Audio/Voice/ko/<캐릭터>/` → 규칙에 맞는 상황만. S000 = 기본 DA (무기 세트) · S00x = 스킨 DA Overrides.
+	 * 재생 규칙(확률 · 간격 · 끊기)은 기본 DA 의 VoiceRules 에 **통째로** (JSON 이 원본). 반환: 쓴 줄 수
+	 */
+	int32 FillVoice(const FString& Char, UERPresentationData& Base, const FString& Folder, const TArray<TPair<FString, UERSkinData*>>& SkinAssets, bool bForce, FFillStats& Stats)
+	{
+		const TArray<FAssetData> Voices = FindAssets(TEXT("/Game/ER/Audio/Voice/ko/") + Char, USoundBase::StaticClass());
+		if (Voices.IsEmpty() || GVoiceRules.IsEmpty())
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기] %s 음성 — 파일 %d · 규칙 %d · 건너뜀"), *Char, Voices.Num(), GVoiceRules.Num());
+			return 0;
+		}
+		const TMap<FString, FString> SkinOf = LoadVoiceSkins();
+		using FGroupKey = TTuple<FString, EERWeaponType, FGameplayTag>;   // 스킨 · 무기 · 음성 키
+		TMap<FGroupKey, TArray<UObject*>> Groups;
+		TMap<FString, int32> UnusedSitu;   // 규칙 밖 상황 → 파일 수 (지역 · 로비 · 결과 …)
+		int32 NoSkin = 0;
+		for (const FAssetData& A : Voices)
+		{
+			const FString Name = A.AssetName.ToString();
+			const FString* Skin = SkinOf.Find(Name.ToLower());
+			TArray<FString> T;
+			Name.ParseIntoArray(T, TEXT("_"));
+			int32 Ko = INDEX_NONE;
+			for (int32 i = T.Num() - 1; i >= 0; --i)
+			{
+				if (T[i].Equals(TEXT("ko"), ESearchCase::IgnoreCase)) { Ko = i; break; }
+			}
+			// <캐릭터> _ <상황키 (밑줄 있을 수 있음)> [_ <번호>] _ ko [_k] — 번호 없는 것도 있다 (VictoryCutscene · hacking_lost — 한 개짜리)
+			if (!Skin || Ko < 2 || !T[0].Equals(Char, ESearchCase::IgnoreCase))
+			{
+				++NoSkin;
+				Stats.Unmatched.Add(FString::Printf(TEXT("음성 %s (%s)"), *Name, Skin ? TEXT("이름 형식") : TEXT("스킨 표에 없음")));
+				continue;
+			}
+			const int32 SituEnd = (Ko >= 3 && T[Ko - 1].IsNumeric()) ? Ko - 1 : Ko;   // 번호 토큰 앞까지
+			const FString Situ = FString::Join(TArray<FString>(T.GetData() + 1, SituEnd - 1), TEXT("_"));
+			const FVoiceFillRule* Hit = nullptr;
+			FString Group1;
+			for (const FVoiceFillRule& R : GVoiceRules)
+			{
+				FRegexMatcher M(FRegexPattern(R.Match), Situ);
+				if (M.FindNext() && M.GetMatchBeginning() == 0 && M.GetMatchEnding() == Situ.Len())
+				{
+					Hit = &R;
+					Group1 = M.GetCaptureGroup(1);
+					break;
+				}
+			}
+			if (!Hit)
+			{
+				++UnusedSitu.FindOrAdd(Situ);
+				continue;
+			}
+			EERWeaponType Weapon = EERWeaponType::None;
+			if (Hit->bWeaponFromMatch)
+			{
+				const FString* Alias = GVoiceWeaponAlias.Find(Group1.ToLower());
+				Weapon = TokenToWeapon(Alias ? *Alias : Group1);
+				if (Weapon == EERWeaponType::None)
+				{
+					Stats.Unmatched.Add(FString::Printf(TEXT("음성 %s (무기 '%s' 를 모른다 — VoiceWeaponAlias)"), *Name, *Group1));
+					continue;
+				}
+			}
+			Groups.FindOrAdd(FGroupKey(*Skin, Weapon, Hit->Key)).Add(A.GetAsset());
+		}
+
+		int32 Rows = 0;
+		TMap<FString, int32> MissingSkinDA;
+		for (const TPair<FGroupKey, TArray<UObject*>>& G : Groups)
+		{
+			const FString& GSkin = G.Key.Get<0>();
+			const EERWeaponType GWeapon = G.Key.Get<1>();
+			const FGameplayTag& GKey = G.Key.Get<2>();
+			if (GSkin == TEXT("S000"))
+			{
+				UERPresentationData* Target = &Base;
+				if (GWeapon != EERWeaponType::None)
+				{
+					const FString WeaponName = StaticEnum<EERWeaponType>()->GetNameStringByValue(static_cast<int64>(GWeapon));
+					Target = FindOrCreate<UERPresentationData>(Folder, FString::Printf(TEXT("DA_Pres_%s_%s"), *Char, *WeaponName), Stats);
+					if (Target && Base.WeaponSets.FindOrAdd(GWeapon).IsNull())
+					{
+						Base.WeaponSets[GWeapon] = Target;
+					}
+				}
+				if (Target)
+				{
+					Target->Modify();
+					Rows += WriteEntry(*Target, EERWeaponType::None, GKey, G.Value, bForce, Stats) ? 1 : 0;
+					Target->MarkPackageDirty();
+				}
+				continue;
+			}
+			const TPair<FString, UERSkinData*>* SkinRow = SkinAssets.FindByPredicate([&GSkin](const TPair<FString, UERSkinData*>& S) { return S.Key == GSkin; });
+			if (!SkinRow)
+			{
+				MissingSkinDA.FindOrAdd(GSkin) += G.Value.Num();
+				continue;
+			}
+			SkinRow->Value->Modify();
+			Rows += WriteEntry(*SkinRow->Value, GWeapon, GKey, G.Value, bForce, Stats) ? 1 : 0;
+			SkinRow->Value->MarkPackageDirty();
+		}
+
+		// 재생 규칙 — JSON 이 원본이라 통째로 (Force 무관)
+		Base.Modify();
+		Base.VoiceRules.Reset();
+		for (const FVoiceFillRule& R : GVoiceRules)
+		{
+			Base.VoiceRules.FindOrAdd(R.Key) = R.Rule;   // 같은 키 여러 줄(사망 묶음)이면 마지막 줄
+		}
+		Base.MarkPackageDirty();
+
+		for (const TPair<FString, int32>& M : MissingSkinDA)
+		{
+			Stats.Unmatched.Add(FString::Printf(TEXT("음성 스킨 %s %d개 — 스킨 DA 가 없다 (Skins/ 에 %s 폴더 없음) · 그 스킨에선 기본 대사가 나온다"), *M.Key, M.Value, *M.Key));
+		}
+		TArray<FString> Unused;
+		for (const TPair<FString, int32>& U : UnusedSitu) { Unused.Add(FString::Printf(TEXT("%s ×%d"), *U.Key, U.Value)); }
+		Unused.Sort();
+		UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기] %s 음성 — 파일 %d · 묶음 %d · 줄 채움 %d · 재생 규칙 %d · 이름/스킨 표 문제 %d · 규칙 밖 상황 %d종"),
+			*Char, Voices.Num(), Groups.Num(), Rows, Base.VoiceRules.Num(), NoSkin, UnusedSitu.Num());
+		UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기]   음성 규칙 밖 (그 기능 때): %s"), *FString::Join(Unused, TEXT(" · ")));
+		return Rows;
+	}
+
 	void FillCharacter(const FString& Char, bool bForce)
 	{
 		FFillStats Stats;
@@ -732,8 +1007,8 @@ namespace
 			const FString TokenLower = Tokens[1].ToLower();
 			const FModeRule* Rule = SkinId.IsEmpty() ? ModeRules().FindByPredicate([&](const FModeRule& R)
 			{
-				const bool bToken = FCString::Strcmp(R.Token, TEXT("*")) == 0 ? Weapon != EERWeaponType::None : TokenLower == R.Token;
-				return bToken && Act == R.Act && (!R.Char || Char.Equals(R.Char, ESearchCase::IgnoreCase));
+				const bool bToken = R.Token == TEXT("*") ? Weapon != EERWeaponType::None : TokenLower == R.Token;
+				return bToken && Act == R.Act && (R.Char.IsEmpty() || Char.Equals(R.Char, ESearchCase::IgnoreCase));
 			}) : nullptr;
 			if (Rule && Rule->Keys.IsEmpty())
 			{
@@ -836,7 +1111,7 @@ namespace
 		Base->Modify();
 		for (const TPair<TPair<EERWeaponType, FGameplayTag>, TArray<UObject*>>& G : BaseGroups)
 		{
-			WriteEntry(Base->Entries, G.Key.Key, G.Key.Value, G.Value, bForce, Stats);
+			WriteEntry(*Base, G.Key.Key, G.Key.Value, G.Value, bForce, Stats);
 		}
 		// 뺀 애니가 든 옛 줄 정리 — 그 애니만 빼고, 비면 줄째 (재키 W 시전 · 옛 도끼 Q · skill03_start …)
 		auto PruneExcluded = [&ExcludedAnims](TArray<FERPresentationEntry>& Entries, const UObject* Owner)
@@ -861,7 +1136,7 @@ namespace
 		};
 		for (const TPair<TPair<FGameplayTag, FGameplayTag>, TArray<UObject*>>& G : BaseModeGroups)
 		{
-			WriteEntry(Base->Entries, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats, G.Key.Key);
+			WriteEntry(*Base, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats, G.Key.Key);
 		}
 		PruneExcluded(Base->Entries, Base);
 		// 맨손 레이어 — 무기 없을 때 대기 · 달리기 (사용자 2026-09-28)
@@ -877,13 +1152,13 @@ namespace
 			Set->Modify();
 			for (const TPair<TPair<EERWeaponType, FGameplayTag>, TArray<UObject*>>& G : WG.Value)
 			{
-				WriteEntry(Set->Entries, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats);
+				WriteEntry(*Set, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats);
 			}
 			if (const FModeGroups* MG = ModeGroups.Find(WG.Key))
 			{
 				for (const TPair<TPair<FGameplayTag, FGameplayTag>, TArray<UObject*>>& G : *MG)
 				{
-					WriteEntry(Set->Entries, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats, G.Key.Key);
+					WriteEntry(*Set, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats, G.Key.Key);
 				}
 			}
 			PruneExcluded(Set->Entries, Set);
@@ -936,7 +1211,7 @@ namespace
 			{
 				for (const TPair<TPair<EERWeaponType, FGameplayTag>, TArray<UObject*>>& G : *Groups)
 				{
-					WriteEntry(SkinDA->Overrides, G.Key.Key, G.Key.Value, G.Value, bForce, Stats);
+					WriteEntry(*SkinDA, G.Key.Key, G.Key.Value, G.Value, bForce, Stats);
 				}
 			}
 			SkinDA->MarkPackageDirty();
@@ -1033,14 +1308,14 @@ namespace
 						if (Target)
 						{
 							Target->Modify();
-							SoundRows += WriteEntry(Target->Entries, EERWeaponType::None, E.Key, E.Assets, bForce, Stats, E.Mode) ? 1 : 0;
+							SoundRows += WriteEntry(*Target, EERWeaponType::None, E.Key, E.Assets, bForce, Stats, E.Mode) ? 1 : 0;
 							Target->MarkPackageDirty();
 						}
 					}
 					else if (const TPair<FString, UERSkinData*>* SkinRow = SkinAssets.FindByPredicate([&SkinId](const TPair<FString, UERSkinData*>& S) { return S.Key == SkinId; }))
 					{
 						SkinRow->Value->Modify();
-						SoundRows += WriteEntry(SkinRow->Value->Overrides, E.Weapon, E.Key, E.Assets, bForce, Stats, E.Mode) ? 1 : 0;
+						SoundRows += WriteEntry(*SkinRow->Value, E.Weapon, E.Key, E.Assets, bForce, Stats, E.Mode) ? 1 : 0;
 						SkinRow->Value->MarkPackageDirty();
 					}
 				}
@@ -1057,7 +1332,7 @@ namespace
 						{
 							// 무기 무관 (캐릭터 스킬 소리 · F19-02) → 캐릭터 기본 표
 							Base->Modify();
-							SoundRows += WriteEntry(Base->Entries, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats) ? 1 : 0;
+							SoundRows += WriteEntry(*Base, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats) ? 1 : 0;
 							Base->MarkPackageDirty();
 							continue;
 						}
@@ -1068,7 +1343,7 @@ namespace
 							continue;
 						}
 						Set->Modify();
-						SoundRows += WriteEntry(Set->Entries, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats) ? 1 : 0;
+						SoundRows += WriteEntry(*Set, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats) ? 1 : 0;
 						Set->MarkPackageDirty();
 						TSoftObjectPtr<UERPresentationData>& Slot = Base->WeaponSets.FindOrAdd(G.Key.Key);
 						if (Slot.IsNull())
@@ -1089,11 +1364,14 @@ namespace
 				for (const TPair<TPair<EERWeaponType, FGameplayTag>, TArray<UObject*>>& G : Groups)
 				{
 					// 스킨 줄은 **무기 칸**을 채운다 — 그 무기를 들 때만 (연출 컴포넌트 "스킨·무기" 층)
-					SoundRows += WriteEntry(Skin->Value->Overrides, G.Key.Key, G.Key.Value, G.Value, bForce, Stats) ? 1 : 0;
+					SoundRows += WriteEntry(*Skin->Value, G.Key.Key, G.Key.Value, G.Value, bForce, Stats) ? 1 : 0;
 				}
 				Skin->Value->MarkPackageDirty();
 			}
 		}
+
+		// 3.7) 음성 (Argument 73) — Voice/ko/<캐릭터> · 규칙 Data/Presentation/_Voice.json · 스킨 VoiceSkin.csv
+		const int32 VoiceRows = FillVoice(Char, *Base, Folder, SkinAssets, bForce, Stats);
 
 		// 4) 실험체 DA 에 연결 — 이름에 캐릭터 이름이 든 UERCharacterData 가 하나일 때만
 		TArray<FAssetData> CharDAs = FindAssets(TEXT("/Game"), UERCharacterData::StaticClass());
@@ -1125,12 +1403,13 @@ namespace
 				*Char, CharDAs.Num(), *Base->GetName());
 		}
 
+		TidyAll(Stats);   // 애니 · 소리 · 음성 칸 정리 · 정렬 (Argument 74)
 		for (const FString& U : Stats.Unmatched)
 		{
 			UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기]   규칙 밖: %s"), *U);
 		}
-		UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기] %s — 애니 %d · 새 애셋 %d · 줄 채움 %d (소리 %d) · 유지 %d · 무기 세트 %d · 스킨 %d · 규칙 밖 %d. **Save All**"),
-			*Char, Anims.Num(), Stats.Created, Stats.Written, SoundRows, Stats.Kept, WeaponGroups.Num(), SkinAssets.Num(), Stats.Unmatched.Num());
+		UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기] %s — 애니 %d · 새 애셋 %d · 줄 채움 %d (소리 %d · 음성 %d) · 유지 %d · 무기 세트 %d · 스킨 %d · 규칙 밖 %d. **Save All**"),
+			*Char, Anims.Num(), Stats.Created, Stats.Written, SoundRows, VoiceRows, Stats.Kept, WeaponGroups.Num(), SkinAssets.Num(), Stats.Unmatched.Num());
 	}
 
 	/** 야생동물 DA → 애셋 폴더 (종 이름이 폴더와 다른 것만 별칭). */
@@ -1318,7 +1597,7 @@ namespace
 			Pres->Modify();
 			for (const TPair<TPair<EERWeaponType, FGameplayTag>, TArray<UObject*>>& G : Groups)
 			{
-				WriteEntry(Pres->Entries, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats);
+				WriteEntry(*Pres, EERWeaponType::None, G.Key.Value, G.Value, bForce, Stats);
 			}
 			Pres->MarkPackageDirty();
 			if (!D->Presentation || bForce)
@@ -1329,6 +1608,7 @@ namespace
 				++Linked;
 			}
 		}
+		TidyAll(Stats);   // 애니 · 소리 · 음성 칸 정리 · 정렬 (Argument 74)
 		for (const FString& U : Stats.Unmatched)
 		{
 			UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기]   규칙 밖: %s"), *U);
@@ -1365,7 +1645,7 @@ namespace
 				continue;
 			}
 			DA->Modify();
-			if (WriteEntry(DA->Entries, EERWeaponType::None, P.Key.Value, P.Value, bForce, Stats))
+			if (WriteEntry(*DA, EERWeaponType::None, P.Key.Value, P.Value, bForce, Stats))
 			{
 				DA->MarkPackageDirty();
 			}
@@ -1375,6 +1655,7 @@ namespace
 		{
 			UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기]   무기 공통 %s — %s"), *StaticEnum<EERWeaponType>()->GetNameStringByValue(static_cast<int64>(M.Key)), *FString::Join(M.Value, TEXT(" · ")));
 		}
+		TidyAll(Stats);   // 애니 · 소리 · 음성 칸 정리 · 정렬 (Argument 74)
 		for (const FString& U : Stats.Unmatched)
 		{
 			UE_LOG(LogEternalReturn, Log, TEXT("[연출 채우기]   규칙 밖: %s"), *U);
@@ -1391,6 +1672,7 @@ namespace
 			return;
 		}
 		const bool bForce = Args.Num() >= 2 && Args[1].Equals(TEXT("Force"), ESearchCase::IgnoreCase);
+		LoadFillRules();   // 규칙 데이터 (Argument 72 A1) — 매번 다시 읽는다
 		if (Args[0].Equals(TEXT("Wild"), ESearchCase::IgnoreCase))
 		{
 			FillWild(bForce);

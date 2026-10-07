@@ -108,6 +108,28 @@ struct FERPresentationEntry
 };
 
 /**
+ * 음성 키 하나의 재생 규칙 (Argument 73 G-A). ⚠ 손으로 안 채운다 — `ER.Pres.Fill` 이 `Data/Presentation/_Voice.json` 에서.
+ * 각 클라가 틀 때 본다 (복제 안 함). 누가 듣는지는 키를 보내는 길이 정한다 (주변 = 큐 · 본인 = Client RPC).
+ */
+USTRUCT()
+struct FERVoiceRule
+{
+	GENERATED_BODY()
+
+	/** 틀 확률 0~1 */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", ClampMax = "1"))
+	float Chance = 1.f;
+
+	/** 같은 키를 다시 말할 때까지 초 (이 캐릭터 · 이 머신) */
+	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
+	float Cooldown = 0.f;
+
+	/** 하던 말을 끊고 말한다 (스킬 · 사망). 아니면 말하는 중엔 건너뜀 */
+	UPROPERTY(EditDefaultsOnly)
+	bool bInterrupt = false;
+};
+
+/**
  * 연출 표 하나 — 캐릭터 기본 · 무기 세트 · 야생동물 (F12.5-01 · Argument 39 ③ T3).
  *
  * ⭐ 로드 단위를 나눈다 — 전 캐릭터 표 한 장은 판에 없는 캐릭터까지 전부 올린다 (사용자 2026-09-24).
@@ -120,8 +142,17 @@ class ETERNALRETURN_API UERPresentationData : public UPrimaryDataAsset
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditDefaultsOnly, Category = "연출")
+	/** 애니 줄 — 키 `Ability.Slot.*` · `Pres.Anim.*` (Argument 74 — 소리 · 음성은 아래 칸. ⚠ 이름 그대로 — 애셋 참조) */
+	UPROPERTY(EditDefaultsOnly, Category = "연출", meta = (TitleProperty = "Key"))
 	TArray<FERPresentationEntry> Entries;
+
+	/** 효과음 줄 — 키 `Pres.Sfx.*` (Argument 74) */
+	UPROPERTY(EditDefaultsOnly, Category = "소리", meta = (TitleProperty = "Key"))
+	TArray<FERPresentationEntry> Sounds;
+
+	/** 음성 줄 — 키 `Pres.Voice.*` (Argument 73 · 74) */
+	UPROPERTY(EditDefaultsOnly, Category = "음성", meta = (TitleProperty = "Key"))
+	TArray<FERPresentationEntry> Voices;
 
 	/** 무기 계열별 세트 (캐릭터 기본 DA 에서만). 소프트 — 장착하면 그때 로드한다 (Argument 39 개정 2). */
 	UPROPERTY(EditDefaultsOnly, Category = "무기")
@@ -134,6 +165,10 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = "무기")
 	TSubclassOf<UAnimInstance> AnimLayer;
+
+	/** 음성 키 → 재생 규칙 (캐릭터 기본 DA 에서만 · Argument 73). 없는 키 = 확률 1 · 간격 0 · 안 끊음 */
+	UPROPERTY(EditDefaultsOnly, Category = "음성", meta = (Categories = "Pres.Voice"))
+	TMap<FGameplayTag, FERVoiceRule> VoiceRules;
 };
 
 /**
@@ -157,8 +192,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "몸")
 	TSubclassOf<UAnimInstance> AnimClass;
 
-	UPROPERTY(EditDefaultsOnly, Category = "연출")
+	/** 애니 덮어쓰기 (Argument 74 — 소리 · 음성은 아래 칸. ⚠ 이름 그대로) */
+	UPROPERTY(EditDefaultsOnly, Category = "연출", meta = (TitleProperty = "Key"))
 	TArray<FERPresentationEntry> Overrides;
+
+	/** 효과음 덮어쓰기 — 키 `Pres.Sfx.*` */
+	UPROPERTY(EditDefaultsOnly, Category = "소리", meta = (TitleProperty = "Key"))
+	TArray<FERPresentationEntry> OverrideSounds;
+
+	/** 음성 덮어쓰기 — 키 `Pres.Voice.*` */
+	UPROPERTY(EditDefaultsOnly, Category = "음성", meta = (TitleProperty = "Key"))
+	TArray<FERPresentationEntry> OverrideVoices;
 
 	/**
 	 * 모션 소리 바꿈 (Argument 59 N2) — 애니 노티파이 `ER 소리` 가 기본 소리(S000)를 들고 있으면 이 스킨에선 짝을 튼다.

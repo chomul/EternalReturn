@@ -1,0 +1,1110 @@
+{
+	"_설명": "ER.Skill.ExportJson Missing — 지금 DA 그대로 (기본값과 다른 칸만 · 경로는 전체 경로). 원본 JSON 에 합친 뒤 지운다 (Argument 72 A5)",
+	"Skills": [
+		{
+			"Asset": "DA_Skill_P",
+			"Folder": "/Game/GAS/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.P\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(10.000000)",
+				"Costs": "(100.000000)",
+				"Targets": "(Team=All)",
+				"RecoveryTime": "0.300000",
+				"InitialLevel": "1",
+				"MaxLevel": "3"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(30.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(0.850000)",
+						"SlowPercent": "(0.600000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Recast",
+					"Props":
+					{
+					}
+				},
+				{
+					"Class": "ERSkillFragment_NextAttackBuff",
+					"Props":
+					{
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Q",
+			"Folder": "/Game/GAS/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Q\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(10.000000)",
+				"Costs": "(100.000000)",
+				"Targets": "(Team=All)",
+				"RecoveryTime": "0.300000"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(30.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(0.850000)",
+						"SlowPercent": "(0.600000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Recast",
+					"Props":
+					{
+					}
+				},
+				{
+					"Class": "ERSkillFragment_NextAttackBuff",
+					"Props":
+					{
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_R",
+			"Folder": "/Game/GAS/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.R\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(10.000000)",
+				"Costs": "(100.000000)",
+				"Targets": "(Team=All)",
+				"RecoveryTime": "0.300000",
+				"MaxLevel": "3",
+				"MinCharacterLevel": "(6,11,16)"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(30.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(0.850000)",
+						"SlowPercent": "(0.600000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Recast",
+					"Props":
+					{
+					}
+				},
+				{
+					"Class": "ERSkillFragment_NextAttackBuff",
+					"Props":
+					{
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Test_Proportional",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.W\")",
+				"AbilityClass": "/Script/CoreUObject.Class'/Script/EternalReturn.ERBasicAttackAbility'",
+				"Cooldowns": "(0.000000)",
+				"Targets": "(Team=All)",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Single",
+				"Props":
+				{
+					"Range": "3.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"DamageType": "BasicAttack",
+						"BaseDamage": "(0.000000)",
+						"APRatio": "(0.000000)",
+						"MaxHPRatio": "(0.100000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Boss_ArkBlade_Wall",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(12.000000)",
+				"CastTime": "0.500000",
+				"RecoveryTime": "0.500000",
+				"AIUse": "InRange",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": ""
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(100.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Stun.GE_CC_Stun_C'",
+						"Duration": "(1.000000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Boss_ArkBlade",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Q\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(8.000000)",
+				"CastTime": "1.800000",
+				"RecoveryTime": "0.300000",
+				"AIUse": "InRange",
+				"AIUseRange": "4.000000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Cone",
+				"Props":
+				{
+					"Length": "4.000000",
+					"AngleDeg": "180.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(200.000000)",
+						"APRatio": "(1.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Knockback",
+					"Props":
+					{
+						"Distance": "4.000000",
+						"Duration": "0.400000",
+						"WallImpactSkill": "/Script/EternalReturn.ERSkillData'/Game/Wildlife/Skill/DA_Skill_Boss_ArkBlade_Wall.DA_Skill_Boss_ArkBlade_Wall'"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Boss_VFPulse",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.W\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(12.000000)",
+				"CastTime": "1.500000",
+				"RecoveryTime": "0.300000",
+				"AIUse": "InRange",
+				"AIUseRange": "8.000000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "PlayerCircles",
+				"Props":
+				{
+					"Radius": "2.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(150.000000)",
+						"APRatio": "(0.800000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Knockback",
+					"Props":
+					{
+						"Distance": "",
+						"Duration": "0.600000",
+						"Height": "2.000000"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Airborne.GE_CC_Airborne_C'",
+						"Duration": "(0.600000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_AttackPowerDown.GE_AttackPowerDown_C'",
+						"Duration": "(5.000000)",
+						"Magnitude": "(0.700000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Wild_WolfHowl",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Q\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"CastTime": "0.500000",
+				"AIUse": "OnAllyDeath",
+				"AIUseRange": "1.000000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": ""
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_SelfBuff",
+					"Props":
+					{
+						"Effects": "((Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_DamageUp.GE_DamageUp_C'\",Duration=(8.000000),Magnitude=(0.300000)),(Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_AttackSpeedUp.GE_AttackSpeedUp_C'\",Duration=(8.000000),Magnitude=(1.300000)))"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Boss_Hazard",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(1.000000)",
+				"AIUse": "WhileMoving",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": ""
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Area",
+					"Props":
+					{
+						"Duration": "5.000000",
+						"bAggroOnHit": "True"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(50.000000)",
+						"APRatio": "(0.200000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Boss_Control",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.E\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(10.000000)",
+				"CastTime": "0.300000",
+				"RecoveryTime": "0.300000",
+				"AIUse": "InRange",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Single",
+				"Props":
+				{
+					"Range": "14.000000",
+					"MinReach": "2.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_SelfMove",
+					"Props":
+					{
+						"Mode": "ToAimPoint",
+						"Duration": "0.400000",
+						"bPushThroughPawns": "True"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_SelfBuff",
+					"Props":
+					{
+						"Effects": "((Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_AttackSpeedUp.GE_AttackSpeedUp_C'\",Duration=(5.000000),Magnitude=(2.000000)))"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Boss_Triplet",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.W\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(8.000000)",
+				"Targets": "(MaxTargets=1)",
+				"CastTime": "0.400000",
+				"RecoveryTime": "0.500000",
+				"AIUse": "InRange",
+				"AIUseRange": "8.000000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Line",
+				"Props":
+				{
+					"Length": "8.000000",
+					"Width": "0.800000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanCount": "3",
+					"FanAngleDeg": "20.000000"
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(300.000000)",
+						"APRatio": "(1.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(1.500000)",
+						"SlowPercent": "(0.400000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Boss_NerveGas",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Q\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(15.000000)",
+				"CastTime": "1.000000",
+				"RecoveryTime": "0.300000",
+				"AIUse": "InRange",
+				"AIUseRange": "10.000000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": ""
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Area",
+					"Props":
+					{
+						"Duration": "10.000000",
+						"Radius": "16.000000",
+						"CasterEffectsInside": "((Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_AttackSpeedUp.GE_AttackSpeedUp_C'\",Magnitude=(1.200000)),(Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_Wild_MoveSpeedUp.GE_Wild_MoveSpeedUp_C'\",Magnitude=(1.400000)))"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_HealReduction.GE_HealReduction_C'",
+						"Duration": "(1.500000)",
+						"Magnitude": "(-0.400000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Boss_Isolation",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.R\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(20.000000)",
+				"CastTime": "2.000000",
+				"RecoveryTime": "0.500000",
+				"AIUse": "InRange",
+				"AIUseRange": "4.000000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": "4.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"DamageType": "BasicAttack",
+						"BaseDamage": "(300.000000)",
+						"APRatio": "(0.600000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_CastBuff",
+					"Props":
+					{
+						"Effects": "((Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_DamageDown.GE_DamageDown_C'\",Magnitude=(0.700000)),(Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_HealOverTime.GE_HealOverTime_C'\",Magnitude=(400.000000)))"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Knockback",
+					"Props":
+					{
+						"Distance": "5.500000",
+						"Duration": "0.400000",
+						"bAwayFromCaster": "True"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Wild_BearSlam",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Q\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(12.000000)",
+				"CastTime": "0.500000",
+				"RecoveryTime": "0.500000",
+				"AIUse": "InRange",
+				"AIUseRange": "1.500000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": "1.500000",
+					"ForwardOffset": "1.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(150.000000)",
+						"APRatio": "(1.200000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Stun.GE_CC_Stun_C'",
+						"Duration": "(1.000000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Wild_BoarCharge",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Q\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(10.000000)",
+				"CastTime": "1.500000",
+				"RecoveryTime": "0.500000",
+				"AIUse": "InRange",
+				"AIUseRange": "6.000000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Line",
+				"Props":
+				{
+					"Length": "6.000000",
+					"Width": "1.600000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(100.000000)",
+						"APRatio": "(1.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_FailPenalty",
+					"Props":
+					{
+						"Effects": "((Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_Frustrated.GE_Frustrated_C'\",Duration=(3.000000),Magnitude=(0.200000)))"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_SelfMove",
+					"Props":
+					{
+						"Distance": "6.000000",
+						"Duration": "0.400000",
+						"bPushThroughPawns": "True"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Knockback",
+					"Props":
+					{
+						"Distance": "8.000000",
+						"Duration": "0.700000",
+						"Height": "2.500000"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Airborne.GE_CC_Airborne_C'",
+						"Duration": "(0.500000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Wild_DogBite",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Q\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(12.000000)",
+				"AIUse": "InRange",
+				"AIUseRange": "3.000000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+					"Radius": ""
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_SelfBuff",
+					"Props":
+					{
+						"Effects": "((Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_Wild_MoveSpeedUp.GE_Wild_MoveSpeedUp_C'\",Duration=(3.000000),Magnitude=(1.300000)))"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_NextAttackBuff",
+					"Props":
+					{
+						"Duration": "5.000000"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(40.000000)",
+						"APRatio": "(0.500000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Ability/GE_HealReduction.GE_HealReduction_C'",
+						"Duration": "(3.000000)",
+						"Magnitude": "(-0.400000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D_Bat_Wall",
+			"Folder": "/Game/GAS/Skill/WeaponSkill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(25.000000,25.000000,25.000000)",
+				"Costs": "(100.000000)",
+				"CastTime": "0.420000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.Bat\")"
+			},
+			"Area":
+			{
+				"Type": "Cone",
+				"Props":
+				{
+					"Length": "2.000000",
+					"AngleDeg": "180.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(50.000000,100.000000,150.000000)",
+						"BonusAPRatio": "(0.600000,0.600000,0.600000)",
+						"SkillAmpRatio": "(0.300000,0.300000,0.300000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Stun.GE_CC_Stun_C'",
+						"Duration": "(0.800000,0.900000,1.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Recast",
+					"Props":
+					{
+					}
+				},
+				{
+					"Class": "ERSkillFragment_NextAttackBuff",
+					"Props":
+					{
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_Wild_Test",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Q\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(5.000000)",
+				"Targets": "(Team=All)",
+				"CastTime": "1.000000",
+				"RecoveryTime": "0.300000",
+				"AIUse": "InRange",
+				"AIUseRange": "1.000000",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"DamageType": "BasicAttack",
+						"BaseDamage": "(0.000000)",
+						"APRatio": "(1.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_FailPenalty",
+					"Props":
+					{
+						"Effects": "((Effect=\"/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_Frustrated.GE_Frustrated_C'\",Duration=(3.000000),Magnitude=(0.200000)))"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Attack_Wild",
+			"Folder": "/Game/Wildlife/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.Attack\")",
+				"AbilityClass": "/Script/CoreUObject.Class'/Script/EternalReturn.ERBasicAttackAbility'",
+				"Targets": "(Team=All)",
+				"InitialLevel": "1",
+				"MaxLevel": "1",
+				"bUsesSkillPoints": ""
+			},
+			"Area":
+			{
+				"Type": "Single",
+				"Props":
+				{
+					"Range": "3.000000"
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"DamageType": "BasicAttack",
+						"BaseDamage": "(0.000000)",
+						"APRatio": "(1.000000)"
+					}
+				}
+			]
+		},
+		{
+			"Asset": "DA_Skill_D",
+			"Folder": "/Game/GAS/Skill",
+			"Props":
+			{
+				"SlotTag": "(TagName=\"Ability.Slot.D\")",
+				"AbilityClass": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/Skill/GA_Test.GA_Test_C'",
+				"Cooldowns": "(25.000000,20.000000,15.000000)",
+				"bIgnoreCooldownReduction": "True",
+				"Costs": "(100.000000)",
+				"Targets": "(Team=All)",
+				"RecoveryTime": "0.300000",
+				"MaxLevel": "3",
+				"bUsesSkillPoints": "",
+				"CooldownTagOverride": "(TagName=\"Cooldown.Weapon.Hammer\")"
+			},
+			"Area":
+			{
+				"Type": "Circle",
+				"Props":
+				{
+				}
+			},
+			"Delivery":
+			{
+				"Type": "Instant",
+				"Props":
+				{
+					"FanAngleDeg": ""
+				}
+			},
+			"Fragments": [
+				{
+					"Class": "ERSkillFragment_Damage",
+					"Props":
+					{
+						"BaseDamage": "(30.000000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_OnHitEffect",
+					"Props":
+					{
+						"Effect": "/Script/Engine.BlueprintGeneratedClass'/Game/GAS/CC/GE_CC_Slow.GE_CC_Slow_C'",
+						"Duration": "(0.850000)",
+						"SlowPercent": "(0.600000)"
+					}
+				},
+				{
+					"Class": "ERSkillFragment_Recast",
+					"Props":
+					{
+					}
+				},
+				{
+					"Class": "ERSkillFragment_NextAttackBuff",
+					"Props":
+					{
+					}
+				}
+			]
+		}
+	]
+}

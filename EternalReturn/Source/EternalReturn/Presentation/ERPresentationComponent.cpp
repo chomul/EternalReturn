@@ -25,6 +25,7 @@
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
+#include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
 #include "Weapon/ERWeaponLibrary.h"
 #include "Weapon/ERWeaponTypes.h"
@@ -222,6 +223,21 @@ void UERPresentationComponent::AddLayer(const TArray<FERPresentationEntry>& Entr
 	}
 }
 
+void UERPresentationComponent::AddLayers(const UERPresentationData& DA, const TCHAR* Source, bool bFilterWeapon, bool bRequireWeaponMatch, bool bModePass)
+{
+	// 애니 · 소리 · 음성 칸 (Argument 74) — 키 뿌리가 서로 달라 칸 순서는 결과에 상관없다
+	AddLayer(DA.Entries, Source, bFilterWeapon, bRequireWeaponMatch, bModePass);
+	AddLayer(DA.Sounds, Source, bFilterWeapon, bRequireWeaponMatch, bModePass);
+	AddLayer(DA.Voices, Source, bFilterWeapon, bRequireWeaponMatch, bModePass);
+}
+
+void UERPresentationComponent::AddLayers(const UERSkinData& DA, const TCHAR* Source, bool bFilterWeapon, bool bRequireWeaponMatch, bool bModePass)
+{
+	AddLayer(DA.Overrides, Source, bFilterWeapon, bRequireWeaponMatch, bModePass);
+	AddLayer(DA.OverrideSounds, Source, bFilterWeapon, bRequireWeaponMatch, bModePass);
+	AddLayer(DA.OverrideVoices, Source, bFilterWeapon, bRequireWeaponMatch, bModePass);
+}
+
 void UERPresentationComponent::Rebuild()
 {
 	Cache.Reset();
@@ -230,35 +246,35 @@ void UERPresentationComponent::Rebuild()
 	const bool bMode = ActiveMode.IsValid();
 	if (const TObjectPtr<UERPresentationData>* Common = LoadedWeaponCommon.Find(Weapon))
 	{
-		AddLayer((*Common)->Entries, TEXT("무기공통"), false, false, false);   // 캐릭터와 무관한 무기 소리 (Argument 39 ④ · 49)
+		AddLayers(**Common, TEXT("무기공통"), false, false, false);   // 캐릭터와 무관한 무기 소리 (Argument 39 ④ · 49)
 	}
 	if (Base)
 	{
-		AddLayer(Base->Entries, TEXT("기본"), true, false, false);
-		AddLayer(Base->Entries, TEXT("기본·무기"), true, true, false);
+		AddLayers(*Base, TEXT("기본"), true, false, false);
+		AddLayers(*Base, TEXT("기본·무기"), true, true, false);
 	}
 	if (Set)
 	{
-		AddLayer((*Set)->Entries, TEXT("무기세트"), false, false, false);
+		AddLayers(**Set, TEXT("무기세트"), false, false, false);
 	}
 	// 모드 줄 (Argument 42 ⑤) — 캐릭터 모드(전기톱)는 기본 DA 에, 무기 모드(저격)는 무기 세트에 적는다
 	if (bMode && Base)
 	{
-		AddLayer(Base->Entries, TEXT("기본·모드"), true, false, true);
-		AddLayer(Base->Entries, TEXT("기본·모드·무기"), true, true, true);
+		AddLayers(*Base, TEXT("기본·모드"), true, false, true);
+		AddLayers(*Base, TEXT("기본·모드·무기"), true, true, true);
 	}
 	if (bMode && Set)
 	{
-		AddLayer((*Set)->Entries, TEXT("무기세트·모드"), false, false, true);
+		AddLayers(**Set, TEXT("무기세트·모드"), false, false, true);
 	}
 	if (Skin)
 	{
-		AddLayer(Skin->Overrides, TEXT("스킨"), true, false, false);
-		AddLayer(Skin->Overrides, TEXT("스킨·무기"), true, true, false);
+		AddLayers(*Skin, TEXT("스킨"), true, false, false);
+		AddLayers(*Skin, TEXT("스킨·무기"), true, true, false);
 		if (bMode)
 		{
-			AddLayer(Skin->Overrides, TEXT("스킨·모드"), true, false, true);
-			AddLayer(Skin->Overrides, TEXT("스킨·모드·무기"), true, true, true);
+			AddLayers(*Skin, TEXT("스킨·모드"), true, false, true);
+			AddLayers(*Skin, TEXT("스킨·모드·무기"), true, true, true);
 		}
 	}
 	UE_LOG(LogEternalReturn, Verbose, TEXT("[연출] %s 해석 %d키 (무기 %s · 스킨 %s)"), *GetNameSafe(GetOwner()), Cache.Num(),
@@ -363,6 +379,73 @@ void UERPresentationComponent::SendAnimCue(AActor* Instigator, FGameplayTag Anim
 	ASC->ExecuteGameplayCue(ERTags::GameplayCue_Pres_Anim, P);
 }
 
+void UERPresentationComponent::SendVoiceCue(AActor* Instigator, FGameplayTag VoiceKey)
+{
+	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Instigator);
+	if (!ASC || !VoiceKey.IsValid() || !Instigator->HasAuthority())
+	{
+		return;
+	}
+	FGameplayCueParameters P;
+	P.Instigator = Instigator;
+	P.AggregatedSourceTags.AddTag(VoiceKey);
+	ASC->ExecuteGameplayCue(ERTags::GameplayCue_Pres_Voice, P);
+}
+
+void UERPresentationComponent::PlayVoice(FGameplayTag VoiceKey, bool bSelf)
+{
+	if (GetNetMode() == NM_DedicatedServer || !VoiceKey.IsValid() || !GetWorld())
+	{
+		return;
+	}
+	const FERVoiceRule* Found = Base ? Base->VoiceRules.Find(VoiceKey) : nullptr;
+	const FERVoiceRule Rule = Found ? *Found : FERVoiceRule();
+	const double Now = GetWorld()->GetTimeSeconds();
+	const double* Last = VoiceLastTime.Find(VoiceKey);
+	const bool bSpeaking = VoiceAudio.IsValid() && VoiceAudio->IsPlaying();
+	const TCHAR* Skip = Last && Now - *Last < Rule.Cooldown ? TEXT("간격")
+		: bSpeaking && !Rule.bInterrupt ? TEXT("말하는 중")
+		: FMath::FRand() >= Rule.Chance ? TEXT("확률")
+		: nullptr;
+	USoundBase* Sound = Skip ? nullptr : PickSound(VoiceKey);
+	if (!Skip && !Sound)
+	{
+		Skip = TEXT("줄 없음");
+	}
+	if (Skip)
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[음성] %s %s 건너뜀 — %s (%s)"), *GetNameSafe(GetOwner()), *VoiceKey.ToString(), Skip, NetTag(GetOwner()));
+		return;
+	}
+	VoiceLastTime.Add(VoiceKey, Now);
+	if (bSpeaking)
+	{
+		VoiceAudio->Stop();
+	}
+	if (bSelf)
+	{
+		VoiceAudio = UGameplayStatics::SpawnSound2D(this, Sound);
+	}
+	else
+	{
+		if (!VoiceAttenuation)
+		{
+			VoiceAttenuation = NewObject<USoundAttenuation>(this);
+			FSoundAttenuationSettings& A = VoiceAttenuation->Attenuation;
+			A.bAttenuate = true;
+			A.bSpatialize = true;
+			A.AttenuationShape = EAttenuationShape::Sphere;
+			A.AttenuationShapeExtents = FVector(VoiceInnerRadius, 0.f, 0.f);
+			A.FalloffDistance = VoiceFalloff;
+			A.DistanceAlgorithm = EAttenuationDistanceModel::Linear;
+		}
+		VoiceAudio = UGameplayStatics::SpawnSoundAttached(Sound, GetOwner()->GetRootComponent(), NAME_None, FVector::ZeroVector,
+			EAttachLocation::KeepRelativeOffset, /*bStopWhenAttachedToDestroyed=*/false, 1.f, 1.f, 0.f, VoiceAttenuation);
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[음성] %s %s — %s (%s%s · %s)"), *GetNameSafe(GetOwner()), *VoiceKey.ToString(), *Sound->GetName(),
+		bSelf ? TEXT("본인만") : TEXT("주변"), bSpeaking ? TEXT(" · 하던 말 끊음") : TEXT(""), NetTag(GetOwner()));
+}
+
 void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGameplayCueParameters& Params)
 {
 	// 동작표 키 하나 (레니 R 같이 날아감) — 이 머신에서 그 애니
@@ -375,6 +458,19 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 				const FString Played = PlayEventPres(T, FGameplayTag());
 				UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 애니 큐 %s — %s (%s)"), *GetNameSafe(GetOwner()), *T.ToString(), *Played, NetTag(GetOwner()));
 				break;
+			}
+		}
+		return;
+	}
+
+	// 음성 (Argument 73) — 시전자 자신의 컴포넌트만 (같은 큐를 다른 액터가 받아도 두 번 말하지 않게)
+	if (CueTag == ERTags::GameplayCue_Pres_Voice)
+	{
+		if (Params.Instigator.Get() == GetOwner())
+		{
+			for (const FGameplayTag& T : Params.AggregatedSourceTags)
+			{
+				if (T.MatchesTag(ERTags::Pres_Voice)) { PlayVoice(T, /*bSelf=*/false); break; }
 			}
 		}
 		return;

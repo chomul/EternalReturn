@@ -69,14 +69,7 @@ void AERProjectile_Wilson::Land()
 	if (Throw->LandSkill)
 	{
 		// 길에서 맞은 적도 착지 범위에선 또 맞는다 (두 피해가 따로 · 툴팁) — 거르는 건 시전자만
-		FTargetQuery Q = Filter;
-		Q.Shape = ESkillTargeting::GroundCircle;
-		Q.Origin = FVector(Here.X, Here.Y, Sissela->GetActorLocation().Z);
-		Q.RadiusOuter = Throw->LandRadius;
-		Q.IgnoredActors.Reset();
-		Q.IgnoredActors.Add(Sissela);
-		TArray<AActor*> Targets;
-		for (AActor* T : ERTargeting::Query(GetWorld(), Q).HitActors) { if (T) { Targets.Add(T); } }
+		const TArray<AActor*> Targets = ERTargeting::QueryCircleAt(GetWorld(), Filter, Here, Throw->LandRadius, Sissela);
 		UE_LOG(LogEternalReturn, Log, TEXT("[윌슨] Q 착지 — 반경 %.1fm 안 %d명 (%s)"), Throw->LandRadius, Targets.Num(), *GetNameSafe(Throw->LandSkill));
 		if (!Targets.IsEmpty())
 		{
@@ -184,12 +177,6 @@ void AERProjectile_WilsonTether::HitSissela()
 	UERPresentationComponent::SendSfxCue(Sissela, ERTags::Pres_Sfx_SkillPull_E, Sissela->GetActorLocation());     // Skill03_Take
 	UERPresentationComponent::SendSfxCue(Sissela, ERTags::Pres_Sfx_SkillShield_E, Sissela->GetActorLocation());   // Skill03_Shield
 	const FGameplayTagContainer& Cooldown = A->GetCooldownTagsForFragment();
-	if (Tether->SelfHitCooldownCut > 0.f && !Cooldown.IsEmpty())
-	{
-		for (const FActiveGameplayEffectHandle& H : ASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(Cooldown)))
-		{
-			ASC->ModifyActiveEffectStartTime(H, -Tether->SelfHitCooldownCut);
-		}
-	}
+	ERSkill::ShiftCooldown(ASC, Cooldown, Tether->SelfHitCooldownCut);
 	EndFlight(TEXT("시셀라"));
 }

@@ -8,8 +8,8 @@
 
 /**
  * 패시브 전용 · 두 이벤트를 듣는다.
- * ① `Event.Ally.SkillHit` (레니 스킬이 아군 실험체에 맞음) → 그 아군에게 곰돌이 GE (`State.Leni.Bear` · Duration · 출처 = 레니) — 이미 있으면 새로
- * ② `Event.Leni.BearTriggered` (곰돌이 아군이 적을 때림 · 어트리뷰트셋) → 곰돌이를 지우고 (한 번 쓰면 사라짐 · 사용자 2026-10-07)
+ * ① `Event.Ally.SkillHit` (레니 스킬이 아군 실험체에 맞음) → 그 아군에게 곰돌이 GE (`State.Mark.LeniBear` · Duration · 출처 = 레니) — 이미 있으면 새로
+ * ② `Event.Mark.Triggered` (표식 = 곰돌이) (곰돌이 아군이 적을 때림 · 어트리뷰트셋) → 곰돌이를 지우고 (한 번 쓰면 사라짐 · 사용자 2026-10-07)
  *    맞은 적에게 **이 패시브 DA 의 피해 조각** (레니가 준 피해) · 레니 Q · W · E 쿨 −CooldownCut
  * 곰돌이는 레니 자신에게는 안 붙는다 (사용자 2026-10-07)
  */

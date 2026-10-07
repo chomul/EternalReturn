@@ -49,13 +49,10 @@ void ReduceCooldown(FERSkillContext& Ctx, const FGameplayTagContainer& CooldownT
 		return;
 	}
 	// 시작 시각을 앞당기면 남은 시간이 준다 (복제 · 클라 쿨다운 표시도 엔진이)
-	for (const FActiveGameplayEffectHandle& H : Ctx.ASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(CooldownTags)))
+	if (ERSkill::ShiftCooldown(Ctx.ASC, CooldownTags, Sec) > 0)
 	{
-		Ctx.ASC->ModifyActiveEffectStartTime(H, -Sec);
-		const FActiveGameplayEffect* E = Ctx.ASC->GetActiveGameplayEffect(H);
-		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 적중 — %s 쿨다운 −%.1f초 (남은 %.1f초)"),
-			*GetNameSafe(Ctx.Avatar), *GetNameSafe(Ctx.Skill), *CooldownTags.ToStringSimple(), Sec,
-			E ? E->GetTimeRemaining(Ctx.ASC->GetWorld()->GetTimeSeconds()) : -1.f);
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 적중 — %s 쿨다운 −%.1f초"),
+			*GetNameSafe(Ctx.Avatar), *GetNameSafe(Ctx.Skill), *CooldownTags.ToStringSimple(), Sec);
 	}
 }
 }   // namespace

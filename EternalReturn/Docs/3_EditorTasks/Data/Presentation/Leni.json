@@ -1,0 +1,126 @@
+{
+  "_설명": "ER.Pres.Fill 규칙 (Argument 72 A1 — C++ 에서 옮김 2026-10-07). AnimRules = 파일명 토큰(무기 · 모드 · common · *) + 동작 → (모드 · 키) · Keys 비면 그 애니는 안 씀. SoundRules = 소리 이름(소문자 정확히) → (키 · 모드 · 무기) · Key 비면 안 씀. 태그는 문자열 · 고치면 에디터에서 ER.Pres.Fill <캐릭터> Force (빌드 불필요) · 캐릭터 Leni 전용",
+  "AnimRules": [
+    {
+      "Token": "pistol",
+      "Act": "normalweaponskill",
+      "Keys": [
+        "Ability.Slot.D"
+      ]
+    },
+    {
+      "Token": "pistol",
+      "Act": "normalrun",
+      "Mode": "Mode.MovingReload",
+      "Keys": [
+        "Pres.Anim.ModeIdle",
+        "Pres.Anim.ModeRun"
+      ]
+    },
+    {
+      "Token": "pistol",
+      "Act": "reload",
+      "Mode": "Mode.MovingReload",
+      "Keys": [
+        "Pres.Anim.ModeEnd"
+      ]
+    },
+    {
+      "Token": "pistol",
+      "Act": "skill04_jump",
+      "Keys": [
+        "Ability.Slot.R.Execute"
+      ]
+    },
+    {
+      "Token": "pistol",
+      "Act": "skill04_back",
+      "Keys": []
+    }
+  ],
+  "SoundRules": [
+    {
+      "Name": "leni_pistol_normalattack",
+      "Key": "Pres.Sfx.Attack",
+      "_메모": "권총 공용 대신"
+    },
+    {
+      "Name": "leni_pistol_normalattack_hit",
+      "Key": "Pres.Sfx.Hit"
+    },
+    {
+      "Name": "leni_pistol_passive_bearappear",
+      "Key": "Pres.Sfx.BearAppear"
+    },
+    {
+      "Name": "leni_pistol_passive_bearshot",
+      "Key": "Pres.Sfx.BearShot"
+    },
+    {
+      "Name": "leni_pistol_passive_hit",
+      "Key": "Pres.Sfx.SkillHit.P",
+      "_메모": "곰돌이 적중"
+    },
+    {
+      "Name": "leni_pistol_reload",
+      "Key": "Pres.Sfx.ModeEnd",
+      "Mode": "Mode.MovingReload",
+      "_메모": "D 끝 — 재장전"
+    },
+    {
+      "Name": "leni_pistol_skill01_shot",
+      "Key": "Pres.Sfx.SkillCast.Q"
+    },
+    {
+      "Name": "leni_pistol_skill01_boom",
+      "Key": "Pres.Sfx.SkillLand.Q",
+      "_메모": "폭발 (맞힌 사람 없어도)"
+    },
+    {
+      "Name": "leni_pistol_skill01_hit",
+      "Key": "Pres.Sfx.SkillHit.Q",
+      "_메모": "적만"
+    },
+    {
+      "Name": "leni_pistol_skill01_recovery",
+      "Key": "Pres.Sfx.SkillAlly.Q",
+      "_메모": "아군 회복"
+    },
+    {
+      "Name": "leni_pistol_skill02_jump",
+      "Key": "Pres.Sfx.SkillCast.W"
+    },
+    {
+      "Name": "leni_pistol_skill02_hit",
+      "Key": "Pres.Sfx.SkillHit.W",
+      "_메모": "적만"
+    },
+    {
+      "Name": "leni_pistol_skill03_shot",
+      "Key": "Pres.Sfx.SkillCast.E"
+    },
+    {
+      "Name": "leni_pistol_skill03_hit",
+      "Key": "Pres.Sfx.SkillHit.E",
+      "_메모": "적 · 아군 둘 다"
+    },
+    {
+      "Name": "leni_pistol_skill04_whistle",
+      "Key": "Pres.Sfx.SkillCast.R",
+      "_메모": "떼는 순간 (설치)"
+    },
+    {
+      "Name": "leni_pistol_skill04_spring",
+      "Key": "Pres.Sfx.SkillLand.R",
+      "_메모": "터질 때"
+    },
+    {
+      "Name": "leni_pistol_skill04_hit",
+      "Key": "Pres.Sfx.SkillHit.R"
+    },
+    {
+      "Name": "leni_pistol_skill04_wallhit",
+      "Key": "Pres.Sfx.SkillWall.R"
+    }
+  ]
+}

@@ -380,6 +380,7 @@ void AERWildlifeCharacter::GrantKillRewards(AActor* Killer)
 		? Data->HuntExpBase + Data->HuntExpPerLevel * Level
 		: S.HuntExpPerKillBase + S.HuntExpPerKillPerLevel * Level;
 	Growth->OnWildlifeKilled(Level, HuntExp);   // 경험치는 숙련도 입구 하나로 흐른다 (F10-05)
+	PS->ClientPlayVoice(ERTags::Pres_Voice_KillMonster);   // 야생동물 처치 혼잣말 (Argument 73 · 본인)
 }
 
 void AERWildlifeCharacter::SetHome(AERWildlifeSpawnPoint* Point, const FVector& Location)

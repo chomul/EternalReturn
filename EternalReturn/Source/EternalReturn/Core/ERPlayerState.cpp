@@ -21,6 +21,8 @@
 #include "Combat/ERCombatSettings.h"
 #include "GAS/ERSkillPhaseEffect.h"
 #include "Net/UnrealNetwork.h"
+#include "Item/ERItemDropActor.h"
+#include "Presentation/ERPresentationComponent.h"
 
 AERPlayerState::AERPlayerState()
 {
@@ -82,6 +84,17 @@ void AERPlayerState::BeginPlay()
 			Inventory->OnItemCrafted.AddWeakLambda(this, [this](FName ResultId, bool bFirstTime)
 			{
 				Growth->OnItemCrafted(ResultId, bFirstTime);
+				// 제작 음성 (Argument 73 · 본인) — 결과 등급. 일반은 대사 없음 · 영웅 = craftEpic · 초월 = craftMystic
+				if (const FERItemRow* Row = ERItem::Find(ResultId))
+				{
+					const FGameplayTag ByGrade[] = { FGameplayTag(), ERTags::Pres_Voice_Craft_Uncommon, ERTags::Pres_Voice_Craft_Rare,
+						ERTags::Pres_Voice_Craft_Epic, ERTags::Pres_Voice_Craft_Legend, ERTags::Pres_Voice_Craft_Mystic };
+					const int32 G = static_cast<int32>(Row->Grade);
+					if (G >= 0 && G < static_cast<int32>(UE_ARRAY_COUNT(ByGrade)) && ByGrade[G].IsValid())
+					{
+						ClientPlayVoice(ByGrade[G]);
+					}
+				}
 			});
 			// ⭐ 숙련도 레벨업 → D 해금 · 강화 (F11-03). 무기 트랙 · 장착 계열의 이벤트만 — 다른 계열은 교체할 때 맞춘다.
 			//   나머지 5 트랙(방어 · 사냥 · 제작 · 탐색 · 이동)의 레벨 효과는 (미확인) — F10-05 는 적립 · 레벨업까지.
@@ -93,9 +106,9 @@ void AERPlayerState::BeginPlay()
 				}
 				const FName WeaponId = Inventory->GetEquippedItem(EEREquipSlot::Weapon);
 				const FERItemRow* Item = WeaponId.IsNone() ? nullptr : ERItem::Find(WeaponId);
-				if (Item && Item->WeaponType == Key.WeaponType)
+				if (Item && Item->WeaponType == Key.WeaponType && SyncWeaponSkillLevel())
 				{
-					SyncWeaponSkillLevel();
+					ClientPlayVoice(ERTags::Pres_Voice_LearnWeaponSkill);   // D 처음 해금 (Argument 73 · 본인 · 무기 세트 줄)
 				}
 			});
 			// 상자 열기 → 탐색 숙련도 (F10-05)
@@ -122,10 +135,15 @@ void AERPlayerState::BeginPlay()
 		{
 			AttributeSet->OnOutOfHealth.AddWeakLambda(this, [this](AActor* Killer)
 			{
-				const APawn* MyPawn = GetPawn();
+				APawn* MyPawn = GetPawn();
+				// 사망 음성 (Argument 73 · 주변) — 실험체는 사망 포즈(SetDead)가 아직 없다 (F14) → 서버 사망 사건에서 큐 (2026-10-07 PIE: 로그 0줄로 확인)
+				UERPresentationComponent::SendVoiceCue(MyPawn, ERTags::Pres_Voice_Death);
 				if (Inventory && MyPawn)
 				{
-					Inventory->SpawnDeathDrop(MyPawn->GetActorLocation());
+					if (AERItemDropActor* Corpse = Inventory->SpawnDeathDrop(MyPawn->GetActorLocation()))
+					{
+						Corpse->SetKiller(Cast<APlayerState>(Killer));   // 시체 수색 음성 — 내가 처치한 시체인가 (Argument 73)
+					}
 				}
 
 				// ⭐ 처치 → 처치자의 무기 숙련도 (적 레벨 함수) — 실험체 경험치는 숙련도가 올린다 (F10-05 · Argument 26 B).
@@ -146,6 +164,17 @@ void AERPlayerState::BeginPlay()
 						Kill.Instigator = KillerPS->GetPawn();
 						Kill.Target = GetPawn();
 						KillerASC->HandleGameplayEvent(ERTags::Event_Kill_Dealt, &Kill);
+					}
+					// 누적 처치 음성 (Argument 73 · 본인) — kill1Player ~ kill14Player. 15명부터는 대사 없음
+					const FGameplayTag KillVoice[] = {
+						ERTags::Pres_Voice_Kill_1, ERTags::Pres_Voice_Kill_2, ERTags::Pres_Voice_Kill_3, ERTags::Pres_Voice_Kill_4, ERTags::Pres_Voice_Kill_5,
+						ERTags::Pres_Voice_Kill_6, ERTags::Pres_Voice_Kill_7, ERTags::Pres_Voice_Kill_8, ERTags::Pres_Voice_Kill_9, ERTags::Pres_Voice_Kill_10,
+						ERTags::Pres_Voice_Kill_11, ERTags::Pres_Voice_Kill_12, ERTags::Pres_Voice_Kill_13, ERTags::Pres_Voice_Kill_14,
+					};
+					++KillerPS->PlayerKills;
+					if (KillerPS->PlayerKills <= static_cast<int32>(UE_ARRAY_COUNT(KillVoice)))
+					{
+						KillerPS->ClientPlayVoice(KillVoice[KillerPS->PlayerKills - 1]);
 					}
 				}
 			});
@@ -386,18 +415,18 @@ void AERPlayerState::SetModeAttack(UERSkillData* Data, int32 Level)
 		Data ? *FString::Printf(TEXT(" Lv.%d"), ModeLevel) : TEXT(""));
 }
 
-void AERPlayerState::SyncWeaponSkillLevel()
+bool AERPlayerState::SyncWeaponSkillLevel()
 {
 	if (!HasAuthority() || !AbilitySystemComponent || !Inventory || !Growth)
 	{
-		return;
+		return false;
 	}
 	const FName WeaponId = Inventory->GetEquippedItem(EEREquipSlot::Weapon);
 	const FERItemRow* Item = WeaponId.IsNone() ? nullptr : ERItem::Find(WeaponId);
 	const FERWeaponClassRow* Row = Item ? ERWeapon::Find(Item->WeaponType) : nullptr;
 	if (!Row || !Row->DSkill)
 	{
-		return;
+		return false;
 	}
 
 	const int32 Proficiency = Growth->GetWeaponProficiencyLevel(Item->WeaponType);
@@ -410,8 +439,18 @@ void AERPlayerState::SyncWeaponSkillLevel()
 			if (Proficiency >= Upgrade) { ++DLevel; }
 		}
 	}
-	ERSkill::SetSkillLevel(AbilitySystemComponent, ERTags::Ability_Slot_D, DLevel,
+	const bool bChanged = ERSkill::SetSkillLevel(AbilitySystemComponent, ERTags::Ability_Slot_D, DLevel,
 		*FString::Printf(TEXT("%s 숙련도 %d · 해금 %d · 강화 %d개"), *UEnum::GetValueAsString(Item->WeaponType), Proficiency, Row->UnlockLevel, Row->UpgradeLevels.Num()));
+	return bChanged && DLevel == 1;
+}
+
+void AERPlayerState::ClientPlayVoice_Implementation(FGameplayTag VoiceKey)
+{
+	const APawn* MyPawn = GetPawn();
+	if (UERPresentationComponent* Pres = MyPawn ? MyPawn->FindComponentByClass<UERPresentationComponent>() : nullptr)
+	{
+		Pres->PlayVoice(VoiceKey, /*bSelf=*/true);
+	}
 }
 
 void AERPlayerState::EnterCombat()

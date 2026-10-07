@@ -1,0 +1,38 @@
+{
+  "_설명": "ER.Pres.Fill 규칙 (Argument 72 A1 — C++ 에서 옮김 2026-10-07). AnimRules = 파일명 토큰(무기 · 모드 · common · *) + 동작 → (모드 · 키) · Keys 비면 그 애니는 안 씀. SoundRules = 소리 이름(소문자 정확히) → (키 · 모드 · 무기) · Key 비면 안 씀. 태그는 문자열 · 고치면 에디터에서 ER.Pres.Fill <캐릭터> Force (빌드 불필요)",
+  "AnimRules": [
+    {
+      "Token": "sniperrifle",
+      "Act": "skill_start",
+      "Mode": "Mode.Sniper",
+      "Keys": [
+        "Pres.Anim.ModeStart"
+      ]
+    },
+    {
+      "Token": "sniperrifle",
+      "Act": "skill_loop",
+      "Mode": "Mode.Sniper",
+      "Keys": [
+        "Pres.Anim.ModeIdle",
+        "Pres.Anim.ModeRun"
+      ]
+    },
+    {
+      "Token": "sniperrifle",
+      "Act": "skill_shot",
+      "Mode": "Mode.Sniper",
+      "Keys": [
+        "Ability.Slot.Attack"
+      ]
+    },
+    {
+      "Token": "sniperrifle",
+      "Act": "skill_end",
+      "Mode": "Mode.Sniper",
+      "Keys": [
+        "Pres.Anim.ModeEnd"
+      ]
+    }
+  ]
+}

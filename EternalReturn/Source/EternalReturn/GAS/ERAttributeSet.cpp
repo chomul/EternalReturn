@@ -171,23 +171,24 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 		Data.EffectSpec.GetAllAssetTags(Hit.InstigatorTags);   // Damage.Type.BasicAttack / Skill / True
 		SourceASC->HandleGameplayEvent(ERTags::Event_Hit_Dealt, &Hit);
 
-		// 곰돌이 (레니 P · Argument 70 B1) — 가해자에게 곰돌이가 있으면 **곰돌이 주인**(레니)에게도 알린다. 주인이 소모 · 추가 피해 · 쿨 감소
-		if (SourceASC->HasMatchingGameplayTag(ERTags::State_Leni_Bear))
+		// 표식 (레니 곰돌이 · 다니엘 W 자리 · Argument 70 B1 → 72 A2) — 가해자에게 `State.Mark.*` GE 가 있으면 그 **GE 주인**에게 알린다. 주인이 소모 · 효과
+		if (SourceASC->HasMatchingGameplayTag(ERTags::State_Mark))
 		{
-			FGameplayTagContainer Bear; Bear.AddTag(ERTags::State_Leni_Bear);
-			for (const FActiveGameplayEffectHandle& H : SourceASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(Bear)))
+			FGameplayTagContainer MarkRoot; MarkRoot.AddTag(ERTags::State_Mark);
+			for (const FActiveGameplayEffectHandle& H : SourceASC->GetActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(MarkRoot)))
 			{
 				const FActiveGameplayEffect* AE = SourceASC->GetActiveGameplayEffect(H);
 				UAbilitySystemComponent* Owner = AE ? AE->Spec.GetContext().GetInstigatorAbilitySystemComponent() : nullptr;
-				if (Owner && Owner != SourceASC)
+				if (!Owner || Owner == SourceASC)
 				{
-					FGameplayEventData B;
-					B.EventTag = ERTags::Event_Leni_BearTriggered;
-					B.Instigator = SourceASC->GetAvatarActor();
-					B.Target = Data.Target.AbilityActorInfo->AvatarActor.Get();
-					Owner->HandleGameplayEvent(ERTags::Event_Leni_BearTriggered, &B);
+					continue;
 				}
-				break;
+				FGameplayEventData M;
+				M.EventTag = ERTags::Event_Mark_Triggered;
+				M.Instigator = SourceASC->GetAvatarActor();
+				M.Target = Data.Target.AbilityActorInfo->AvatarActor.Get();
+				M.InstigatorTags = AE->Spec.DynamicGrantedTags;   // 어느 표식인지 (State.Mark.LeniBear …)
+				Owner->HandleGameplayEvent(ERTags::Event_Mark_Triggered, &M);
 			}
 		}
 	}

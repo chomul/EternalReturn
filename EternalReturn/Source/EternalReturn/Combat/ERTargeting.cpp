@@ -584,3 +584,19 @@ FTargetResult ERTargeting::QueryDualRadius(const UWorld* World, const FTargetQue
 	Result.HitActors      = MoveTemp(Outer);
 	return Result;
 }
+
+TArray<AActor*> ERTargeting::QueryCircleAt(const UWorld* World, const FTargetQuery& Filter, const FVector& Center, float RadiusM, AActor* Caster)
+{
+	FTargetQuery Q = Filter;
+	Q.Shape = ESkillTargeting::GroundCircle;
+	Q.Origin = FVector(Center.X, Center.Y, Caster ? Caster->GetActorLocation().Z : Center.Z);
+	Q.RadiusOuter = RadiusM;
+	Q.IgnoredActors.Reset();
+	if (Caster)
+	{
+		Q.IgnoredActors.Add(Caster);
+	}
+	TArray<AActor*> Out;
+	for (AActor* T : Query(World, Q).HitActors) { if (T) { Out.Add(T); } }
+	return Out;
+}

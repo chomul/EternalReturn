@@ -138,6 +138,18 @@ protected:
 	TObjectPtr<UERAttributeSet> AttributeSet;
 
 public:
+	/**
+	 * [서버 → 이 플레이어 화면만] 음성 키 하나 (Argument 73 V-B 본인) — 처치 · 제작 · 채집 · 상자 · 시체 · D 습득 혼잣말.
+	 * Unreliable — 놓쳐도 대사 하나. 받는 클라가 자기 폰의 연출 컴포넌트로 2D 재생.
+	 */
+	UFUNCTION(Client, Unreliable)
+	void ClientPlayVoice(FGameplayTag VoiceKey);
+
+protected:
+	/** [서버] 이번 판 실험체 처치 수 (막타) — 누적 처치 음성 kill<N>Player. 복제 안 함 (UI 는 F14) */
+	int32 PlayerKills = 0;
+
+public:
 	/** 인벤토리 (F08). ⭐ ASC 와 같은 액터에 — 장비 GE 와 핸들의 수명이 같다 (Docs/4_Argument/21). */
 	UERInventoryComponent* GetInventory() const { return Inventory; }
 
@@ -177,7 +189,8 @@ protected:
 	 * [서버] 장착 계열의 숙련도 레벨로 D 스펙 레벨을 맞춘다 (F11-03): 숙련도 < UnlockLevel → 0 · 아니면 1 + (UpgradeLevels 중 도달한 수).
 	 * 5/10/15 는 계열 행 값. 부여 직후(RefreshWeaponSkills) 와 Growth->OnWeaponProficiencyLevelUp 이벤트에서 — 매 프레임 비교 없음.
 	 */
-	void SyncWeaponSkillLevel();
+	/** @return D 가 이번에 처음 해금됐다 (0 → 1 · 습득 음성) */
+	bool SyncWeaponSkillLevel();
 
 public:
 	/**

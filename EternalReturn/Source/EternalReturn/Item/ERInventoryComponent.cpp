@@ -16,6 +16,9 @@
 #include "Item/ERItemData.h"
 #include "Item/ERItemDropActor.h"
 #include "Item/ERItemSettings.h"
+#include "Item/ERLootLibrary.h"
+#include "Item/ERLootTypes.h"
+#include "Core/ERPlayerState.h"
 #include "Net/UnrealNetwork.h"
 
 namespace
@@ -292,6 +295,13 @@ void UERInventoryComponent::ServerPickup_Implementation(AERItemDropActor* Drop, 
 		if (Seconds > 0.f)
 		{
 			UE_LOG(LogEternalReturn, Log, TEXT("[습득] %s — #%d 채집 시작 (%.1f초)"), *GetNameSafe(GetOwner()), Drop->GetDropId(), Seconds);
+			// 채집 음성 (Argument 73 · 본인) — 루트 행의 Voice 칸 (DT_Loot)
+			const FERLootRow* LootRow = ERLoot::Find(Drop->GetLootRow());
+			AERPlayerState* Me = Cast<AERPlayerState>(GetOwner());
+			if (Me && LootRow && LootRow->Voice.IsValid())
+			{
+				Me->ClientPlayVoice(LootRow->Voice);
+			}
 			TWeakObjectPtr<AERItemDropActor> WeakDrop = Drop;
 			GetWorld()->GetTimerManager().SetTimer(GatherTimer, FTimerDelegate::CreateWeakLambda(this, [this, WeakDrop, Index]()
 			{
@@ -304,6 +314,18 @@ void UERInventoryComponent::ServerPickup_Implementation(AERItemDropActor* Drop, 
 		}
 		FinishGather(Drop, Index);
 		return;
+	}
+
+	// 상자 · 실험체 시체에서 꺼낼 때 혼잣말 (Argument 73 · 본인) — 칸마다 오지만 음성 간격(_Voice.json Cooldown)이 막는다. 야생동물 시체는 대사 없음
+	if (AERPlayerState* Me = Cast<AERPlayerState>(GetOwner()))
+	{
+		const FGameplayTag Voice = Drop->IsPlayerCorpse()
+			? (Drop->GetKiller() == Me ? ERTags::Pres_Voice_LootCorpse_Self : ERTags::Pres_Voice_LootCorpse_Other)
+			: Drop->bCorpse ? FGameplayTag() : ERTags::Pres_Voice_Box;
+		if (Voice.IsValid())
+		{
+			Me->ClientPlayVoice(Voice);
+		}
 	}
 
 	// 상자를 처음 여는 사람 → 탐색 숙련도 (F10-05). 시체(LootRow 없음) · 채집물(무한)은 아니다.

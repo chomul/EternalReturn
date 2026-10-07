@@ -99,8 +99,8 @@ namespace ERTags
 
 	// ── 무기 (F11-02) ──────────────────────────────────────────
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Unarmed);           // 무기 없음 — 평타 · 스킬 전부 차단 (원작 확인: 무기 없으면 아무 스킬도 못 쓴다). UERUnarmedEffect 가 준다
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_InCombat);
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ConsumeOnAttack);   // 이 태그가 있는 자기 버프 GE 는 기본 공격 적중마다 Charges 가 1 줄고 0 이면 사라진다 (F11-05 B)          // 전투 중 — 피해를 주거나 받은 뒤 CombatStateSeconds. 무기 교체 불가 (원작 확인). 비전투 재생 · 귀환도 이걸 본다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_InCombat);          // 전투 중 — 피해를 주거나 받은 뒤 CombatStateSeconds. 무기 교체 불가 (원작 확인). 비전투 재생 · 귀환도 이걸 본다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_ConsumeOnAttack);   // 이 태그가 있는 자기 버프 GE 는 기본 공격 적중마다 Charges 가 1 줄고 0 이면 사라진다 (F11-05 B)
 
 	// 다음 기본 공격 강화 대기 (F07-07). UERNextAttackBuffEffect 가 부여, 평타가 적중 시 소비.
 	//   카티야 P · 재키 W · 시셀라 Q · 권총 D 가 같은 GE 를 쓴다 (역기획서 §8 "4곳이 같은 구조").
@@ -112,7 +112,8 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_LostHPStats);   // 잃은 체력 비례 스탯 GE (상시 1개 — 레벨이 바뀌면 이걸로 찾아 지우고 다시)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Bubble);   // 시셀라 W 감싸는 중 (피해 면역 · 이속 GE 에 같이) — 터질 때 이걸로 지운다
 	// ── 레니 (F19-05 · Argument 70) ─────────────────────────
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Leni_Bear);   // 곰돌이 — 아군에게 5초 · GE 출처 = 레니 ASC (어트리뷰트셋이 주인을 찾는다)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Mark);              // 표식 (부모) — 이 아래 태그 GE 를 가진 가해자가 때리면 GE 주인에게 Event.Mark.Triggered (어트리뷰트셋 · Argument 72 A2)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Mark_LeniBear);     // 레니 곰돌이 — 아군에게 5초 · GE 출처 = 레니 ASC
 
 	// ── 게임플레이 이벤트 ──────────────────────────────────────
 	// 입력 → 어빌리티. PC 가 어빌리티 내부를 모르게 하는 통로 (SendGameplayEventToActor).
@@ -121,7 +122,7 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Kill_Dealt);        // 내가 적 실험체를 처치했다 (막타 — F14 전 임시 "처치 관여") — 플레이어 스테이트가 처치자 ASC 에 · 패시브가 듣는다 (Argument 65)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Wilson_Joined);   // 윌슨과 하나가 됐다 (줍기 · 거리 복귀 · E · W) — AERWilson 이 시셀라 ASC 에 · 패시브가 듣는다 (Argument 68)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ally_SkillHit);       // 내 스킬이 아군(자신 제외)에게 맞았다 — 적 · 아군 나누기 조각이 시전자 ASC 에 (Target = 아군)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Leni_BearTriggered);  // 곰돌이 아군이 적을 때렸다 — 어트리뷰트셋이 곰돌이 주인(레니) ASC 에 (Instigator = 아군 · Target = 적)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Mark_Triggered);      // 표식을 가진 가해자가 적을 때렸다 — 어트리뷰트셋이 표식 주인 ASC 에 (Instigator = 가해자 · Target = 맞은 쪽 · InstigatorTags = 표식 태그)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Hit_Dealt);         // 내 피해가 들어갔다 — 어트리뷰트셋이 가해자에게 (Target = 맞은 쪽 · InstigatorTags = Damage.Type.*) · 패시브가 듣는다 (Argument 61 E1)
 
 	// ── 어빌리티 형태 ──────────────────────────────────────────
@@ -327,6 +328,7 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Hit);        // 평타 타격음
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCast);  // 스킬 시전음 (D · Q~R)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillHit);   // 스킬 타격음
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx);            // 효과음 부모 — 연출 DA 의 소리 칸으로 나누는 기준 (Argument 74)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Die);        // 사망음 (야생동물 — 사망 포즈와 같이 · 복제 상태 bDead 가 신호)
 	// 야생동물 상태 사건 (F12.6-01 · 복제 상태 PresState 가 신호)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Appear);    // 등장 appear
@@ -391,6 +393,43 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Ready);   // 시전자 — 다음 평타 강화가 걸렸다 (K8)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Anim);     // 시전자 — 동작표 키 하나를 각 머신에서 (키 = AggregatedSourceTags 의 Ability.Slot.* · 레니 R 같이 날아감 Skill04_Jump)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Sfx);      // 시전자 — 소리 키 하나를 그대로 (키 = AggregatedSourceTags 의 Pres.Sfx.* · 위치 = Location · UERPresentationComponent::SendSfxCue)
+	// 캐릭터 음성 (Argument 73) — [주변] = 그 자리 3D 누구나 · [본인] = 그 플레이어 화면만 (2D)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Voice);   // 시전자 — 음성 키 하나 (키 = AggregatedSourceTags 의 Pres.Voice.* · 주변 3D · Argument 73 V-B)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice);   // 음성 부모 (Argument 73) — 줄은 Fill 이 Data/Presentation/_Voice.json 으로 채운다
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Skill_Q);   // [주변] 스킬 시전 — 어빌리티 시작 순간 한 번 (리캐스트 제외)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Skill_W);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Skill_E);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Skill_R);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Death);   // [주변] 사망 (Dead · die · killedCommon 묶음)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_1);   // [본인] 이번 판 누적 처치 수 (kill<N>Player)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_2);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_3);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_4);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_5);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_6);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_7);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_8);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_9);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_10);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_11);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_12);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_13);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Kill_14);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_KillMonster);   // [본인] 야생동물 처치
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_TargetOn);   // [본인] 적 실험체를 평타 대상으로 찍을 때 (클라 로컬)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_FirstMove);   // [본인] 판 시작 뒤 첫 이동 (클라 로컬)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Craft_Uncommon);   // [본인] 제작 — 결과 등급 (일반은 대사 없음)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Craft_Rare);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Craft_Epic);   // 영웅 (Hero)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Craft_Legend);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Craft_Mystic);   // 초월 (Transcendent)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Gather_Branch);   // [본인] 채집 시작 — 루트 행 Voice 칸 (DT_Loot)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Gather_Stone);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Gather_Flower);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Box);   // [본인] 상자에서 꺼낼 때
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_LootCorpse_Self);   // [본인] 내가 처치한 실험체 시체에서 꺼낼 때
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_LootCorpse_Other);   // [본인] 남이 처치한 실험체 시체
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_LearnWeaponSkill);   // [본인] D 습득 (숙련도로 0 → 1) — 줄은 무기 세트 DA 에
 	// 모드 상태 애니 (Argument 42 ⑥ A2) — 모드 칸이 있는 줄에만 쓴다. C++ 가 해석해 AnimInstance 에 넘기고 상태머신이 튼다
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_AttackEnhanced);   // 강화를 소비하는 평타 (재키 W skill02_attack) — 없으면 평소 평타 (Argument 66 E1)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeStart);
