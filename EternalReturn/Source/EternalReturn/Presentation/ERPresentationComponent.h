@@ -127,6 +127,9 @@ public:
 	/** [서버] 소리 키 하나를 Instigator 의 소리 표에서 골라 Location 에 (모든 클라 · GameplayCue.Pres.Sfx). 어빌리티 밖(윌슨 액터 · 투사체 · 지연 타이머)에서 쓴다 */
 	static void SendSfxCue(AActor* Instigator, FGameplayTag SfxKey, const FVector& Location);
 
+	/** [서버] 소리 **애셋** 하나를 Location 에 (모든 클라 · 같은 소리 큐 · 큐 SourceObject 로 실어). 데이터 행이 애셋을 직접 가리킬 때 — 채집 소리 (DT_Loot GatherSounds · Argument 77 U1) */
+	static void SendSoundAssetCue(AActor* Instigator, USoundBase* Sound, const FVector& Location);
+
 	/** [서버] 동작표 키 하나를 Instigator 에게 — 각 머신이 자기 화면에 (레니 R 같이 날아감 · GameplayCue.Pres.Anim) */
 	static void SendAnimCue(AActor* Instigator, FGameplayTag AnimKey);
 	/** [서버] 음성 키 하나를 주변 모두에게 (GameplayCue.Pres.Voice · Argument 73 V-B 주변) — 스킬 시전 */
@@ -176,8 +179,15 @@ private:
 
 	/** 채집 태그가 붙으면 collect 를 **원래 속도로** 튼다 · 떨어지면 길고 부드러운 블렌드 아웃으로 일어선다 (Argument 47 F1). 이동하면 AnimInstance 가 끊는다. */
 	void OnGatherTagChanged(const FGameplayTag Tag, int32 NewCount);
+	/** 아군 소생 중 (State.Reviving 복제 loose · F14) — 소생하는 쪽 동작(resurrect)을 소생 시간 동안 반복 · 빠지면 멈춤 (채집과 같은 길) */
+	void OnRevivingTagChanged(const FGameplayTag Tag, int32 NewCount);
 	/** 모션 유지 태그(State.AnimHold)가 빠지면 지금 몽타주를 End 섹션으로 — 서버(복제) · 소유 클라(로컬 재생분) (Argument 63 M1). */
 	void OnAnimHoldTagChanged(const FGameplayTag Tag, int32 NewCount);
+	/** 실험체 사망 태그 (State.Dead · F14 · Argument 75) → SetDead. 야생동물은 이 태그가 없다 (bDead 복제) */
+	void OnDeadTagChanged(const FGameplayTag Tag, int32 NewCount);
+	/** 빈사 태그 (State.Downed · F14 · Argument 76) → AnimBP 빈사 전용 상태 */
+	void OnDownedTagChanged(const FGameplayTag Tag, int32 NewCount);
+	void SetDownedPose(bool bInDowned, bool bSkipIntro);
 	/** 반복 소리 (F19-02 매그너스 W · R · Audio/Magnus.md) — 태그가 있는 동안 SkillLoop 키 소리를 몸에 붙여 반복 · 빠지면 멈춤. bPlayStart = 막 붙었다 (시작음) */
 	void OnLoopSfxTagChanged(const FGameplayTag Tag, int32 NewCount);
 	void RefreshLoopSfx(bool bPlayStart);
@@ -241,17 +251,25 @@ private:
 	TWeakObjectPtr<UAbilitySystemComponent> ModeASC;
 	FDelegateHandle ModeTagHandle;
 	FDelegateHandle GatherTagHandle;
+	FDelegateHandle RevivingTagHandle;
 	FDelegateHandle AnimHoldTagHandle;
+	FDelegateHandle DeadTagHandle;
+	FDelegateHandle DownedTagHandle;
 	/** 반복 소리 태그 → 구독 핸들 · 지금 도는 소리 (이 머신만) */
 	TMap<FGameplayTag, FDelegateHandle> LoopSfxTagHandles;
 	UPROPERTY()
 	TMap<FGameplayTag, TObjectPtr<class UAudioComponent>> LoopAudio;
 	/** 지금 트는 채집 몽타주 — 채집 끝에 이것만 멈춘다 (그 사이 스킬 몽타주가 덮었으면 이미 끝나 있다). */
 	TWeakObjectPtr<UAnimMontage> GatherMontage;
+	/** 지금 트는 소생 동작 몽타주 — 소생이 끝나면 이것만 멈춘다 */
+	TWeakObjectPtr<UAnimMontage> ReviveMontage;
 
 	/** 상태 포즈 원천 — 컴포넌트가 들고 있다가 PushStateToAnim 이 넘긴다 (AnimInstance 가 바뀌어도 잃지 않게). */
 	bool bDead = false;
 	bool bDeathSkipToEnd = false;
+	/** 빈사 자세 (F14 · Argument 76) — 컴포넌트가 들고 있다가 PushStateToAnim 이 넘긴다 */
+	bool bDowned = false;
+	bool bDownedSkipIntro = false;
 	EERRestPose RestPose = EERRestPose::None;
 	bool bRestSkipIntro = false;
 

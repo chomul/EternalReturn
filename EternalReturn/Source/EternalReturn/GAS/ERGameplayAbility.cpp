@@ -73,10 +73,14 @@ UERGameplayAbility::UERGameplayAbility()
 
 	// ⭐ 차단 태그를 베이스에 둔다 — 애셋마다 넣다가 빠뜨리면 조용히 안 막힌다 (F06-01 은 애셋에 넣었었다).
 	//   State.Block.Skill : CC (기절 · 침묵)          State.Recovering : 다른 스킬의 후딜
-	//   애셋이 더 붙이는 건 자유다 (BP Class Defaults 는 여기에 **추가**된다).
+	//   애셋이 더 붙이는 건 자유다 — ⚠ 단 BP 가 이 칸을 저장하면 그 뒤 여기 추가한 태그는 그 BP 에 **안 내려간다** (덮어쓴다 · 2026-10-08 빈사 Q 발동).
+	//     꼭 막아야 하는 것(빈사 · 사망 · 소생)은 CanActivateAbility 가 코드로 막는다.
 	ActivationBlockedTags.AddTag(ERTags::State_Block_Skill);
 	ActivationBlockedTags.AddTag(ERTags::State_Recovering);
 	ActivationBlockedTags.AddTag(ERTags::State_Unarmed);   // 무기 없음 — 평타 포함 전부 (F11-02, 원작 확인)
+	ActivationBlockedTags.AddTag(ERTags::State_Downed);    // 빈사 — 이동과 빈사 스킬만 (원작 · Argument 75). 빈사 스킬은 ⏸ S4
+	ActivationBlockedTags.AddTag(ERTags::State_Dead);
+	ActivationBlockedTags.AddTag(ERTags::State_Reviving);  // 아군 소생 중 — 끊으려면 움직인다 (Argument 75 R1)
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1242,6 +1246,43 @@ bool UERGameplayAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Han
 	// 탑승 중 (매그너스 R 바이크) — 평타 · 다른 스킬은 막고 **자기 리캐스트 창(재사용 발사)만** 연다.
 	//   차단 태그(State.Block.Skill)로 막으면 R 재사용까지 막힌다 — 리캐스트는 쿨다운만 건너뛰기 때문 (Argument 62).
 	const UAbilitySystemComponent* ASC = ActorInfo ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+	// 빈사 · 사망 · 소생 중 — 생성자의 ActivationBlockedTags 에도 있지만 **스킬 BP 가 그 칸을 저장해 두면 부모 추가분이 안 내려온다**
+	//   (F06 때 GA_Test 에 State.Block.Skill 을 넣고 저장 → 2026-10-08 PIE 빈사 중 재키 Q 발동). 애셋과 무관하게 여기서 막는다
+	//   빈사 스킬(bDownedSkill)은 거꾸로 — 빈사일 때만 (Argument 79 · 이동과 빈사 스킬만 쓸 수 있다)
+	static const FGameplayTagContainer Incapacitated = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{ ERTags::State_Downed, ERTags::State_Dead, ERTags::State_Reviving });
+	static const FGameplayTagContainer IncapacitatedButDowned = FGameplayTagContainer::CreateFromArray(TArray<FGameplayTag>{ ERTags::State_Dead, ERTags::State_Reviving });
+	const FGameplayTagContainer& Blocking = bDownedSkill ? IncapacitatedButDowned : Incapacitated;
+	if (ASC && ASC->HasAnyMatchingGameplayTags(Blocking))
+	{
+		if (OptionalRelevantTags)
+		{
+			OptionalRelevantTags->AppendTags(Blocking);
+		}
+		return false;
+	}
+	if (bDownedSkill && (!ASC || !ASC->HasMatchingGameplayTag(ERTags::State_Downed)))
+	{
+		return false;
+	}
+	// 무기 없음 — 같은 이유로 BP 칸에서 빠져 있었다 (E41 재검증 2026-10-11 PIE: 무기 없이 재키 Q 발동 · 선판정 "태그 OK").
+	//   C++ 클래스 기본값이 Unarmed 를 막는 것만 — 패시브(UERPassiveAbility)는 칸을 비워 무기 없이도 켜진다
+	if (ASC && ASC->HasMatchingGameplayTag(ERTags::State_Unarmed))
+	{
+		const UClass* Native = GetClass();
+		while (Native && !Native->HasAnyClassFlags(CLASS_Native))
+		{
+			Native = Native->GetSuperClass();
+		}
+		const UERGameplayAbility* NativeCDO = Native ? Cast<UERGameplayAbility>(Native->GetDefaultObject()) : nullptr;
+		if (NativeCDO && NativeCDO->ActivationBlockedTags.HasTagExact(ERTags::State_Unarmed))
+		{
+			if (OptionalRelevantTags)
+			{
+				OptionalRelevantTags->AddTag(ERTags::State_Unarmed);
+			}
+			return false;
+		}
+	}
 	if (ASC && ASC->HasMatchingGameplayTag(ERTags::State_Riding))
 	{
 		const UERSkillData* Skill = GetSkillData(Handle, ActorInfo);
@@ -1266,7 +1307,8 @@ namespace
 		switch (CostType)
 		{
 		case ESkillCostType::VP: return UERVPCostEffect::StaticClass();
-		case ESkillCostType::HP: return UERHPCostEffect::StaticClass();
+		case ESkillCostType::HP:
+		case ESkillCostType::HPCurrentRatio: return UERHPCostEffect::StaticClass();
 		default:                 return nullptr;
 		}
 	}
@@ -1299,6 +1341,7 @@ bool UERGameplayAbility::CheckCost(const FGameplayAbilitySpecHandle Handle, cons
 		break;
 
 	case ESkillCostType::HP:
+	case ESkillCostType::HPCurrentRatio:
 		// ⭐ 부족해도 시전은 된다 — 1 까지만 지불한다 (Task 문서 "현재HP-1 로 깎아서 넘긴다").
 		//   낼 게 아예 없는(HP<=1) 경우만 막는다. 자체 결정값, 원작 (미확인).
 		bAffordable = ASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 1.f;
@@ -1348,9 +1391,13 @@ void UERGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
 	}
 
 	// ⭐ HP 하한 1 — 어트리뷰트셋이 아니라 여기서. F02-04: "하한이 데미지 경로에 섞이면 죽어야 할 때 안 죽는다".
-	if (SkillData->CostType == ESkillCostType::HP)
+	if (SkillData->CostType == ESkillCostType::HP || SkillData->CostType == ESkillCostType::HPCurrentRatio)
 	{
 		const float HP = ASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute());
+		if (SkillData->CostType == ESkillCostType::HPCurrentRatio)
+		{
+			Cost = HP * FMath::Min(Cost, 1.f);   // 비율 → 지금 체력의 그만큼 (빈사 스킬 · Argument 79)
+		}
 		Cost = FMath::Min(Cost, FMath::Max(HP - 1.f, 0.f));
 		if (Cost <= 0.f)
 		{
@@ -1369,7 +1416,7 @@ void UERGameplayAbility::ApplyCost(const FGameplayAbilitySpecHandle Handle, cons
 
 		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 코스트 %s %.0f 지불"),
 			*GetNameSafe(ActorInfo->OwnerActor.Get()), *GetNameSafe(SkillData),
-			SkillData->CostType == ESkillCostType::HP ? TEXT("HP") : TEXT("VP"), Cost);
+			SkillData->CostType == ESkillCostType::VP ? TEXT("VP") : TEXT("HP"), Cost);
 	}
 }
 

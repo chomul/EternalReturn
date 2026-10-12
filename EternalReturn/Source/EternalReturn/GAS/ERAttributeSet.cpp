@@ -114,11 +114,28 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 		// ⭐ 통로를 반드시 비운다. IncomingDamage 와 같은 이유다.
 		SetIncomingHealing(0.f);
 
+		// 빈사 · 사망은 회복이 안 된다 (Argument 75) — 빈사 체력은 "빈사 타이머" 다. ⚠ 자체 결정값 — 원작 (미확인)
+		const UAbilitySystemComponent* OwnerASC = GetOwningAbilitySystemComponent();
+		if (OwnerASC && (OwnerASC->HasMatchingGameplayTag(ERTags::State_Downed) || OwnerASC->HasMatchingGameplayTag(ERTags::State_Dead)))
+		{
+			return;
+		}
 		if (Healing > 0.f)
 		{
 			// 상한(최대 체력)은 PreAttributeChange 가 자른다. 여기서 또 자르지 않는다.
 			SetHP(GetHP() + Healing * (1.f + GetHealAmp()));
 		}
+		return;
+	}
+
+	// HP 를 직접 바꾸는 GE (빈사 체력 감소 · Argument 75) — 피해 통로가 아니어도 0 이 되면 사망 알림 (빗장 같은 규칙)
+	if (Data.EvaluatedData.Attribute == GetHPAttribute())
+	{
+		if (GetHP() <= 0.f && !bOutOfHealth)
+		{
+			OnOutOfHealth.Broadcast(Data.EffectSpec.GetEffectContext().GetOriginalInstigator());
+		}
+		bOutOfHealth = (GetHP() <= 0.f);
 		return;
 	}
 
@@ -135,6 +152,12 @@ void UERAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallback
 	if (Damage <= 0.f)
 	{
 		return;
+	}
+
+	// 빈사 받는 피해 감소 (Argument 75) — 보호막보다 먼저
+	if (DownedDamageReduction > 0.f)
+	{
+		Damage *= 1.f - DownedDamageReduction;
 	}
 
 	// 보호막 먼저 (Argument 68 S1) — 다 막아도 적중은 적중이다 (적중 이벤트 · 숙련도는 그대로 간다)

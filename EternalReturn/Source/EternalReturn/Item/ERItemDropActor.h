@@ -61,6 +61,14 @@ public:
 	/** [서버] 실험체 시체를 만든 처치자 (시체 수색 음성 · Argument 73). 상자 · 채집물 · 야생동물 시체는 비어 있다 */
 	void SetKiller(APlayerState* InKiller) { Killer = InKiller; }
 	APlayerState* GetKiller() const { return Killer.Get(); }
+	/** [서버] 이 사람이 이 상자를 처음 여는 것이면 true (사람마다 한 번 — 여는 소리 · 사용자 2026-10-08) */
+	bool MarkOpenedBy(APlayerState* Who)
+	{
+		bool bAlready = false;
+		OpenedBy.Add(Who, &bAlready);
+		return !bAlready;
+	}
+
 	/** 실험체 시체 = 루트 행 없음 (SpawnDeathDrop). 야생동물 시체는 행이 있다 */
 	bool IsPlayerCorpse() const { return LootRow.IsNone(); }
 
@@ -97,6 +105,8 @@ protected:
 	TWeakObjectPtr<APlayerState> Gatherer;
 	/** 서버 전용. 실험체 시체의 처치자 — 복제 안 함 */
 	TWeakObjectPtr<APlayerState> Killer;
+	/** 서버 전용. 이 상자를 연 사람들 (여는 소리 한 번씩) */
+	TSet<TWeakObjectPtr<APlayerState>> OpenedBy;
 	FTimerHandle GatherTimer;
 	/** 캐는 사람 ASC 에 State.Gathering(복제 loose)을 붙였나 — 뗄 때 짝을 맞춘다 (F12.5-04 · Argument 46). */
 	bool bGatherTagged = false;

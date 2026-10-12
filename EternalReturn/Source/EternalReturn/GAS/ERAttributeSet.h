@@ -96,6 +96,12 @@ public:
 	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnDamageTaken, AActor* /*Instigator*/, float /*Damage*/);
 	mutable FOnDamageTaken OnDamageTaken;
 
+	/**
+	 * [서버] 빈사 받는 피해 감소 (0~1 · Argument 75). 빈사에 들어갈 때 AERPlayerState 가 레벨식으로 넣고 나올 때 0.
+	 * 피해 통로에서 보호막보다 먼저 곱한다. ⭐ DamageDown 어트리뷰트와 따로 — 그쪽은 상한 0.8 · 피해 증가와 상쇄라 원작 "50%+(레벨×1.5)%" 가 그대로 안 나온다.
+	 */
+	void SetDownedDamageReduction(float InReduction) { DownedDamageReduction = FMath::Clamp(InReduction, 0.f, 1.f); }
+
 	// ═══════════════════════════════════════════════════════════
 	//  어트리뷰트 변화를 듣는 법  (F02-06)
 	// ═══════════════════════════════════════════════════════════
@@ -144,6 +150,9 @@ private:
 	 * 참고: Lyra 도 같은 방식이다 (Docs/6_Lyra참조/01_어트리뷰트셋.md)
 	 */
 	bool bOutOfHealth = false;
+
+	/** 빈사 받는 피해 감소 — SetDownedDamageReduction. 서버만 쓴다 (복제 안 함) */
+	float DownedDamageReduction = 0.f;
 
 	/** 클램프 규칙 한 곳. PreAttributeChange 와 PreAttributeBaseChange 가 같은 규칙을 쓴다. */
 	void ClampAttribute(const FGameplayAttribute& Attribute, float& NewValue) const;

@@ -78,4 +78,12 @@ struct FERLootRow : public FTableRowBase
 	/** 채집물만. 캐기 시작할 때 캐는 사람 혼잣말 (Pres.Voice.Gather.* · Argument 73). 비면 없음 — 상자는 행과 무관하게 Pres.Voice.Box */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (Categories = "Pres.Voice", EditCondition = "bInfinite"))
 	FGameplayTag Voice;
+
+	/** 채집물만. 캐기 시작할 때 소리 — 무작위 하나 · 주변 (사용자 2026-10-08 · Argument 77 U1 — 물체 소리는 물체 행). 비면 없음 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (EditCondition = "bInfinite"))
+	TArray<TSoftObjectPtr<class USoundBase>> GatherSounds;
+
+	/** 상자만. 사람마다 처음 열 때 소리 — **상자 모양마다 다르다** · 무작위 하나 · 본인만 (사용자 2026-10-08). 비면 없음 · UI 소리 BoxOpenUI 는 따로 공용 (ER Sound) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<TSoftObjectPtr<class USoundBase>> OpenSounds;
 };

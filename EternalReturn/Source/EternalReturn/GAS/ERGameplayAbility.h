@@ -213,6 +213,12 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "ER|Skill", DisplayName = "OnSkillExecuted")
 	void K2_OnSkillExecuted();
 
+	/**
+	 * 빈사 스킬 (UERDownedAbility) — **빈사일 때만** 발동된다 (일반 스킬은 반대로 빈사면 막힌다). 생성자에서만 켠다.
+	 * ⚠ UPROPERTY 가 아니다 — BP 가 저장해 덮을 수 없게 (E41: BP 가 저장한 차단 칸이 부모 추가분을 덮었다).
+	 */
+	bool bDownedSkill = false;
+
 	/** 레벨 0(미습득)이면 발동 불가. 나머지는 Super (태그·쿨다운·코스트). */
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, OUT FGameplayTagContainer* OptionalRelevantTags = nullptr) const override;
 

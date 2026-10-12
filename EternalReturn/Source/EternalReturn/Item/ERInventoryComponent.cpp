@@ -19,6 +19,7 @@
 #include "Item/ERLootLibrary.h"
 #include "Item/ERLootTypes.h"
 #include "Core/ERPlayerState.h"
+#include "Presentation/ERPresentationComponent.h"
 #include "Net/UnrealNetwork.h"
 
 namespace
@@ -243,6 +244,7 @@ bool UERInventoryComponent::ServerPickup_Validate(AERItemDropActor* Drop, int32 
 
 void UERInventoryComponent::ServerPickup_Implementation(AERItemDropActor* Drop, int32 Index)
 {
+	if (IsIncapacitated(TEXT("줍기"))) { return; }
 	const APlayerState* PS = Cast<APlayerState>(GetOwner());
 	const APawn* Pawn = PS ? PS->GetPawn() : nullptr;
 	if (!Drop || !IsValid(Drop) || !Pawn)
@@ -302,6 +304,19 @@ void UERInventoryComponent::ServerPickup_Implementation(AERItemDropActor* Drop, 
 			{
 				Me->ClientPlayVoice(LootRow->Voice);
 			}
+			// 채집 소리 (주변 · 루트 행 GatherSounds 중 무작위 · 사용자 2026-10-08 · Argument 77 U1) — 서버가 골라 애셋을 큐에 실어 보낸다
+			if (Me && LootRow && !LootRow->GatherSounds.IsEmpty() && Me->GetPawn())
+			{
+				const TSoftObjectPtr<USoundBase>& Pick = LootRow->GatherSounds[FMath::RandRange(0, LootRow->GatherSounds.Num() - 1)];
+				if (USoundBase* Sound = Pick.LoadSynchronous())
+				{
+					UERPresentationComponent::SendSoundAssetCue(Me->GetPawn(), Sound, Me->GetPawn()->GetActorLocation());
+				}
+				else
+				{
+					UE_LOG(LogEternalReturn, Warning, TEXT("[습득] %s GatherSounds — 애셋이 없다: %s"), *Drop->GetLootRow().ToString(), *Pick.ToString());
+				}
+			}
 			TWeakObjectPtr<AERItemDropActor> WeakDrop = Drop;
 			GetWorld()->GetTimerManager().SetTimer(GatherTimer, FTimerDelegate::CreateWeakLambda(this, [this, WeakDrop, Index]()
 			{
@@ -325,6 +340,15 @@ void UERInventoryComponent::ServerPickup_Implementation(AERItemDropActor* Drop, 
 		if (Voice.IsValid())
 		{
 			Me->ClientPlayVoice(Voice);
+		}
+		// 상자를 이 사람이 처음 열 때 — 상자 모양 소리(루트 행 OpenSounds 중 무작위) + UI 소리 · 본인만 (사용자 2026-10-08 "상자마다 열리는 소리가 다달라서")
+		if (!Drop->IsPlayerCorpse() && !Drop->bCorpse && Drop->MarkOpenedBy(Me))
+		{
+			if (const FERLootRow* BoxRow = ERLoot::Find(Drop->GetLootRow()); BoxRow && !BoxRow->OpenSounds.IsEmpty())
+			{
+				Me->ClientPlaySoundPath(BoxRow->OpenSounds[FMath::RandRange(0, BoxRow->OpenSounds.Num() - 1)].ToSoftObjectPath());
+			}
+			Me->ClientPlaySfx(ERTags::Pres_Sfx_BoxOpenUI);
 		}
 	}
 
@@ -369,6 +393,18 @@ void UERInventoryComponent::FinishGather(AERItemDropActor* Drop, int32 Index)
 // RPC
 // ─────────────────────────────────────────────────────────────
 
+bool UERInventoryComponent::IsIncapacitated(const TCHAR* What) const
+{
+	// 빈사 · 사망 — 이동과 빈사 스킬만 (원작 · Argument 75). 클라 UI 가 막기 전이라도 서버가 거절한다
+	const UAbilitySystemComponent* ASC = GetASC();
+	if (ASC && (ASC->HasMatchingGameplayTag(ERTags::State_Downed) || ASC->HasMatchingGameplayTag(ERTags::State_Dead)))
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[인벤토리] %s — %s 거절 (빈사 · 사망)"), *GetNameSafe(GetOwner()), What);
+		return true;
+	}
+	return false;
+}
+
 bool UERInventoryComponent::ServerEquipFromBag_Validate(int32 BagIndex)
 {
 	return BagIndex >= 0;   // 범위 밖 · 빈 칸은 정상 실패(로그)라 Validate 로 끊지 않는다
@@ -376,6 +412,7 @@ bool UERInventoryComponent::ServerEquipFromBag_Validate(int32 BagIndex)
 
 void UERInventoryComponent::ServerEquipFromBag_Implementation(int32 BagIndex)
 {
+	if (IsIncapacitated(TEXT("장착"))) { return; }
 	EquipFromBag(BagIndex);
 }
 
@@ -386,6 +423,7 @@ bool UERInventoryComponent::ServerDiscard_Validate(int32 BagIndex)
 
 void UERInventoryComponent::ServerDiscard_Implementation(int32 BagIndex)
 {
+	if (IsIncapacitated(TEXT("버리기"))) { return; }
 	// ⚠ 드롭 액터(F08-05) 전까지는 그냥 사라진다.
 	if (Bag.IsValidIndex(BagIndex) && !Bag[BagIndex].IsEmpty())
 	{
@@ -400,6 +438,7 @@ bool UERInventoryComponent::ServerUnequip_Validate(EEREquipSlot Slot)
 
 void UERInventoryComponent::ServerUnequip_Implementation(EEREquipSlot Slot)
 {
+	if (IsIncapacitated(TEXT("해제"))) { return; }
 	Unequip(Slot);
 }
 
@@ -630,6 +669,7 @@ bool UERInventoryComponent::ServerCraft_Validate(FName ResultId)
 
 void UERInventoryComponent::ServerCraft_Implementation(FName ResultId)
 {
+	if (IsIncapacitated(TEXT("제작"))) { return; }
 	Craft(ResultId);
 }
 

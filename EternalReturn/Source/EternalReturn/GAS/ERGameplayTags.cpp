@@ -4,6 +4,7 @@
 
 namespace ERTags
 {
+	UE_DEFINE_GAMEPLAY_TAG(State_CC, "State.CC");
 	UE_DEFINE_GAMEPLAY_TAG(State_CC_Stun,        "State.CC.Stun");
 	UE_DEFINE_GAMEPLAY_TAG(State_CC_Airborne,    "State.CC.Airborne");
 	UE_DEFINE_GAMEPLAY_TAG(State_Frustrated,     "State.Frustrated");
@@ -19,6 +20,13 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(State_DamageImmune,   "State.DamageImmune");
 	UE_DEFINE_GAMEPLAY_TAG(State_Unstoppable,    "State.Unstoppable");
 	UE_DEFINE_GAMEPLAY_TAG(State_Untargetable,   "State.Untargetable");
+	UE_DEFINE_GAMEPLAY_TAG(State_Downed, "State.Downed");
+	UE_DEFINE_GAMEPLAY_TAG(State_Dead, "State.Dead");
+	UE_DEFINE_GAMEPLAY_TAG(State_Dead_FromDowned, "State.Dead.FromDowned");
+	UE_DEFINE_GAMEPLAY_TAG(State_Reviving, "State.Reviving");
+	UE_DEFINE_GAMEPLAY_TAG(State_DownedSkill_Obstinacy, "State.DownedSkill.Obstinacy");
+	UE_DEFINE_GAMEPLAY_TAG(State_DownedSkill_SelfReviving, "State.DownedSkill.SelfReviving");
+	UE_DEFINE_GAMEPLAY_TAG(State_DownedSkill_Fuse, "State.DownedSkill.Fuse");
 	UE_DEFINE_GAMEPLAY_TAG(State_CCImmune,       "State.CCImmune");
 	UE_DEFINE_GAMEPLAY_TAG(State_Bleeding,       "State.Bleeding");
 	UE_DEFINE_GAMEPLAY_TAG(State_Adrenaline,     "State.Adrenaline");
@@ -41,6 +49,9 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_R, "Ability.Slot.R");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_D, "Ability.Slot.D");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Attack, "Ability.Slot.Attack");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Downed_Q, "Ability.Slot.Downed.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Downed_W, "Ability.Slot.Downed.W");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Downed_R, "Ability.Slot.Downed.R");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Q_Recast, "Ability.Slot.Q.Recast");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_W_Recast, "Ability.Slot.W.Recast");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_E_Recast, "Ability.Slot.E.Recast");
@@ -59,6 +70,9 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_R, "Cooldown.Slot.R");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_D, "Cooldown.Slot.D");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Attack, "Cooldown.Slot.Attack");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Downed_Q, "Cooldown.Slot.Downed.Q");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Downed_W, "Cooldown.Slot.Downed.W");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Downed_R, "Cooldown.Slot.Downed.R");
 
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Hammer,      "Cooldown.Weapon.Hammer");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Bat,         "Cooldown.Weapon.Bat");
@@ -87,6 +101,8 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Cost,                 "SetByCaller.Cost");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_PhaseDuration,        "SetByCaller.PhaseDuration");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_StateDuration,        "SetByCaller.StateDuration");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Downed_MoveSpeed, "SetByCaller.Downed.MoveSpeed");
+	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Downed_Bleed, "SetByCaller.Downed.Bleed");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_LostHP_RegenMin,      "SetByCaller.LostHP.RegenMin");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_LostHP_RegenMax,      "SetByCaller.LostHP.RegenMax");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_LostHP_SkillAmpMin,   "SetByCaller.LostHP.SkillAmpMin");
@@ -109,6 +125,7 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Event_Mark_Triggered, "Event.Mark.Triggered");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Input_Move, "Event.Input.Move");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Skill_Aim,  "Event.Skill.Aim");
+	UE_DEFINE_GAMEPLAY_TAG(Event_Revive_Request, "Event.Revive.Request");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Kill_Dealt, "Event.Kill.Dealt");
 	UE_DEFINE_GAMEPLAY_TAG(Event_Hit_Dealt,  "Event.Hit.Dealt");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_SlowPercent,          "SetByCaller.SlowPercent");
@@ -276,6 +293,22 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Mode, "Mode");
 	UE_DEFINE_GAMEPLAY_TAG(Mode_Sniper, "Mode.Sniper");
 	UE_DEFINE_GAMEPLAY_TAG(Mode_Bubble, "Mode.Bubble");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_DownDead, "Pres.Anim.DownDead");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_DownStart, "Pres.Anim.DownStart");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_DownIdle, "Pres.Anim.DownIdle");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_DownRun, "Pres.Anim.DownRun");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_DownEnd, "Pres.Anim.DownEnd");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Anim_Revive, "Pres.Anim.Revive");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Voice_Save, "Pres.Voice.Save");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Voice_Resurrection, "Pres.Voice.Resurrection");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Downed, "Pres.Sfx.Downed");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Resurrect, "Pres.Sfx.Resurrect");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_TeamDown, "Pres.Sfx.TeamDown");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_TeamRevival, "Pres.Sfx.TeamRevival");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Terminate, "Pres.Sfx.Terminate");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_Craft, "Pres.Sfx.Craft");
+	UE_DEFINE_GAMEPLAY_TAG(Pres_Sfx_BoxOpenUI, "Pres.Sfx.BoxOpenUI");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Revive, "Ability.Revive");
 	UE_DEFINE_GAMEPLAY_TAG(Mode_MovingReload, "Mode.MovingReload");
 	UE_DEFINE_GAMEPLAY_TAG(Mode_Chainsaw, "Mode.Chainsaw");
 }

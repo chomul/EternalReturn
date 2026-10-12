@@ -19,8 +19,10 @@
 #include "GAS/ERAttributeSet.h"
 #include "Combat/ERTargeting.h"
 #include "Core/ERGameState.h"
+#include "GAS/ERReviveAbility.h"
 #include "Core/ERTeamStatics.h"
 #include "GAS/ERSkillData.h"
+#include "GAS/Fragment/ERSkillFragment_Mode.h"
 #include "NavigationSystem.h"
 #include "Presentation/ERPresentationComponent.h"
 
@@ -133,13 +135,51 @@ namespace
 		for (const FGameplayAbilitySpec& Spec : ASC.GetActivatableAbilities())
 		{
 			const UERGameplayAbility* ER = Cast<UERGameplayAbility>(Spec.GetPrimaryInstance());
-			if (ER && Spec.DynamicAbilityTags.HasTagExact(SlotTag) && ER->IsModeActive())
+			const UERSkillData* Skill = Cast<UERSkillData>(Spec.SourceObject.Get());
+			// 모드 조각만 — 활성 유지하는 다른 조각(빈사 스킬 도화선 · 자가 소생)은 재입력이 사격이 아니다
+			if (ER && Spec.DynamicAbilityTags.HasTagExact(SlotTag) && ER->IsModeActive() && Skill && Skill->FindFragment<UERSkillFragment_Mode>())
 			{
 				UE_LOG(LogEternalReturn, Verbose, TEXT("[입력] %s -> 모드 중 재입력 = %s"), *SlotTag.ToString(), *ERTags::Ability_Slot_Attack.GetTag().ToString());
 				return ERTags::Ability_Slot_Attack;
 			}
 		}
 		return SlotTag;
+	}
+
+	/**
+	 * F14 S4 빈사 스킬 (Argument 79 I1): 빈사 중 Q · W · R = 빈사 스킬 슬롯. 일반 스킬과 슬롯 태그를 나눠 선판정 루프가 섞이지 않게 (첫 스펙에서 끝난다).
+	 * 클라 · 서버 같은 규칙 (모드 재입력과 같은 자리). 그 밖의 키는 그대로 — 빈사면 일반 스킬 차단이 막는다.
+	 */
+	FGameplayTag ResolveDownedSlot(const UAbilitySystemComponent& ASC, FGameplayTag SlotTag)
+	{
+		if (!ASC.HasMatchingGameplayTag(ERTags::State_Downed))
+		{
+			return SlotTag;
+		}
+		if (SlotTag == ERTags::Ability_Slot_Q) { return ERTags::Ability_Slot_Downed_Q; }
+		if (SlotTag == ERTags::Ability_Slot_W) { return ERTags::Ability_Slot_Downed_W; }
+		if (SlotTag == ERTags::Ability_Slot_R) { return ERTags::Ability_Slot_Downed_R; }
+		return SlotTag;
+	}
+
+	FGameplayTag ResolveSlot(const UAbilitySystemComponent& ASC, FGameplayTag SlotTag)
+	{
+		return ResolveModeSlot(ASC, ResolveDownedSlot(ASC, SlotTag));
+	}
+
+	/** 활성 중 재입력 = 취소인 스킬인가 (자가 제세동 — 원작 "재시전해서 취소") */
+	bool CancelsOnReinput(const FGameplayAbilitySpec& Spec)
+	{
+		const UERSkillData* Skill = Cast<UERSkillData>(Spec.SourceObject.Get());
+		if (!Spec.IsActive() || !Skill)
+		{
+			return false;
+		}
+		for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
+		{
+			if (F && F->CancelOnReinput()) { return true; }
+		}
+		return false;
 	}
 }
 
@@ -155,7 +195,7 @@ void AERPlayerController::OnSkillSlotStarted(FGameplayTag SlotTag)
 	HoldAnchorSlot = FGameplayTag();
 	if (const UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPawn()))
 	{
-		const FGameplayTag Slot = ResolveModeSlot(*ASC, SlotTag);
+		const FGameplayTag Slot = ResolveSlot(*ASC, SlotTag);
 		for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 		{
 			const UERSkillData* Skill = Spec.DynamicAbilityTags.HasTagExact(Slot) ? Cast<UERSkillData>(Spec.SourceObject.Get()) : nullptr;
@@ -188,7 +228,7 @@ void AERPlayerController::DrawSkillPreview()
 	{
 		return;
 	}
-	const FGameplayTag Slot = ResolveModeSlot(*ASC, PreviewSlot);
+	const FGameplayTag Slot = ResolveSlot(*ASC, PreviewSlot);
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
 		if (!Spec.DynamicAbilityTags.HasTagExact(Slot))
@@ -244,13 +284,21 @@ void AERPlayerController::OnSkillSlotPressed(FGameplayTag SlotTag)
 	// ⭐ F07-05: TryActivateAbility 대신 **조준을 실어** 서버로 보낸다 (Docs/4_Argument/18).
 	//   TryActivateAbility 가 하던 클라 선판정(CanActivateAbility)은 여기서 **인스턴스**로 직접 한다 —
 	//   엔진의 클라 선판정은 CDO 에서 돌아 쿨다운 태그를 못 본다 (E12). 인스턴스로 하면 쿨다운 중 헛 RPC 도 안 보낸다.
-	SlotTag = ResolveModeSlot(*ASC, SlotTag);   // F11-05 D 모드 중 재입력 = 사격
+	SlotTag = ResolveSlot(*ASC, SlotTag);   // F11-05 D 모드 중 재입력 = 사격 · F14 빈사면 빈사 스킬 슬롯
 
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
 		if (!Spec.Ability || !Spec.DynamicAbilityTags.HasTagExact(SlotTag))
 		{
 			continue;
+		}
+
+		// 활성 중 재입력 = 취소 (자가 제세동) — 선판정 없이 서버로 (서버가 다시 보고 끊는다)
+		if (CancelsOnReinput(Spec))
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[입력] %s -> 활성 중 재입력 = 취소 요청 (%s)"), *SlotTag.ToString(), *GetNameSafe(Spec.SourceObject.Get()));
+			ServerActivateSkill(SlotTag, FGameplayAbilityTargetDataHandle());
+			return;
 		}
 
 		const UGameplayAbility* Instance = Spec.GetPrimaryInstance();
@@ -335,13 +383,21 @@ void AERPlayerController::ServerActivateSkill_Implementation(FGameplayTag SlotTa
 		return;
 	}
 
-	SlotTag = ResolveModeSlot(*ASC, SlotTag);   // 클라가 모드를 아직 모를 수도 있다 — 서버가 다시 판단
+	SlotTag = ResolveSlot(*ASC, SlotTag);   // 클라가 모드를 아직 모를 수도 있다 — 서버가 다시 판단
 
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
 		if (!Spec.Ability || !Spec.DynamicAbilityTags.HasTagExact(SlotTag))
 		{
 			continue;
+		}
+
+		// 활성 중 재입력 = 취소 (자가 제세동 — 원작 "재시전해서 취소") · 취소 → 조각 OnEnd 가 쿨다운 반환
+		if (CancelsOnReinput(Spec))
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[입력] %s -> %s 재입력 취소 (서버)"), *SlotTag.ToString(), *GetNameSafe(Spec.SourceObject.Get()));
+			ASC->CancelAbilityHandle(Spec.Handle);
+			return;
 		}
 
 		// ⭐ 서버(권위)에서는 TriggerAbilityFromGameplayEvent 가 허용된다 (AbilitySystemComponent_Abilities.cpp:2567-2579).
@@ -412,6 +468,25 @@ void AERPlayerController::PlayerTick(float DeltaTime)
 	}
 
 	ApplyCameraOffset();
+}
+
+bool AERPlayerController::ServerRequestRevive_Validate(AActor* Target)
+{
+	return true;   // 대상 없음 · 거리 · 팀은 정상 실패 (어빌리티가 로그) — 끊지 않는다
+}
+
+void AERPlayerController::ServerRequestRevive_Implementation(AActor* Target)
+{
+	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPawn());
+	if (!ASC || !Target)
+	{
+		return;
+	}
+	// 검사는 어빌리티가 (UERReviveAbility::CanRevive · 차단 태그) — PC 는 이벤트 하나만 (이동 이벤트와 같은 경계 · Argument 17)
+	FGameplayEventData Event;
+	Event.Instigator = GetPawn();
+	Event.Target = Target;
+	ASC->HandleGameplayEvent(ERTags::Event_Revive_Request, &Event);
 }
 
 void AERPlayerController::SetPawn(APawn* InPawn)
@@ -610,7 +685,30 @@ void AERPlayerController::OnMoveToCursor()
 		FHitResult ActorHit;
 		AActor* Clicked = GetHitResultUnderCursor(ERCollisionChannel::Select, /*bTraceComplex=*/false, ActorHit) ? ActorHit.GetActor() : nullptr;
 		const UAbilitySystemComponent* ClickedASC = Clicked ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Clicked) : nullptr;
-		if (ClickedASC && GetPawn() && ERTeamStatics::IsHostile(GetPawn(), Clicked) && ClickedASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 0.f)
+		const UAbilitySystemComponent* MyASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetPawn());
+		const bool bIncapacitated = MyASC && (MyASC->HasMatchingGameplayTag(ERTags::State_Downed) || MyASC->HasMatchingGameplayTag(ERTags::State_Dead));
+		// 빈사 아군 우클릭 → 소생 (F14 · Argument 75 R1). 멀면 아래 이동으로 — 다가가서 다시 우클릭 `[자체]` (원작 자동 접근 (미확인))
+		if (ClickedASC && GetPawn() && !bIncapacitated && Clicked != GetPawn() && ERTeamStatics::IsSameTeam(GetPawn(), Clicked)
+			&& ClickedASC->HasMatchingGameplayTag(ERTags::State_Downed))
+		{
+			FString Why;
+			if (UERReviveAbility::CanRevive(GetPawn(), Clicked, 0.f, &Why))
+			{
+				SetAttackTarget(nullptr, TEXT("소생"));
+				StopMovement();
+				// 빈사 아군 쪽을 바라본다 (사용자 2026-10-08) — 소유 클라 회전이 서버로 간다 (CMC) · 서버 어빌리티의 회전은 다른 창 몫. 순차 사격 몸 돌리기와 같은 이유
+				const FVector ToTarget = (Clicked->GetActorLocation() - GetPawn()->GetActorLocation()).GetSafeNormal2D();
+				if (!ToTarget.IsNearlyZero())
+				{
+					GetPawn()->SetActorRotation(FRotator(0.f, ToTarget.Rotation().Yaw, 0.f));
+				}
+				ServerRequestRevive(Clicked);
+				UE_LOG(LogEternalReturn, Log, TEXT("[소생] %s 소생 요청"), *GetNameSafe(Clicked));
+				return;
+			}
+			UE_LOG(LogEternalReturn, Log, TEXT("[소생] %s — %s · 다가간다"), *GetNameSafe(Clicked), *Why);
+		}
+		else if (ClickedASC && GetPawn() && !bIncapacitated && ERTeamStatics::IsHostile(GetPawn(), Clicked) && ClickedASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 0.f)
 		{
 			// 적 실험체를 새로 찍으면 혼잣말 (Argument 73 · 본인 · 클라 로컬 — 네트워크 없음). 확률 · 간격은 _Voice.json
 			UERPresentationComponent* Pres = Clicked != AttackTarget.Get() && Clicked->IsA<AERCharacterBase>()
@@ -703,6 +801,13 @@ void AERPlayerController::ServerSetDestination_Implementation(const FVector& Des
 		UE_LOG(LogEternalReturn, Verbose,
 			TEXT("[이동] CC 로 막혀 있어 목적지를 받지 않는다. %s"), *GetNameSafe(ControlledPawn));
 		return;
+	}
+
+	// 아군 소생 채널은 움직이면 끊긴다 (Argument 75 R1 · 사용자 2026-10-08)
+	if (UAbilitySystemComponent* MoveASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(ControlledPawn))
+	{
+		const FGameplayTagContainer ReviveTag(ERTags::Ability_Revive);
+		MoveASC->CancelAbilities(&ReviveTag);
 	}
 
 	// ⭐ 검증 ② 거리. 화면 밖을 찍는 텔레포트 시도를 막는다.
@@ -876,7 +981,7 @@ bool AERPlayerController::RequestAttackOn(AActor* Target)
 	{
 		return false;
 	}
-	const FGameplayTag SlotTag = ResolveModeSlot(*ASC, ERTags::Ability_Slot_Attack);
+	const FGameplayTag SlotTag = ResolveSlot(*ASC, ERTags::Ability_Slot_Attack);
 	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
 	{
 		if (!Spec.Ability || !Spec.DynamicAbilityTags.HasTagExact(SlotTag))

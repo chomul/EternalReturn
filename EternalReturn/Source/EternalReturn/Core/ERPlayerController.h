@@ -38,6 +38,9 @@ protected:
 	virtual void PlayerTick(float DeltaTime) override;
 	/** 로컬 PC — 소리 감쇠 거리를 카메라가 아니라 **내 캐릭터**에서 잰다 (탑다운 카메라 2천cm 위 · 음성 3D · Argument 73). 방향(좌우)은 카메라 그대로 */
 	virtual void SetPawn(APawn* InPawn) override;
+	/** 빈사 아군 소생 요청 (F14 · Argument 75 R1) — 서버가 ASC 에 Event.Revive.Request → UERReviveAbility */
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerRequestRevive(AActor* Target);
 
 	/** 입력 액션 묶음. 에디터에서 지정한다. */
 	UPROPERTY(EditDefaultsOnly, Category = "입력")

@@ -1,0 +1,119 @@
+{
+  "_설명": "ER.Skill.ImportJson Downed — 빈사 스킬 3개 (F14 S4 · Argument 79). 모든 실험체 공통 — 실험체 DA 가 아니라 Project Settings › ER Combat › 빈사 스킬 › Downed Skills 목록이 부여한다 (Config/DefaultGame.ini). 수치 = 사용자 표 2026-10-12 (나무위키 가이드와 같음) · Q 반경 2m 사용자 결정. 형식은 Katja.json 과 같다.",
+  "Folder": "/Game/GAS/Skill/Downed",
+  "Skills": [
+    {
+      "Asset": "DA_Skill_Downed_Q",
+      "_메모": "분열 폭발 — 현재 체력 20% 소모 · 쿨 10 · 4초 뒤 반경 2m(사용자 결정) 적에게 고정 150 + 대상 현재 체력 20% → 본인 사망 (처치 = 빈사로 만든 사람). 취소 불가 · 4초 안에 빈사 체력 0 이면 폭발 없음. 야생동물도 맞는지 (미확인) — 적 전체로 둠",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.Downed.Q\")",
+        "AbilityClass": "/Script/EternalReturn.ERDownedAbility",
+        "MaxLevel": 1,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(10)",
+        "CostType": "HPCurrentRatio",
+        "Costs": "(0.2)",
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 2
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_FuseBlast",
+          "Props": {
+            "Delay": 4,
+            "bKillSelf": true
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Fixed",
+            "BaseDamage": "(150)",
+            "FixedCurHPRatio": "(0.2)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Downed_W",
+      "_메모": "집념 — 현재 체력 10% 소모 · 쿨 4 · 빈사 이속 +100% 3초. +100% 는 ER Combat › Downed Obstinacy Move Speed Bonus (빈사 이속이 Override 라 PlayerState 가 태그를 보고 바꾼다 · Argument 79 D4). 판정 반경 0 (자기만)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.Downed.W\")",
+        "AbilityClass": "/Script/EternalReturn.ERDownedAbility",
+        "MaxLevel": 1,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(4)",
+        "CostType": "HPCurrentRatio",
+        "Costs": "(0.1)",
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_TimedTag",
+          "Props": {
+            "Tag": "(TagName=\"State.DownedSkill.Obstinacy\")",
+            "Duration": "(3)"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Downed_R",
+      "_메모": "자가 제세동 — 현재 체력 90% 소모 · 쿨 20 · 20초 집중 (이동 · 다른 빈사 스킬 불가 · 출혈 계속 — 사용자 2026-10-12) → 체력 25% 로 소생 (ER Combat Revive HP Ratio). 다시 R = 취소 · CC = 끊김 → 쿨 80% 반환 · 잠금 없음 (사용자 2026-10-12)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.Downed.R\")",
+        "AbilityClass": "/Script/EternalReturn.ERDownedAbility",
+        "MaxLevel": 1,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(20)",
+        "CostType": "HPCurrentRatio",
+        "Costs": "(0.9)",
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfRevive",
+          "Props": {
+            "ChannelSeconds": 20,
+            "FailRefund": 0.8
+          }
+        }
+      ]
+    }
+  ]
+}

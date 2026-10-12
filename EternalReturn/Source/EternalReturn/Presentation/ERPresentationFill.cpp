@@ -32,6 +32,7 @@
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Presentation/ERPresentationData.h"
+#include "Presentation/ERSoundSettings.h"
 #include "Sound/SoundBase.h"
 #include "UObject/Package.h"
 #include "Wildlife/ERWildlifeData.h"
@@ -1372,6 +1373,19 @@ namespace
 
 		// 3.7) 음성 (Argument 73) — Voice/ko/<캐릭터> · 규칙 Data/Presentation/_Voice.json · 스킨 VoiceSkin.csv
 		const int32 VoiceRows = FillVoice(Char, *Base, Folder, SkinAssets, bForce, Stats);
+
+		// 3.8) 공용 소리 — 이제 ER Sound + 사운드 서브시스템 (Argument 78). 예전에 복사해 둔 줄을 지운다 (공용 키 · 지운 태그 Pres.Sfx.Gather.* 처럼 키가 비게 된 줄)
+		{
+			const UERSoundSettings& SoundSettings = UERSoundSettings::Get();
+			const int32 Before = Base->Sounds.Num();
+			Base->Modify();
+			Base->Sounds.RemoveAll([&SoundSettings](const FERPresentationEntry& E) { return !E.Key.IsValid() || SoundSettings.Find(E.Key) != nullptr; });
+			if (Base->Sounds.Num() != Before)
+			{
+				Base->MarkPackageDirty();
+				UE_LOG(LogEternalReturn, Log, TEXT("[연출 Fill] %s — 공용 소리 옛 줄 %d 개 지움 (이제 ER Sound)"), *Char, Before - Base->Sounds.Num());
+			}
+		}
 
 		// 4) 실험체 DA 에 연결 — 이름에 캐릭터 이름이 든 UERCharacterData 가 하나일 때만
 		TArray<FAssetData> CharDAs = FindAssets(TEXT("/Game"), UERCharacterData::StaticClass());

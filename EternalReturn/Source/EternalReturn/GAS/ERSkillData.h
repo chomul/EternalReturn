@@ -42,6 +42,8 @@ enum class ESkillCostType : uint8
 	None,
 	VP,
 	HP,
+	/** 현재 체력의 비율 — Costs 가 0~1 (빈사 스킬 "현재 체력 90%" · Argument 79). 하한 1 은 HP 와 같다 */
+	HPCurrentRatio,
 };
 
 /** 피해 채널. 기본 공격은 별도(평타 어빌리티). ERDamageExecution 이 태그로 방어력·치명타 적용을 가른다 (F03). */

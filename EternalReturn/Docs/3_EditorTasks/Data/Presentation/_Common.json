@@ -33,6 +33,49 @@
       "Keys": [
         "Pres.Anim.ModeEnd"
       ]
+    },
+    {
+      "Token": "common",
+      "Act": "down_start",
+      "Keys": [
+        "Pres.Anim.DownEnd"
+      ],
+      "bToBase": true,
+      "_메모": "빈사 (Argument 75 · 76) — AnimBP 빈사 전용 상태. 사용자 확인 2026-10-08: down_start = 빈사에서 **일어날 때** (이름과 달리) · down_wait = 빈사 대기 · down_run = 빈사 이동 · down_dead = 빈사에서 사망 · Common_death = 빈사 없이 바로 사망 (터미네이트). 쓰러지는 애니는 없다 → 빈사 대기로 바로"
+    },
+    {
+      "Token": "common",
+      "Act": "down_wait",
+      "Keys": [
+        "Pres.Anim.DownIdle"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "common",
+      "Act": "down_run",
+      "Keys": [
+        "Pres.Anim.DownRun"
+      ],
+      "bToBase": true
+    },
+    {
+      "Token": "common",
+      "Act": "resurrect",
+      "Keys": [
+        "Pres.Anim.Revive"
+      ],
+      "bToBase": true,
+      "_메모": "아군을 소생하는 쪽 동작 (사용자 2026-10-08) — State.Reviving 동안 반복"
+    },
+    {
+      "Token": "common",
+      "Act": "down_dead",
+      "Keys": [
+        "Pres.Anim.DownDead"
+      ],
+      "bToBase": true,
+      "_메모": "빈사에서 사망 — 없으면 Pres.Anim.Death"
     }
   ]
 }

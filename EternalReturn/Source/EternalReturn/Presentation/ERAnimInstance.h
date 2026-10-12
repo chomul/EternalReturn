@@ -41,6 +41,17 @@ public:
 	/** [게임 스레드] 사망 — 쓰러지는 애니 (`Pres.Anim.Death`). bSkipToEnd = 늦게 relevant 된 클라: 쓰러지는 과정 없이 **누운 채로** (마지막 프레임부터). */
 	void SetDead(UAnimSequenceBase* Anim, bool bSkipToEnd) { PendingDeathAnim = Anim; bPendingDeathSkipToEnd = bSkipToEnd; bPendingDead = true; }
 
+	/**
+	 * [게임 스레드] 빈사 (F14 · Argument 76 — 모드와 따로인 **전용 상태**). 애니 4개 = 쓰러짐 · 대기 · 기어감 · 일어섬 (null 이면 그 단계를 건너뛴다).
+	 * bSkipIntro = 늦게 relevant — 쓰러지는 과정 없이 대기부터.
+	 */
+	void SetDowned(bool bInDowned, bool bSkipIntro, UAnimSequenceBase* Start, UAnimSequenceBase* Idle, UAnimSequenceBase* Run, UAnimSequenceBase* End)
+	{
+		bPendingDowned = bInDowned; bPendingDownSkipIntro = bSkipIntro;
+		PendingDownAnims[0] = Start; PendingDownAnims[1] = Idle; PendingDownAnims[2] = Run; PendingDownAnims[3] = End;
+		bPendingDown = true;
+	}
+
 	/** [게임 스레드] 쉬는 자세 (F12.6-02 야생동물 경계 · 잠) + 애니 6개. null 이면 그 단계가 없는 종 — 상태머신이 bHas* 로 건너뛴다. */
 	void SetRest(bool bInBeware, bool bInSleep, bool bSkipIntro, UAnimSequenceBase* BewareStart, UAnimSequenceBase* BewareLoop, UAnimSequenceBase* BewareEnd,
 		UAnimSequenceBase* SleepStart, UAnimSequenceBase* SleepLoop, UAnimSequenceBase* Wake)
@@ -108,6 +119,33 @@ protected:
 	/** 0 = 처음부터 쓰러진다 · 애니 길이 = 누운 마지막 프레임 (늦게 relevant). */
 	UPROPERTY(BlueprintReadOnly, Category = "상태")
 	float DeathStartPosition = 0.f;
+
+	/**
+	 * 빈사 (F14 · Argument 76) — 상태머신: (평소 · 모드 어디서든) → DownStart → DownLoop [대기 ⇄ 기어감 (bIsMoving)] → DownEnd → Idle. 사망이 이긴다.
+	 * ⭐ 전이 조건은 변수 하나씩 (Fast Path). 모드 중(재키 R 전기톱 …)에 쓰러져도 이 상태가 따로라 쓰러짐 · 일어섬이 나온다.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "빈사")
+	bool bDowned = false;
+	/** 평소 · 모드 → DownStart */
+	UPROPERTY(BlueprintReadOnly, Category = "빈사")
+	bool bDownIntro = false;
+	/** 평소 · 모드 → DownLoop (쓰러짐 애니 없음 · 늦게 받음) */
+	UPROPERTY(BlueprintReadOnly, Category = "빈사")
+	bool bDownDirect = false;
+	/** DownStart · DownLoop → DownEnd (소생 · 일어섬). 사망이면 거짓 — Dead 가 이긴다 */
+	UPROPERTY(BlueprintReadOnly, Category = "빈사")
+	bool bDownOutro = false;
+	/** DownStart · DownLoop → Idle (일어섬 애니 없음) */
+	UPROPERTY(BlueprintReadOnly, Category = "빈사")
+	bool bDownQuit = false;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "빈사")
+	TObjectPtr<UAnimSequenceBase> DownStartAnim;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "빈사")
+	TObjectPtr<UAnimSequenceBase> DownIdleAnim;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "빈사")
+	TObjectPtr<UAnimSequenceBase> DownRunAnim;
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "빈사")
+	TObjectPtr<UAnimSequenceBase> DownEndAnim;
 
 	/**
 	 * 쉬는 자세 (F12.6-02 · 야생동물) — 상태머신: 대기 ↔ 경계(시작 → 반복 → 끝) · 대기 ↔ 잠(시작 → 반복 → 깸). 움직이면 이동이 이긴다.
@@ -185,6 +223,13 @@ private:
 	bool bPendingDeathSkipToEnd = false;
 	UPROPERTY(Transient)
 	TObjectPtr<UAnimSequenceBase> PendingDeathAnim;
+
+	/** SetDowned 가 쓴 값 — 게임 스레드 업데이트에서 옮긴다. */
+	bool bPendingDown = false;
+	bool bPendingDowned = false;
+	bool bPendingDownSkipIntro = false;
+	UPROPERTY(Transient)
+	TObjectPtr<UAnimSequenceBase> PendingDownAnims[4];
 
 	/** SetRest 가 쓴 값 — 게임 스레드 업데이트에서 옮긴다. */
 	bool bPendingRest = false;

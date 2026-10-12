@@ -145,9 +145,58 @@ public:
 	UFUNCTION(Client, Unreliable)
 	void ClientPlayVoice(FGameplayTag VoiceKey);
 
+	/** [서버 → 이 플레이어 화면만] 효과음 키 하나를 2D 로 (팀 알림 — 팀원 빈사 · 소생 · 전멸 · F14 · 사용자 2026-10-08). 소리는 자기 캐릭터 동작표 → 없으면 공용 ER Sound (Argument 78) */
+	UFUNCTION(Client, Unreliable)
+	void ClientPlaySfx(FGameplayTag SfxKey);
+
+	/** [서버 → 이 플레이어 화면만] 소리 애셋 하나를 2D 로 — 키가 아니라 데이터 칸이 애셋을 직접 가리킬 때 (상자 모양마다 다른 여는 소리 · DT_Loot OpenSounds) */
+	UFUNCTION(Client, Unreliable)
+	void ClientPlaySoundPath(const FSoftObjectPath& SoundPath);
+
 protected:
 	/** [서버] 이번 판 실험체 처치 수 (막타) — 누적 처치 음성 kill<N>Player. 복제 안 함 (UI 는 F14) */
 	int32 PlayerKills = 0;
+
+public:
+	// ── 빈사 · 사망 · 소생 (F14 · Argument 75) ── 상태는 태그 (State.Downed · State.Dead) — 어느 머신에서나 읽힌다
+	bool IsDowned() const;
+	bool IsDead() const;
+	/** 폰이 있고 빈사도 사망도 아니다 (빈사 판단 · 전멸 판단) */
+	bool IsStanding() const;
+	/** [서버] 아군 소생 완료 (UERReviveAbility) — 빈사를 풀고 체력 = 최대 × ReviveHPRatio. 자가 제세동은 By = 자기 */
+	void Revive(AERPlayerState* By);
+	/** [서버] 빈사 스킬 분열 폭발 뒤 사망 (Argument 79) — 빈사일 때만. 처치 = 빈사로 만든 사람 (K2) */
+	void SelfDestruct();
+
+protected:
+	/** [서버] 체력 0 알림 (UERAttributeSet::OnOutOfHealth) — 빈사 중이면 사망 · 서 있는 팀원이 있으면 빈사 · 없으면 사망 · 그 뒤 전멸 검사 */
+	void HandleOutOfHealth(AActor* LastHitter);
+	void EnterDowned(AERPlayerState* By);
+	/** 빈사 GE · 체력 감소 GE · 받는 피해 감소를 걷는다 (소생 · 사망) */
+	void ClearDowned();
+	/** 사망 — 처치자 = 빈사로 만든 사람 (K2) · 없으면 LastHitter (마지막 가해자). 시체 · 처치 이벤트 · 처치 경험치 · 음성 */
+	void Die(AActor* LastHitter);
+	/** 스킬의 "처치 시" 이벤트 (Event.Kill.Dealt) — **빈사로 만든 순간만** (사용자 2026-10-08). 바로 사망 · 빈사에서 사망은 안 보낸다 */
+	void SendKillEvent(AERPlayerState* KillerPS, APawn* VictimPawn);
+	/** 우리 팀에 서 있는 사람이 없으면 빈사자 전원 사망 (전멸) · 전멸시킨 팀에 알림 (Terminator = 이번에 쓰러뜨린 사람) */
+	void CheckTeamWipe(AERPlayerState* Terminator);
+	/** 팀원들(나 빼고 · bIncludeSelf 면 나도) 화면에 효과음 2D */
+	void SendTeamSfx(FGameplayTag SfxKey, bool bIncludeSelf);
+	/** 시전 중 어빌리티 전부 취소 (패시브 제외) */
+	void CancelActiveAbilities();
+	/** 같은 팀 다른 플레이어 (GameState PlayerArray) */
+	void ForEachTeammate(TFunctionRef<void(AERPlayerState&)> Fn) const;
+
+	FActiveGameplayEffectHandle DownedHandle;
+	FActiveGameplayEffectHandle BleedHandle;
+	/** 빈사 스킬 (ER Combat DownedSkills) — 모든 실험체 · BeginPlay 에서 한 번 */
+	FERGrantedSkillHandles DownedSkills;
+	/** [서버] 집념 태그가 붙고 빠질 때 — 빈사 GE 의 이속 SetByCaller 를 바꾼다 (Override 라 버프 GE 로는 안 먹는다 · Argument 79 D4) */
+	void OnObstinacyChanged(const FGameplayTag Tag, int32 Count);
+	/** 지금 빈사 이속 (집념 중이면 × (1 + 보너스)) */
+	float GetDownedMoveSpeed() const;
+	/** [서버] 나를 빈사로 만든 사람 (K2 처치 인정) — 소생 · 사망 때 비운다 */
+	TWeakObjectPtr<AERPlayerState> DownedBy;
 
 public:
 	/** 인벤토리 (F08). ⭐ ASC 와 같은 액터에 — 장비 GE 와 핸들의 수명이 같다 (Docs/4_Argument/21). */

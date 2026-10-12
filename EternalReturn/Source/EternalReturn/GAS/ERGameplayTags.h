@@ -20,6 +20,7 @@
 namespace ERTags
 {
 	// ── 군중 제어 ──────────────────────────────────────────────
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CC);             // 부모 — 아래 어느 것이든 (소생 채널 끊기 · Argument 75 R1)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CC_Stun);        // 기절 — 이동·평타·스킬 전부 차단
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CC_Airborne);    // 에어본 — 기절과 같은 축 전부 차단 · 방해 저항 안 받음 (F12.6-03 멧돼지 돌진)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Frustrated);     // 좌절 — 스킬 실패 벌칙 표시 (멧돼지 돌진 빗나감 · 시전 중 CC). 막는 축은 함께 거는 기절이 맡는다
@@ -68,6 +69,15 @@ namespace ERTags
 
 	// ⏸ 대상 지정 불가 — 이미 적용된 효과 외 전부 무시. 요구 사례 없음. 자리만.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Untargetable);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Downed);   // 빈사 (Argument 75) — 스킬 · 평타 · 줍기 · 제작 막힘 · 느림 · 받는 피해 감소 · 초당 체력 감소. UERDownedEffect 의 동적 태그
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead);   // 사망 (Argument 75) — 전부 막힘 · 대상 안 됨 · 못 움직임. UERDeadEffect 의 동적 태그
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Dead_FromDowned);   // 빈사에서 사망 — 사망 애니를 down_dead 로 (사망 GE 에 같이 · 빈사 태그가 빠지는 순서와 무관하게)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Reviving);   // 아군을 소생하는 중 (소생 어빌리티 ActivationOwnedTags — 연출 · 다른 소생 막기)
+	// ⚠ State.Downed 아래에 두지 않는다 — 부모 일치로 IsDowned() 가 참이 된다 (집념 3초가 소생 뒤까지 남으면 "빈사" 로 보임)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_DownedSkill_Obstinacy);    // 빈사 스킬 W 집념 중 — PlayerState 가 빈사 이속을 올린다 (Argument 79 D4)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_DownedSkill_SelfReviving); // 빈사 스킬 R 자가 제세동 집중 중 — 다른 빈사 스킬 막힘 (재입력 = 취소)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_DownedSkill_Fuse);         // 빈사 스킬 Q 분열 폭발 도화선 중 — 다른 빈사 스킬 막힘
+	// ⭐ 위 셋 중 하나라도 있으면 빈사 스킬 전부 막힌다 (UERDownedAbility · 사용자 2026-10-12 "스킬 하나 쓰면 다른 스킬 못 씀")
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CCImmune);       // 이동 방해 면역 (매그너스 R)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Bleeding);       // 출혈 중 (재키 P · UERBleedEffect 동적 태그 · Argument 65 D1)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Adrenaline);     // 아드레날린 분비 (재키 P — 적중마다 출혈 최대 · 추가 피해 · 회복)
@@ -119,7 +129,8 @@ namespace ERTags
 	// 입력 → 어빌리티. PC 가 어빌리티 내부를 모르게 하는 통로 (SendGameplayEventToActor).
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Input_Move);        // 이동 명령이 서버에서 수락됨
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Skill_Aim);         // 스킬 발동 요청에 실린 조준 데이터 (Docs/4_Argument/18)
-	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Kill_Dealt);        // 내가 적 실험체를 처치했다 (막타 — F14 전 임시 "처치 관여") — 플레이어 스테이트가 처치자 ASC 에 · 패시브가 듣는다 (Argument 65)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Revive_Request);   // [서버] 소생 요청 — 대상 = 빈사 아군 폰. UERReviveAbility 가 이 이벤트로 발동 (Argument 75)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Kill_Dealt);        // 스킬의 "처치 시" — 적 실험체를 **빈사로 만든 순간만** (사망은 아니다 · F14-01 · 사용자 2026-10-08 "포함이 아니라 빈사만") — 플레이어 스테이트가 빈사로 만든 사람 ASC 에 · 패시브가 듣는다 (Argument 65). ⏸ 어시스트(관여)는 아직 막타만
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Wilson_Joined);   // 윌슨과 하나가 됐다 (줍기 · 거리 복귀 · E · W) — AERWilson 이 시셀라 ASC 에 · 패시브가 듣는다 (Argument 68)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Ally_SkillHit);       // 내 스킬이 아군(자신 제외)에게 맞았다 — 적 · 아군 나누기 조각이 시전자 ASC 에 (Target = 아군)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Event_Mark_Triggered);      // 표식을 가진 가해자가 적을 때렸다 — 어트리뷰트셋이 표식 주인 ASC 에 (Instigator = 가해자 · Target = 맞은 쪽 · InstigatorTags = 표식 태그)
@@ -132,12 +143,17 @@ namespace ERTags
 	// ── 어빌리티 슬롯 ──────────────────────────────────────────
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot);         // 부모 — RPC 가 "슬롯 계열인지" 검증할 때
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_P);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Revive);   // 소생 어빌리티 표식 — 이동 · 스킬 시전이 이 태그로 취소한다 (Argument 75 R1)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Q);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_W);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_E);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_R);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_D);       // 무기가 소유하는 슬롯
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Attack);  // 기본 공격 (F07-07). 무기가 소유 (F11). 포인트 대상 아님
+	// 빈사 스킬 (F14 S4 · Argument 79 I1) — 빈사 중 Q · W · R 입력이 이 슬롯으로 바뀐다 (PC ResolveDownedSlot)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Downed_Q);   // 분열 폭발
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Downed_W);   // 집념
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Downed_R);   // 자가 제세동
 
 	// ── 리캐스트 연출 키 (F12.5-03 · 사용자 2026-09-29) ── 슬롯의 **자식**이라 슬롯 매칭(HasTagExact)에는 안 걸린다.
 	//   리캐스트(재입력)로 발동하면 연출 컴포넌트가 이 키를 먼저 찾고, 없으면 슬롯 키로 떨어진다 — 단검 D: 1번째(망토) 모션 없음 · 2번째 = 찌르기
@@ -165,6 +181,9 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_R);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_D);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Attack);   // 평타 간격 = 1 / AttackSpeed
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Downed_Q);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Downed_W);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Downed_R);
 
 	// ── 무기별 D 쿨다운 (F11-04 · Docs/4_Argument/25 방안 B) ─────
 	// D 는 슬롯 태그 대신 이 태그로 쿨다운을 건다 (UERSkillData.CooldownTagOverride) — 무기를 바꿔도 각자 보존. 초기 8계열.
@@ -225,6 +244,8 @@ namespace ERTags
 
 	// 상태 GE(다음 평타 강화 · 리캐스트 윈도우)의 길이(초). 0 이하면 어빌리티가 Infinite 클래스를 쓴다.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_StateDuration);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Downed_MoveSpeed);   // 빈사 이동 속도 (m/s · Override) — UERCombatSettings
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_Downed_Bleed);   // 빈사 초당 체력 변화 (음수) — UERCombatSettings
 
 	// 잃은 체력 비례 스탯 (시셀라 P) — 최소(체력 100%) · 최대(체력 0%). MMC 가 읽는다 (UERLostHPStatCalc)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(SetByCaller_LostHP_RegenMin);
@@ -384,6 +405,13 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillShield_E);    // E 시셀라 적중 — 보호막 (Skill03_Shield)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillCount_R);     // R 카운트 (Skill04_Count · 한 번)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_SkillLand_R);      // R 늦춘 판정 순간 폭발 (Skill04_Explosion · 착지 큐의 R 몫)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Downed);   // 빈사로 쓰러질 때 (공용 · 소리는 ER Sound — Argument 78)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Resurrect);   // 소생돼 일어설 때 (공용)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_TeamDown);     // 팀원 빈사 알림 — 우리 팀만 2D (UI 소리 · 사용자 2026-10-08)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_TeamRevival);  // 팀원 소생 완료 알림 — 우리 팀만 2D
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Terminate);    // 적 팀 전멸시킴 (터미네이트) — 전멸시킨 팀만 2D
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_Craft);           // 제작 완료 — 여러 개 이어서 (ER Sound Craft Count · 주변)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Sfx_BoxOpenUI);       // 상자 처음 열 때 UI 소리 (본인 2D · 상자 모양 소리는 DT_Loot OpenSounds)
 
 	// 연출 큐 (F12.5-05 · Argument 49) — 네트워크 사건. 무엇을 틀지는 키가 정한다 (큐 ≠ 키)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_Pres_Attack);   // 시전자 — 공격이 나갔다 (판정 시점)
@@ -430,12 +458,21 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_LootCorpse_Self);   // [본인] 내가 처치한 실험체 시체에서 꺼낼 때
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_LootCorpse_Other);   // [본인] 남이 처치한 실험체 시체
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_LearnWeaponSkill);   // [본인] D 습득 (숙련도로 0 → 1) — 줄은 무기 세트 DA 에
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Save);   // [본인] 쓰러진 아군 소생 시작 (save)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Voice_Resurrection);   // [본인] 아군이 나를 일으켜 세웠을 때 (resurrection)
 	// 모드 상태 애니 (Argument 42 ⑥ A2) — 모드 칸이 있는 줄에만 쓴다. C++ 가 해석해 AnimInstance 에 넘기고 상태머신이 튼다
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_AttackEnhanced);   // 강화를 소비하는 평타 (재키 W skill02_attack) — 없으면 평소 평타 (Argument 66 E1)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeStart);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeIdle);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeRun);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_ModeEnd);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_DownDead);   // 빈사에서 사망 (down_dead) — 없으면 Pres.Anim.Death
+	// 빈사 자세 (Argument 76 — 모드가 아니라 AnimBP 빈사 전용 상태) — 쓰러짐 · 대기 · 기어감 · 일어섬
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_DownStart);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_DownIdle);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_DownRun);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_DownEnd);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Pres_Anim_Revive);   // 아군을 소생하는 쪽 동작 (resurrect · 사용자 2026-10-08) — State.Reviving 동안 몽타주 반복
 
 	// ── 연출 모드 (Argument 42) ── 서버가 복제 loose 태그로 붙인다. 각 머신의 연출 컴포넌트가 부모(Mode)를 구독해 모드 세트를 고른다.
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Mode);              // 부모 — 구독용

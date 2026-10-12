@@ -17,6 +17,7 @@
 #include "EternalReturn.h"
 #include "GameFramework/Character.h"
 #include "Presentation/ERPresentationData.h"
+#include "Presentation/ERSoundSubsystem.h"
 #include "Core/ERPlayerState.h"
 #include "GAS/ERGameplayTags.h"
 #include "Presentation/ERAnimInstance.h"
@@ -25,6 +26,7 @@
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
+#include "Combat/ERCombatSettings.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
 #include "Weapon/ERWeaponLibrary.h"
@@ -366,6 +368,21 @@ void UERPresentationComponent::SendSfxCue(AActor* Instigator, FGameplayTag SfxKe
 	ASC->ExecuteGameplayCue(ERTags::GameplayCue_Pres_Sfx, P);
 }
 
+void UERPresentationComponent::SendSoundAssetCue(AActor* Instigator, USoundBase* Sound, const FVector& Location)
+{
+	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Instigator);
+	if (!ASC || !Sound || !Instigator->HasAuthority())
+	{
+		return;
+	}
+	FGameplayCueParameters P;
+	P.Instigator = Instigator;
+	P.EffectCauser = Instigator;
+	P.SourceObject = Sound;   // NetSerialize 가 실어 보낸다 — 받는 쪽이 키 대신 이 애셋을 튼다
+	P.Location = Location;
+	ASC->ExecuteGameplayCue(ERTags::GameplayCue_Pres_Sfx, P);
+}
+
 void UERPresentationComponent::SendAnimCue(AActor* Instigator, FGameplayTag AnimKey)
 {
 	UAbilitySystemComponent* ASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Instigator);
@@ -487,13 +504,26 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 		{
 			if (T.MatchesTag(SfxRoot)) { Key = T; break; }
 		}
-		USoundBase* Sound = From && Key.IsValid() ? From->PickSound(Key) : nullptr;
+		const FVector At = Params.Location.IsNearlyZero() ? GetOwner()->GetActorLocation() : FVector(Params.Location);
+		// 찾는 순서 (Argument 78) — 큐에 실린 애셋(물체 소리 · DT_Loot) → 시전자 연출 DA(캐릭터 · 스킨) → 공용 표(ER Sound)
+		USoundBase* Sound = Cast<USoundBase>(const_cast<UObject*>(Params.SourceObject.Get()));
+		const TCHAR* Where = TEXT("물체 행");
 		if (Sound)
 		{
-			UGameplayStatics::PlaySoundAtLocation(this, Sound, Params.Location.IsNearlyZero() ? GetOwner()->GetActorLocation() : FVector(Params.Location));
+			UGameplayStatics::PlaySoundAtLocation(this, Sound, At);
 		}
-		UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 소리 %s ← %s 의 %s (%s)"), *GetNameSafe(GetOwner()),
-			Sound ? *Sound->GetName() : TEXT("없음"), *GetNameSafe(By), *Key.ToString(), NetTag(GetOwner()));
+		else if ((Sound = From && Key.IsValid() ? From->PickSound(Key) : nullptr) != nullptr)
+		{
+			Where = TEXT("캐릭터 DA");
+			UGameplayStatics::PlaySoundAtLocation(this, Sound, At);
+		}
+		else if (UERSoundSubsystem* Common = Key.IsValid() ? UERSoundSubsystem::Get(this) : nullptr)
+		{
+			Where = TEXT("공용");
+			Sound = Common->PlayAt(Key, At);
+		}
+		UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 소리 %s ← %s 의 %s [%s] (%s)"), *GetNameSafe(GetOwner()),
+			Sound ? *Sound->GetName() : TEXT("없음"), *GetNameSafe(By), *Key.ToString(), Sound ? Where : TEXT("-"), NetTag(GetOwner()));
 		return;
 	}
 
@@ -654,13 +684,19 @@ void UERPresentationComponent::PushStateToAnim()
 	}
 	if (bDead)
 	{
-		UAnimSequenceBase* Death = FindFirstAnim(ERTags::Pres_Anim_Death);
+		// 빈사에서 죽었으면 down_dead (사망 GE 의 State.Dead.FromDowned · Argument 76) · 없으면 일반 사망
+		const UAbilitySystemComponent* DeadASC = ModeASC.Get();
+		UAnimSequenceBase* DownDead = DeadASC && DeadASC->HasMatchingGameplayTag(ERTags::State_Dead_FromDowned) ? FindFirstAnim(ERTags::Pres_Anim_DownDead) : nullptr;
+		UAnimSequenceBase* Death = DownDead ? DownDead : FindFirstAnim(ERTags::Pres_Anim_Death);
 		if (!Death && !Cache.IsEmpty())   // 비어 있으면 아직 SetBase 전 (OnRep 순서) — SetBase 의 Rebuild 가 다시 부른다
 		{
 			UE_LOG(LogEternalReturn, Warning, TEXT("[연출] %s 사망 애니가 없다 — 동작표에 Pres.Anim.Death 줄"), *GetNameSafe(GetOwner()));
 		}
 		Anim->SetDead(Death, bDeathSkipToEnd);
 	}
+	// 빈사 (F14 · Argument 76) — 애니는 동작표에서 (Rebuild 뒤에도 다시 넘긴다)
+	Anim->SetDowned(bDowned, bDownedSkipIntro, FindFirstAnim(ERTags::Pres_Anim_DownStart), FindFirstAnim(ERTags::Pres_Anim_DownIdle),
+		FindFirstAnim(ERTags::Pres_Anim_DownRun), FindFirstAnim(ERTags::Pres_Anim_DownEnd));
 	// 쉬는 자세 (F12.6-02) — 애니는 동작표에서 (없으면 null → 상태머신이 그 단계를 건너뛴다)
 	Anim->SetRest(RestPose == EERRestPose::Beware, RestPose == EERRestPose::Sleep, bRestSkipIntro,
 		FindFirstAnim(ERTags::Pres_Anim_BewareStart), FindFirstAnim(ERTags::Pres_Anim_BewareLoop), FindFirstAnim(ERTags::Pres_Anim_BewareEnd),
@@ -694,9 +730,17 @@ void UERPresentationComponent::SetDead(bool bSkipToEnd)
 	// 사망음 (F12.5-05) — 쓰러지는 걸 보는 머신만. 늦게 relevant 된 클라(이미 누워 있음)는 안 튼다. 신호는 복제 상태 bDead 라 큐가 필요 없다
 	if (!bSkipToEnd && GetNetMode() != NM_DedicatedServer)
 	{
-		if (USoundBase* Die = PickSound(ERTags::Pres_Sfx_Die))
+		USoundBase* Die = PickSound(ERTags::Pres_Sfx_Die);
+		if (Die)
 		{
 			UGameplayStatics::PlaySoundAtLocation(this, Die, GetOwner()->GetActorLocation());
+		}
+		else if (UERSoundSubsystem* Common = ModeASC.IsValid() && Cast<AERPlayerState>(ModeASC->GetOwnerActor()) ? UERSoundSubsystem::Get(this) : nullptr)
+		{
+			Die = Common->PlayAt(ERTags::Pres_Sfx_Die, GetOwner()->GetActorLocation());   // 실험체 = 공용 (Argument 78) · 야생동물은 종마다 DA 에만
+		}
+		if (Die)
+		{
 			UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 사망음 %s (%s)"), *GetNameSafe(GetOwner()), *Die->GetName(), NetTag(GetOwner()));
 		}
 	}
@@ -1051,7 +1095,10 @@ void UERPresentationComponent::BindModeTags(UAbilitySystemComponent* InASC)
 	{
 		Old->RegisterGameplayTagEvent(ERTags::Mode, EGameplayTagEventType::AnyCountChange).Remove(ModeTagHandle);
 		Old->RegisterGameplayTagEvent(ERTags::State_Gathering, EGameplayTagEventType::NewOrRemoved).Remove(GatherTagHandle);
+		Old->RegisterGameplayTagEvent(ERTags::State_Reviving, EGameplayTagEventType::NewOrRemoved).Remove(RevivingTagHandle);
 		Old->RegisterGameplayTagEvent(ERTags::State_AnimHold, EGameplayTagEventType::NewOrRemoved).Remove(AnimHoldTagHandle);
+		Old->RegisterGameplayTagEvent(ERTags::State_Dead, EGameplayTagEventType::NewOrRemoved).Remove(DeadTagHandle);
+		Old->RegisterGameplayTagEvent(ERTags::State_Downed, EGameplayTagEventType::NewOrRemoved).Remove(DownedTagHandle);
 		UnbindPropTags(Old);
 		for (const TPair<FGameplayTag, FDelegateHandle>& H : LoopSfxTagHandles)
 		{
@@ -1066,8 +1113,17 @@ void UERPresentationComponent::BindModeTags(UAbilitySystemComponent* InASC)
 	// 채집 (04 · Argument 46 · 47) — 모드와 같은 길: 서버가 복제 loose 태그 → 각 머신이 자기 화면에 몽타주
 	GatherTagHandle = InASC->RegisterGameplayTagEvent(ERTags::State_Gathering, EGameplayTagEventType::NewOrRemoved)
 		.AddUObject(this, &UERPresentationComponent::OnGatherTagChanged);
+	// 아군 소생 중 (F14) — 같은 길
+	RevivingTagHandle = InASC->RegisterGameplayTagEvent(ERTags::State_Reviving, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &UERPresentationComponent::OnRevivingTagChanged);
 	AnimHoldTagHandle = InASC->RegisterGameplayTagEvent(ERTags::State_AnimHold, EGameplayTagEventType::NewOrRemoved)
 		.AddUObject(this, &UERPresentationComponent::OnAnimHoldTagChanged);
+	// 실험체 사망 (F14 · Argument 75) — 서버의 사망 GE 태그가 모두에게 온다 → 각 머신이 사망 포즈. 야생동물은 bDead 복제로 (따로)
+	DeadTagHandle = InASC->RegisterGameplayTagEvent(ERTags::State_Dead, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &UERPresentationComponent::OnDeadTagChanged);
+	// 빈사 (F14 · Argument 76) — 같은 길: 서버 GE 태그 → 각 머신이 AnimBP 빈사 상태
+	DownedTagHandle = InASC->RegisterGameplayTagEvent(ERTags::State_Downed, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &UERPresentationComponent::OnDownedTagChanged);
 	BindPropTags();   // 소품 켜는 태그 (Argument 64 B1) — 이미 타고 있으면 바로 붙는다
 	for (const FLoopSfx& L : LoopSfxTable())
 	{
@@ -1076,6 +1132,44 @@ void UERPresentationComponent::BindModeTags(UAbilitySystemComponent* InASC)
 	}
 	RefreshLoopSfx(/*bPlayStart=*/false);   // 늦게 들어온 클라 — 이미 도는 중이면 반복만
 	RefreshMode();   // 이미 모드 중에 붙었을 수 있다 (늦은 relevant · 부활)
+	if (InASC->HasMatchingGameplayTag(ERTags::State_Dead))
+	{
+		SetDead(/*bSkipToEnd=*/true);   // 이미 죽어 있다 (늦은 relevant) — 쓰러지는 과정 없이 누운 채로
+	}
+	else if (InASC->HasMatchingGameplayTag(ERTags::State_Downed))
+	{
+		SetDownedPose(true, /*bSkipIntro=*/true);   // 이미 빈사 (늦은 relevant) — 쓰러지는 과정 없이 대기부터
+	}
+}
+
+void UERPresentationComponent::OnDownedTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	SetDownedPose(NewCount > 0, /*bSkipIntro=*/false);
+}
+
+void UERPresentationComponent::SetDownedPose(bool bInDowned, bool bSkipIntro)
+{
+	if (bDowned == bInDowned)
+	{
+		return;
+	}
+	bDowned = bInDowned;
+	bDownedSkipIntro = bSkipIntro;
+	if (bInDowned)
+	{
+		StopActionAnim();   // 시전 모션 중에 쓰러지면 끊고 쓰러진다
+	}
+	PushStateToAnim();
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 빈사 자세 %s%s (%s)"), *GetNameSafe(GetOwner()), bInDowned ? TEXT("시작") : TEXT("끝"),
+		bInDowned && bSkipIntro ? TEXT(" · 늦게 받음 — 대기부터") : TEXT(""), NetTag(GetOwner()));
+}
+
+void UERPresentationComponent::OnDeadTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	if (NewCount > 0)
+	{
+		SetDead(/*bSkipToEnd=*/false);
+	}
 }
 
 void UERPresentationComponent::OnAnimHoldTagChanged(const FGameplayTag Tag, int32 NewCount)
@@ -1149,6 +1243,36 @@ void UERPresentationComponent::OnGatherTagChanged(const FGameplayTag Tag, int32 
 		*Seq->GetName(), Length, Loops, Seconds, NetTag(GetOwner()));
 }
 
+void UERPresentationComponent::OnRevivingTagChanged(const FGameplayTag Tag, int32 NewCount)
+{
+	const ACharacter* Character = Cast<ACharacter>(GetOwner());
+	UAnimInstance* Anim = Character && Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	if (NewCount <= 0)
+	{
+		if (Anim && ReviveMontage.IsValid() && Anim->Montage_IsPlaying(ReviveMontage.Get()))
+		{
+			Anim->Montage_Stop(BlendOut, ReviveMontage.Get());
+		}
+		ReviveMontage.Reset();
+		UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 소생 동작 끝 (%s)"), *GetNameSafe(GetOwner()), NetTag(GetOwner()));
+		return;
+	}
+	UAnimSequenceBase* Seq = FindFirstAnim(ERTags::Pres_Anim_Revive);
+	if (!Anim || !Seq)
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[연출] %s 소생 동작 없음 — AnimInstance %s · 애니 %s (동작표 Pres.Anim.Revive · ER.Pres.Fill)"),
+			*GetNameSafe(GetOwner()), *GetNameSafe(Anim), *GetNameSafe(Seq));
+		return;
+	}
+	// 반복 = 올림(소생 시간 ÷ 길이) — 채집과 같다. 끝은 태그 제거가 멈춘다 · 움직이면 AnimInstance 가 끊는다 (그때 소생도 끊긴다)
+	const float Seconds = UERCombatSettings::Get().ReviveSeconds;
+	const float Length = Seq->GetPlayLength();
+	const int32 Loops = Length > 0.f ? FMath::Max(1, FMath::CeilToInt(Seconds / Length)) : 1;
+	ReviveMontage = Anim->PlaySlotAnimationAsDynamicMontage(Seq, AnimSlotName, BlendIn, BlendOut, 1.f, Loops);
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 소생 동작 — %s %.2f초 ×%d (소생 %.1f초) (%s)"), *GetNameSafe(GetOwner()),
+		*Seq->GetName(), Length, Loops, Seconds, NetTag(GetOwner()));
+}
+
 void UERPresentationComponent::OnModeTagChanged(const FGameplayTag Tag, int32 NewCount)
 {
 	RefreshMode();
@@ -1202,7 +1326,10 @@ void UERPresentationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		ASC->RegisterGameplayTagEvent(ERTags::Mode, EGameplayTagEventType::AnyCountChange).Remove(ModeTagHandle);
 		ASC->RegisterGameplayTagEvent(ERTags::State_Gathering, EGameplayTagEventType::NewOrRemoved).Remove(GatherTagHandle);
+		ASC->RegisterGameplayTagEvent(ERTags::State_Reviving, EGameplayTagEventType::NewOrRemoved).Remove(RevivingTagHandle);
 		ASC->RegisterGameplayTagEvent(ERTags::State_AnimHold, EGameplayTagEventType::NewOrRemoved).Remove(AnimHoldTagHandle);
+		ASC->RegisterGameplayTagEvent(ERTags::State_Dead, EGameplayTagEventType::NewOrRemoved).Remove(DeadTagHandle);
+		ASC->RegisterGameplayTagEvent(ERTags::State_Downed, EGameplayTagEventType::NewOrRemoved).Remove(DownedTagHandle);
 		UnbindPropTags(ASC);
 		for (const TPair<FGameplayTag, FDelegateHandle>& H : LoopSfxTagHandles)
 		{

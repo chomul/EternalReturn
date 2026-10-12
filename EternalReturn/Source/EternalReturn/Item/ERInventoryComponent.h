@@ -176,6 +176,8 @@ public:
 
 protected:
 	UAbilitySystemComponent* GetASC() const;
+	/** [서버] 빈사 · 사망이면 true (요청 거절 · 로그) — Argument 75 */
+	bool IsIncapacitated(const TCHAR* What) const;
 
 	/** 장착에 쓰는 내부 몸통. 장착 성공 시 true. 실패하면 아무것도 바꾸지 않는다. */
 	bool ApplyEquip(const FName ItemId, const struct FERItemRow& Item);

@@ -81,6 +81,17 @@ void UERAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		DeathStartPosition = bPendingDeathSkipToEnd ? DeathAnim->GetPlayLength() : 0.f;
 		bDead = true;
 	}
+	if (bPendingDown)
+	{
+		bPendingDown = false;
+		DownStartAnim = PendingDownAnims[0]; DownIdleAnim = PendingDownAnims[1]; DownRunAnim = PendingDownAnims[2]; DownEndAnim = PendingDownAnims[3];
+		bDowned = bPendingDowned && DownIdleAnim;   // 대기 애니가 없으면 들어가지 않는다 (빈 포즈)
+		bDownIntro = bDowned && DownStartAnim && !bPendingDownSkipIntro;
+		bDownDirect = bDowned && !bDownIntro;
+	}
+	// 나가는 쪽은 매 틱 — 사망이 같은 업데이트에 오면 일어서지 않는다 (사망 GE 와 빈사 GE 제거가 한 번에 복제된다)
+	bDownOutro = !bDowned && DownEndAnim && !bDead;
+	bDownQuit = !bDowned && !DownEndAnim && !bDead;
 	if (bPendingRest)
 	{
 		bPendingRest = false;

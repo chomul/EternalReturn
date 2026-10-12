@@ -23,6 +23,15 @@
 #include "Net/UnrealNetwork.h"
 #include "Item/ERItemDropActor.h"
 #include "Presentation/ERPresentationComponent.h"
+#include "Presentation/ERSoundSubsystem.h"
+#include "GAS/ERDownedEffects.h"
+#include "GAS/ERReviveAbility.h"
+#include "GAS/ERPassiveAbility.h"
+#include "Core/ERTeamStatics.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameFramework/Controller.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 AERPlayerState::AERPlayerState()
 {
@@ -64,6 +73,29 @@ void AERPlayerState::BeginPlay()
 	{
 		ERCC::BindSlowRecalculation(AbilitySystemComponent);
 
+		// 아군 소생 (F14 · Argument 75 R1) — 스킬 DA 없는 공용 행동. ASC 가 여기라 폰이 바뀌어도 남는다
+		AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(UERReviveAbility::StaticClass(), 1));
+
+		// 빈사 스킬 (F14 S4 · Argument 79 T1) — 모든 실험체 같은 3개 · 빈사일 때만 발동 (UERDownedAbility). 소생과 같은 자리
+		{
+			TArray<TObjectPtr<UERSkillData>> Downed;
+			for (const TSoftObjectPtr<UERSkillData>& Soft : UERCombatSettings::Get().DownedSkills)
+			{
+				if (UERSkillData* Skill = Soft.LoadSynchronous())
+				{
+					Downed.Add(Skill);
+				}
+				else
+				{
+					// GAS 처럼 조용히 건너뛰지 않는다 — 경로가 틀렸거나 ER.Skill.ImportJson Downed 전
+					UE_LOG(LogEternalReturn, Warning, TEXT("[빈사 스킬] ER Combat DownedSkills — 애셋이 없다: %s"), *Soft.ToString());
+				}
+			}
+			ERSkill::GrantSkills(AbilitySystemComponent, Downed, DownedSkills);
+			AbilitySystemComponent->RegisterGameplayTagEvent(ERTags::State_DownedSkill_Obstinacy, EGameplayTagEventType::NewOrRemoved)
+				.AddUObject(this, &AERPlayerState::OnObstinacyChanged);
+		}
+
 		// ⭐ 스킬 포인트 지급 (F10-03) — 시작 포인트 + 레벨업마다 테이블 행의 SkillPointGranted.
 		//   Growth 가 스탯 GE 를 먼저 적용한 뒤 브로드캐스트한다 (F10-02). P 도 포인트로 찍는다 — 자동 강화 없음.
 		AddSkillPoints(UERGrowthSettings::Get().StartingSkillPoints);
@@ -84,6 +116,11 @@ void AERPlayerState::BeginPlay()
 			Inventory->OnItemCrafted.AddWeakLambda(this, [this](FName ResultId, bool bFirstTime)
 			{
 				Growth->OnItemCrafted(ResultId, bFirstTime);
+				// 제작 소리 (주변 · 여러 개 이어서 — 공용 ER Sound Craft 의 Count · 사용자 2026-10-08)
+				if (APawn* CraftPawn = GetPawn())
+				{
+					UERPresentationComponent::SendSfxCue(CraftPawn, ERTags::Pres_Sfx_Craft, CraftPawn->GetActorLocation());
+				}
 				// 제작 음성 (Argument 73 · 본인) — 결과 등급. 일반은 대사 없음 · 영웅 = craftEpic · 초월 = craftMystic
 				if (const FERItemRow* Row = ERItem::Find(ResultId))
 				{
@@ -133,51 +170,8 @@ void AERPlayerState::BeginPlay()
 		//   사망 처리 자체(폰 파괴 · 부활)는 F14 — 여기서는 시체만 만든다. 원본 인벤토리는 그대로 (원작 확인: 복사 드롭).
 		if (AttributeSet)
 		{
-			AttributeSet->OnOutOfHealth.AddWeakLambda(this, [this](AActor* Killer)
-			{
-				APawn* MyPawn = GetPawn();
-				// 사망 음성 (Argument 73 · 주변) — 실험체는 사망 포즈(SetDead)가 아직 없다 (F14) → 서버 사망 사건에서 큐 (2026-10-07 PIE: 로그 0줄로 확인)
-				UERPresentationComponent::SendVoiceCue(MyPawn, ERTags::Pres_Voice_Death);
-				if (Inventory && MyPawn)
-				{
-					if (AERItemDropActor* Corpse = Inventory->SpawnDeathDrop(MyPawn->GetActorLocation()))
-					{
-						Corpse->SetKiller(Cast<APlayerState>(Killer));   // 시체 수색 음성 — 내가 처치한 시체인가 (Argument 73)
-					}
-				}
-
-				// ⭐ 처치 → 처치자의 무기 숙련도 (적 레벨 함수) — 실험체 경험치는 숙련도가 올린다 (F10-05 · Argument 26 B).
-				//   Killer 는 GE 컨텍스트의 OriginalInstigator = 가해자의 ASC 소유자 = PlayerState.
-				//   자기 자신(자해) · 환경 피해(null) · 야생동물(PlayerState 아님) 은 제외. 어시스트 분배 없음 `[자체]`.
-				if (const AERPlayerState* KillerPS = Cast<AERPlayerState>(Killer); KillerPS && KillerPS != this && KillerPS->GetGrowth())
-				{
-					KillerPS->GetGrowth()->OnPlayerKilled(Growth ? Growth->GetLevel() : 1);
-				}
-
-				// ⭐ 처치 이벤트 → 처치자 ASC (재키 P · E · R "처치 관여" · Argument 65). 지금은 **막타** — 어시스트는 F14 (관여자 목록)
-				if (AERPlayerState* KillerPS = Cast<AERPlayerState>(Killer); KillerPS && KillerPS != this)
-				{
-					if (UAbilitySystemComponent* KillerASC = KillerPS->GetAbilitySystemComponent())
-					{
-						FGameplayEventData Kill;
-						Kill.EventTag = ERTags::Event_Kill_Dealt;
-						Kill.Instigator = KillerPS->GetPawn();
-						Kill.Target = GetPawn();
-						KillerASC->HandleGameplayEvent(ERTags::Event_Kill_Dealt, &Kill);
-					}
-					// 누적 처치 음성 (Argument 73 · 본인) — kill1Player ~ kill14Player. 15명부터는 대사 없음
-					const FGameplayTag KillVoice[] = {
-						ERTags::Pres_Voice_Kill_1, ERTags::Pres_Voice_Kill_2, ERTags::Pres_Voice_Kill_3, ERTags::Pres_Voice_Kill_4, ERTags::Pres_Voice_Kill_5,
-						ERTags::Pres_Voice_Kill_6, ERTags::Pres_Voice_Kill_7, ERTags::Pres_Voice_Kill_8, ERTags::Pres_Voice_Kill_9, ERTags::Pres_Voice_Kill_10,
-						ERTags::Pres_Voice_Kill_11, ERTags::Pres_Voice_Kill_12, ERTags::Pres_Voice_Kill_13, ERTags::Pres_Voice_Kill_14,
-					};
-					++KillerPS->PlayerKills;
-					if (KillerPS->PlayerKills <= static_cast<int32>(UE_ARRAY_COUNT(KillVoice)))
-					{
-						KillerPS->ClientPlayVoice(KillVoice[KillerPS->PlayerKills - 1]);
-					}
-				}
-			});
+			// 체력 0 → 빈사 / 사망 / 전멸 (Argument 75) — 판단은 HandleOutOfHealth 한 곳
+			AttributeSet->OnOutOfHealth.AddUObject(this, &AERPlayerState::HandleOutOfHealth);
 
 			// ⭐ 내가 맞은 피해 → 가해자의 숙련도 (F10-04). 처치 경험치와 같은 경로 — 어트리뷰트셋은 알리기만 한다.
 			//   양쪽 다 전투 상태 (F11-04).
@@ -496,4 +490,337 @@ void AERPlayerState::OnRep_SkillPoints()
 {
 	// UI 가 생기면 여기서 갱신한다. 지금은 로그만.
 	UE_LOG(LogEternalReturn, Verbose, TEXT("[스킬] %s 포인트 복제 -> %d"), *GetName(), SkillPoints);
+}
+
+// ─────────────────────────────────────────────────────────────
+// 빈사 · 사망 · 소생 (F14 · Argument 75 — A1 GE+태그 · H1 같은 HP · K2 빈사로 만든 사람이 처치)
+// ─────────────────────────────────────────────────────────────
+
+bool AERPlayerState::IsDowned() const
+{
+	return AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(ERTags::State_Downed);
+}
+
+bool AERPlayerState::IsDead() const
+{
+	return AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(ERTags::State_Dead);
+}
+
+bool AERPlayerState::IsStanding() const
+{
+	return GetPawn() && !IsDowned() && !IsDead();
+}
+
+void AERPlayerState::ForEachTeammate(TFunctionRef<void(AERPlayerState&)> Fn) const
+{
+	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const int32 MyTeam = ERTeamStatics::GetTeamId(this);
+	if (!GS || MyTeam == INDEX_NONE)
+	{
+		return;   // 무소속 = 팀원 없음
+	}
+	for (APlayerState* Other : GS->PlayerArray)
+	{
+		AERPlayerState* PS = Cast<AERPlayerState>(Other);
+		if (PS && PS != this && ERTeamStatics::GetTeamId(PS) == MyTeam)
+		{
+			Fn(*PS);
+		}
+	}
+}
+
+void AERPlayerState::CancelActiveAbilities()
+{
+	// 시전 중 쓰러지면 판정 타이머가 계속 돈다 — 전부 취소 (패시브는 듣기만 하니 둔다 · Lyra 사망 어빌리티와 같은 이유 · Docs/6_Lyra참조/07)
+	TArray<FGameplayAbilitySpecHandle> ToCancel;
+	for (const FGameplayAbilitySpec& Spec : AbilitySystemComponent->GetActivatableAbilities())
+	{
+		if (Spec.IsActive() && Spec.Ability && !Spec.Ability->IsA<UERPassiveAbility>())
+		{
+			ToCancel.Add(Spec.Handle);
+		}
+	}
+	for (const FGameplayAbilitySpecHandle& H : ToCancel)
+	{
+		AbilitySystemComponent->CancelAbilityHandle(H);
+	}
+}
+
+void AERPlayerState::HandleOutOfHealth(AActor* LastHitter)
+{
+	if (!HasAuthority() || !AbilitySystemComponent || IsDead())
+	{
+		return;
+	}
+	// 이번 일로 우리 팀이 전멸하면 알림을 받을 쪽 — 빈사로 만든 사람 (체력 감소로 죽어도) · 없으면 마무리한 사람. Die 가 DownedBy 를 비우기 전에 잡는다
+	AERPlayerState* Terminator = DownedBy.IsValid() ? DownedBy.Get() : Cast<AERPlayerState>(LastHitter);
+	if (IsDowned())
+	{
+		Die(LastHitter);   // 빈사 중 다시 0 — 맞아서든 체력 감소로든
+	}
+	else
+	{
+		bool bTeammateStanding = false;
+		ForEachTeammate([&bTeammateStanding](AERPlayerState& PS) { bTeammateStanding |= PS.IsStanding(); });
+		if (bTeammateStanding)
+		{
+			EnterDowned(Cast<AERPlayerState>(LastHitter));
+		}
+		else
+		{
+			Die(LastHitter);   // 서 있는 팀원이 없다 — 바로 사망 (원작: 팀원이 살아 있을 때만 빈사)
+		}
+	}
+	CheckTeamWipe(Terminator);
+}
+
+void AERPlayerState::SendTeamSfx(FGameplayTag SfxKey, bool bIncludeSelf)
+{
+	if (bIncludeSelf)
+	{
+		ClientPlaySfx(SfxKey);
+	}
+	ForEachTeammate([SfxKey](AERPlayerState& PS) { PS.ClientPlaySfx(SfxKey); });
+}
+
+void AERPlayerState::ClientPlaySoundPath_Implementation(const FSoftObjectPath& SoundPath)
+{
+	// 작은 소리 하나 — 처음이면 동기 로드 (상자 열기 · 한 번)
+	USoundBase* Sound = Cast<USoundBase>(SoundPath.TryLoad());
+	if (Sound)
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 소리 %s (본인만)"), *GetNameSafe(this), Sound ? *Sound->GetName() : *FString::Printf(TEXT("없음 — %s"), *SoundPath.ToString()));
+}
+
+void AERPlayerState::ClientPlaySfx_Implementation(FGameplayTag SfxKey)
+{
+	const APawn* MyPawn = GetPawn();
+	const UERPresentationComponent* Pres = MyPawn ? MyPawn->FindComponentByClass<UERPresentationComponent>() : nullptr;
+	USoundBase* Sound = Pres ? Pres->PickSound(SfxKey) : nullptr;
+	if (Sound)
+	{
+		UGameplayStatics::PlaySound2D(this, Sound);
+	}
+	else if (UERSoundSubsystem* Common = UERSoundSubsystem::Get(this))
+	{
+		Sound = Common->Play2D(SfxKey);   // 캐릭터 DA 에 없으면 공용 (Argument 78)
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[연출] %s 본인 소리 %s — %s"), *GetNameSafe(this), *SfxKey.ToString(), Sound ? *Sound->GetName() : TEXT("줄 없음"));
+}
+
+void AERPlayerState::EnterDowned(AERPlayerState* By)
+{
+	const UERCombatSettings& S = UERCombatSettings::Get();
+	DownedBy = By != this ? By : nullptr;
+	CancelActiveAbilities();
+
+	FGameplayEffectSpecHandle Spec = AbilitySystemComponent->MakeOutgoingSpec(UERDownedEffect::StaticClass(), 1.f, AbilitySystemComponent->MakeEffectContext());
+	Spec.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_Downed_MoveSpeed, GetDownedMoveSpeed());
+	Spec.Data->DynamicGrantedTags.AddTag(ERTags::State_Downed);
+	DownedHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data);
+
+	FGameplayEffectSpecHandle Bleed = AbilitySystemComponent->MakeOutgoingSpec(UERDownedBleedEffect::StaticClass(), 1.f, AbilitySystemComponent->MakeEffectContext());
+	Bleed.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_Downed_Bleed, -S.DownedBleedPerSecond);
+	BleedHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Bleed.Data);
+
+	// 빈사 체력 (H1) — 같은 HP 를 400 으로. 이 함수는 사망 알림 안에서 불린다 → 알림 뒤 빗장이 HP 를 다시 읽어 풀린다 (UERAttributeSet)
+	const float MaxHP = AbilitySystemComponent->GetNumericAttribute(UERAttributeSet::GetMaxHPAttribute());
+	AbilitySystemComponent->SetNumericAttributeBase(UERAttributeSet::GetHPAttribute(), FMath::Min(S.DownedHP, MaxHP));
+	const int32 Level = Growth ? Growth->GetLevel() : 1;
+	const float Reduction = S.DownedDamageReductionBase + S.DownedDamageReductionPerLevel * Level;
+	AttributeSet->SetDownedDamageReduction(Reduction);
+
+	if (APawn* MyPawn = GetPawn())
+	{
+		UERPresentationComponent::SendSfxCue(MyPawn, ERTags::Pres_Sfx_Downed, MyPawn->GetActorLocation());
+		SendTeamSfx(ERTags::Pres_Sfx_TeamDown, /*bIncludeSelf=*/false);   // 팀원 빈사 알림 (UI 소리 · 우리 팀만 · 사용자 2026-10-08)
+		// ⭐ 스킬의 "처치 시" = **빈사로 만든 순간만** (재키 E 쿨 초기화 · R +5초 · 학살 재사용 · P 아드레날린 — 사용자 2026-10-08 "포함이 아니라 빈사만")
+		//   처치 경험치 · 누적 처치 음성 · 시체 처치자는 사망 때 (K2 — Die)
+		SendKillEvent(DownedBy.Get(), MyPawn);
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[빈사] %s 빈사 — 빈사로 만든 %s · 체력 %.0f · 이속 %.1f · 받는 피해 −%.0f%% (Lv.%d) · 초당 −%.1f"),
+		*GetNameSafe(this), *GetNameSafe(DownedBy.Get()), FMath::Min(S.DownedHP, MaxHP), S.DownedMoveSpeed, Reduction * 100.f, Level, S.DownedBleedPerSecond);
+}
+
+float AERPlayerState::GetDownedMoveSpeed() const
+{
+	const UERCombatSettings& S = UERCombatSettings::Get();
+	const bool bObstinacy = AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(ERTags::State_DownedSkill_Obstinacy);
+	return S.DownedMoveSpeed * (bObstinacy ? 1.f + S.DownedObstinacyMoveSpeedBonus : 1.f);
+}
+
+void AERPlayerState::OnObstinacyChanged(const FGameplayTag Tag, int32 Count)
+{
+	if (!HasAuthority() || !DownedHandle.IsValid())
+	{
+		return;   // 빈사가 아니면 할 일 없다 (소생 뒤 남은 3초 등)
+	}
+	// ⭐ 빈사 이속은 Override 하나 — 버프 GE 를 얹으면 첫 Override 가 이겨 조용히 안 먹는다 (GameplayEffectAggregator.cpp:60).
+	//   그 Override 값 자체를 바꾼다 — SetByCaller 갱신은 엔진이 모디파이어를 다시 모은다
+	const float Speed = GetDownedMoveSpeed();
+	AbilitySystemComponent->UpdateActiveGameplayEffectSetByCallerMagnitude(DownedHandle, ERTags::SetByCaller_Downed_MoveSpeed, Speed);
+	UE_LOG(LogEternalReturn, Log, TEXT("[빈사 스킬] %s 집념 %s — 빈사 이속 %.1f"), *GetNameSafe(this), Count > 0 ? TEXT("시작") : TEXT("끝"), Speed);
+}
+
+void AERPlayerState::SelfDestruct()
+{
+	if (!HasAuthority() || !IsDowned() || IsDead())
+	{
+		return;
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[빈사] %s 분열 폭발로 사망"), *GetNameSafe(this));
+	Die(nullptr);   // 처치 = DownedBy (K2) — 빈사에서 죽는 것이라 서 있는 사람 수는 그대로 (전멸 검사 불필요)
+}
+
+void AERPlayerState::ClearDowned()
+{
+	if (DownedHandle.IsValid())
+	{
+		AbilitySystemComponent->RemoveActiveGameplayEffect(DownedHandle);
+		DownedHandle.Invalidate();
+	}
+	if (BleedHandle.IsValid())
+	{
+		AbilitySystemComponent->RemoveActiveGameplayEffect(BleedHandle);
+		BleedHandle.Invalidate();
+	}
+	AttributeSet->SetDownedDamageReduction(0.f);
+}
+
+void AERPlayerState::Die(AActor* LastHitter)
+{
+	const bool bFromDowned = IsDowned();
+	// K2 — 빈사로 만든 사람이 처치자. 없으면 (환경 · 야생동물이 쓰러뜨림 · 팀원 없이 바로 사망) 마무리한 사람
+	AERPlayerState* KillerPS = DownedBy.IsValid() ? DownedBy.Get() : Cast<AERPlayerState>(LastHitter);
+	if (KillerPS == this)
+	{
+		KillerPS = nullptr;
+	}
+	CancelActiveAbilities();
+
+	// 사망 GE 를 **먼저** 건다 — 빈사에서 죽었다는 표시(State.Dead.FromDowned)가 같은 GE 에 있어 사망 애니(down_dead)를 고른다 (Argument 76)
+	FGameplayEffectSpecHandle Spec = AbilitySystemComponent->MakeOutgoingSpec(UERDeadEffect::StaticClass(), 1.f, AbilitySystemComponent->MakeEffectContext());
+	Spec.Data->DynamicGrantedTags.AddTag(ERTags::State_Dead);
+	Spec.Data->DynamicGrantedTags.AddTag(ERTags::State_Block_Movement);
+	Spec.Data->DynamicGrantedTags.AddTag(ERTags::State_Untargetable);
+	if (bFromDowned)
+	{
+		Spec.Data->DynamicGrantedTags.AddTag(ERTags::State_Dead_FromDowned);
+	}
+	AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*Spec.Data);
+	ClearDowned();
+	DownedBy.Reset();
+	AbilitySystemComponent->SetNumericAttributeBase(UERAttributeSet::GetHPAttribute(), 0.f);   // 팀 전멸로 죽는 빈사자는 체력이 남아 있다
+
+	APawn* MyPawn = GetPawn();
+	if (MyPawn)
+	{
+		if (AController* C = MyPawn->GetController())
+		{
+			C->StopMovement();   // 가던 길 (클릭 이동) — 이동 차단 태그는 다음 입력부터
+		}
+	}
+	UE_LOG(LogEternalReturn, Log, TEXT("[빈사] %s 사망%s — 처치 %s (마무리 %s)"), *GetNameSafe(this),
+		bFromDowned ? TEXT(" (빈사에서)") : TEXT(""), *GetNameSafe(KillerPS), *GetNameSafe(LastHitter));
+
+	// 사망 음성 (Argument 73 · 주변) — **진짜 사망** 순간 (빈사가 아니다 · 사용자 2026-10-08)
+	UERPresentationComponent::SendVoiceCue(MyPawn, ERTags::Pres_Voice_Death);
+	// 시체 (F08-05) — 원본 인벤토리는 그대로 (원작 확인: 복사 드롭)
+	if (Inventory && MyPawn)
+	{
+		if (AERItemDropActor* Corpse = Inventory->SpawnDeathDrop(MyPawn->GetActorLocation()))
+		{
+			Corpse->SetKiller(KillerPS);   // 시체 수색 음성 — 내가 처치한 시체인가 (Argument 73)
+		}
+	}
+	if (!KillerPS)
+	{
+		return;
+	}
+	// ⭐ 처치 → 처치자의 무기 숙련도 (적 레벨 함수) — 실험체 경험치는 숙련도가 올린다 (F10-05 · Argument 26 B). 어시스트 분배 없음 `[자체]`.
+	if (KillerPS->GetGrowth())
+	{
+		KillerPS->GetGrowth()->OnPlayerKilled(Growth ? Growth->GetLevel() : 1);
+	}
+	// 스킬의 "처치 시" 이벤트는 여기서 안 보낸다 — **빈사로 만든 순간만** (EnterDowned · 사용자 2026-10-08 "포함이 아니라 빈사만")
+	// 누적 처치 음성 (Argument 73 · 본인) — kill1Player ~ kill14Player. 15명부터는 대사 없음
+	const FGameplayTag KillVoice[] = {
+		ERTags::Pres_Voice_Kill_1, ERTags::Pres_Voice_Kill_2, ERTags::Pres_Voice_Kill_3, ERTags::Pres_Voice_Kill_4, ERTags::Pres_Voice_Kill_5,
+		ERTags::Pres_Voice_Kill_6, ERTags::Pres_Voice_Kill_7, ERTags::Pres_Voice_Kill_8, ERTags::Pres_Voice_Kill_9, ERTags::Pres_Voice_Kill_10,
+		ERTags::Pres_Voice_Kill_11, ERTags::Pres_Voice_Kill_12, ERTags::Pres_Voice_Kill_13, ERTags::Pres_Voice_Kill_14,
+	};
+	++KillerPS->PlayerKills;
+	if (KillerPS->PlayerKills <= static_cast<int32>(UE_ARRAY_COUNT(KillVoice)))
+	{
+		KillerPS->ClientPlayVoice(KillVoice[KillerPS->PlayerKills - 1]);
+	}
+}
+
+void AERPlayerState::SendKillEvent(AERPlayerState* KillerPS, APawn* VictimPawn)
+{
+	UAbilitySystemComponent* KillerASC = KillerPS && KillerPS != this ? KillerPS->GetAbilitySystemComponent() : nullptr;
+	if (!KillerASC)
+	{
+		return;
+	}
+	// 처치 이벤트 → 처치자 ASC (재키 P · E · R "처치 관여" · Argument 65) — 패시브 · 조각이 듣는다
+	FGameplayEventData Kill;
+	Kill.EventTag = ERTags::Event_Kill_Dealt;
+	Kill.Instigator = KillerPS->GetPawn();
+	Kill.Target = VictimPawn;
+	KillerASC->HandleGameplayEvent(ERTags::Event_Kill_Dealt, &Kill);
+}
+
+void AERPlayerState::CheckTeamWipe(AERPlayerState* Terminator)
+{
+	if (IsStanding())
+	{
+		return;
+	}
+	bool bAnyStanding = false;
+	ForEachTeammate([&bAnyStanding](AERPlayerState& PS) { bAnyStanding |= PS.IsStanding(); });
+	if (bAnyStanding)
+	{
+		return;
+	}
+	// 전멸시킨 팀에 알림 (터미네이트 · 사용자 2026-10-08 "우리 팀만") — 같은 팀 · 야생동물 · 환경이면 없음
+	if (Terminator && ERTeamStatics::IsHostile(Terminator, this))
+	{
+		Terminator->SendTeamSfx(ERTags::Pres_Sfx_Terminate, /*bIncludeSelf=*/true);
+		UE_LOG(LogEternalReturn, Log, TEXT("[빈사] 팀 %d 전멸 — 터미네이트 %s (팀 %d)"), ERTeamStatics::GetTeamId(this), *GetNameSafe(Terminator), ERTeamStatics::GetTeamId(Terminator));
+	}
+	// 서 있는 사람이 없다 — 빈사자 전원 사망 (원작: 팀원이 모두 쓰러지면 전멸)
+	TArray<AERPlayerState*> Downed;
+	if (IsDowned()) { Downed.Add(this); }
+	ForEachTeammate([&Downed](AERPlayerState& PS) { if (PS.IsDowned()) { Downed.Add(&PS); } });
+	if (!Downed.IsEmpty())
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[빈사] 팀 %d 전멸 — 빈사 %d명 사망"), ERTeamStatics::GetTeamId(this), Downed.Num());
+	}
+	for (AERPlayerState* PS : Downed)
+	{
+		PS->Die(nullptr);
+	}
+}
+
+void AERPlayerState::Revive(AERPlayerState* By)
+{
+	if (!HasAuthority() || !IsDowned() || IsDead())
+	{
+		return;
+	}
+	ClearDowned();
+	DownedBy.Reset();
+	const float Ratio = UERCombatSettings::Get().ReviveHPRatio;
+	const float MaxHP = AbilitySystemComponent->GetNumericAttribute(UERAttributeSet::GetMaxHPAttribute());
+	AbilitySystemComponent->SetNumericAttributeBase(UERAttributeSet::GetHPAttribute(), MaxHP * Ratio);
+	if (APawn* MyPawn = GetPawn())
+	{
+		UERPresentationComponent::SendSfxCue(MyPawn, ERTags::Pres_Sfx_Resurrect, MyPawn->GetActorLocation());
+	}
+	ClientPlayVoice(ERTags::Pres_Voice_Resurrection);   // 아군이 나를 일으켜 세웠다 (Argument 73 · 본인)
+	SendTeamSfx(ERTags::Pres_Sfx_TeamRevival, /*bIncludeSelf=*/false);   // 팀원 소생 알림 (UI 소리 · 우리 팀만 · 사용자 2026-10-08)
+	UE_LOG(LogEternalReturn, Log, TEXT("[빈사] %s 소생 ← %s · 체력 %.0f (최대의 %.0f%%)"), *GetNameSafe(this), *GetNameSafe(By), MaxHP * Ratio, Ratio * 100.f);
 }

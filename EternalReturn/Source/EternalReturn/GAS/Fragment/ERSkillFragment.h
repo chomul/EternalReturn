@@ -75,6 +75,12 @@ public:
 	/** 이 조각이 발동 뒤 어빌리티를 활성으로 남기나 (모드). 클라 인스턴스가 "모드 중" 을 알기 위해 — 서버는 Ctx.bKeepActive. */
 	virtual bool KeepsAbilityActive() const { return false; }
 
+	/**
+	 * 활성 중 같은 키를 다시 누르면 **취소**한다 (자가 제세동 — 원작 "재시전해서 취소"). PC 가 발동 대신 서버에서 CancelAbility.
+	 * ⚠ 모드(KeepsAbilityActive)의 "재입력 = 사격" 과 다르다 — PC 는 이게 참이면 모드 재입력 규칙을 안 탄다.
+	 */
+	virtual bool CancelOnReinput() const { return false; }
+
 	/** 리캐스트로 발동했을 때 대신 실행할 데이터 (단검 망토 → 단검). 없으면 nullptr = 같은 데이터. */
 	virtual const UERSkillData* GetRecastExecData() const { return nullptr; }
 

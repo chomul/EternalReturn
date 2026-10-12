@@ -417,6 +417,9 @@ FGameplayTag CooldownTagForSlot(const FGameplayTag& SlotTag)
 	if (SlotTag == ERTags::Ability_Slot_R) { return ERTags::Cooldown_Slot_R; }
 	if (SlotTag == ERTags::Ability_Slot_D) { return ERTags::Cooldown_Slot_D; }
 	if (SlotTag == ERTags::Ability_Slot_Attack) { return ERTags::Cooldown_Slot_Attack; }
+	if (SlotTag == ERTags::Ability_Slot_Downed_Q) { return ERTags::Cooldown_Slot_Downed_Q; }
+	if (SlotTag == ERTags::Ability_Slot_Downed_W) { return ERTags::Cooldown_Slot_Downed_W; }
+	if (SlotTag == ERTags::Ability_Slot_Downed_R) { return ERTags::Cooldown_Slot_Downed_R; }
 
 	// 슬롯 태그를 새로 만들었는데 여기에 안 붙인 것이다. 빈 태그를 돌려주면
 	// 쿨다운이 걸리지 않으므로(CheckCooldown 통과) 반드시 로그로 드러낸다.
