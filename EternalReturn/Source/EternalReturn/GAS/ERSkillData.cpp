@@ -7,6 +7,7 @@
 #include "EternalReturn.h"
 #include "GAS/ERGameplayAbility.h"
 #include "GAS/ERPassiveAbility.h"
+#include "GAS/ERAttributeSet.h"
 #include "GAS/ERGameplayTags.h"
 #include "GAS/Delivery/ERSkillDelivery.h"
 #include "GAS/Shape/ERSkillShapes.h"
@@ -420,11 +421,21 @@ FGameplayTag CooldownTagForSlot(const FGameplayTag& SlotTag)
 	if (SlotTag == ERTags::Ability_Slot_Downed_Q) { return ERTags::Cooldown_Slot_Downed_Q; }
 	if (SlotTag == ERTags::Ability_Slot_Downed_W) { return ERTags::Cooldown_Slot_Downed_W; }
 	if (SlotTag == ERTags::Ability_Slot_Downed_R) { return ERTags::Cooldown_Slot_Downed_R; }
+	if (SlotTag == ERTags::Ability_Slot_F) { return ERTags::Cooldown_Slot_F; }
 
 	// 슬롯 태그를 새로 만들었는데 여기에 안 붙인 것이다. 빈 태그를 돌려주면
 	// 쿨다운이 걸리지 않으므로(CheckCooldown 통과) 반드시 로그로 드러낸다.
 	UE_LOG(LogEternalReturn, Error, TEXT("[스킬] %s 에 대응하는 쿨다운 태그가 없다."), *SlotTag.ToString());
 	return FGameplayTag();
+}
+
+float CasterBonusMaxHP(const UAbilitySystemComponent* ASC)
+{
+	if (!ASC)
+	{
+		return 0.f;
+	}
+	return FMath::Max(0.f, ASC->GetNumericAttribute(UERAttributeSet::GetMaxHPAttribute()) - ASC->GetNumericAttributeBase(UERAttributeSet::GetMaxHPAttribute()));
 }
 
 FGameplayTag RecastTagForSlot(const FGameplayTag& SlotTag)

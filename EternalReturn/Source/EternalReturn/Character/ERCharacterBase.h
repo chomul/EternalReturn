@@ -155,6 +155,11 @@ protected:
 	/** 구독 해제용. 안 풀면 dangling 델리게이트가 남는다. */
 	FDelegateHandle MoveSpeedHandle;
 
+	/** 충돌 무시 (State.Ghost · 전술 블링크 Lv2 · Argument 80) — 태그가 있는 동안 캡슐 Pawn 채널 Overlap. 모든 머신 (GE 태그 복제) */
+	void BindGhost();
+	void OnGhostChanged(const FGameplayTag Tag, int32 Count);
+	FDelegateHandle GhostTagHandle;
+
 	/**
 	 * 연출 연결 (F12.5-01) — 기본 표 · 스킨 · 장착 무기를 연출 컴포넌트에 넣고, 스킨 · 무기 변경을 구독한다.
 	 * ⭐ 서버 · 클라 양쪽 (InitAbilityActorInfo 에서). 서버도 애니를 골라 재생하고, 클라는 메시 · 소리를 바꾼다.

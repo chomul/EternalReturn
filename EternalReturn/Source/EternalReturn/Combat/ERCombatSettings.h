@@ -51,6 +51,16 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "빈사 스킬", meta = (ClampMin = "0"))
 	float DownedObstinacyMoveSpeedBonus = 1.f;
 
+	// ── 전술 스킬 F (Argument 80) ──
+
+	/** 고를 수 있는 전술 스킬 DA. 캐릭터 선택 UI 는 이 **순서(번호)** 로 고른다 — 순서를 바꾸면 번호가 바뀐다. 원본 = Docs/3_EditorTasks/Data/Skills/Tactical.json → ER.Skill.ImportJson Tactical */
+	UPROPERTY(config, EditAnywhere, Category = "전술 스킬")
+	TArray<TSoftObjectPtr<class UERSkillData>> TacticalSkills;
+
+	/** 고르기 전 기본 (TacticalSkills 번호). -1 = F 없음. ⚠ 원작 기본값 (미확인) — 블링크 */
+	UPROPERTY(config, EditAnywhere, Category = "전술 스킬", meta = (ClampMin = "-1"))
+	int32 DefaultTacticalSkill = 0;
+
 	/** 아군 소생에 걸리는 초. ⚠ 자체 결정값 — 원작 (미확인). */
 	UPROPERTY(config, EditAnywhere, Category = "소생", meta = (ClampMin = "0.1"))
 	float ReviveSeconds = 5.f;

@@ -96,6 +96,9 @@ void AERPlayerState::BeginPlay()
 				.AddUObject(this, &AERPlayerState::OnObstinacyChanged);
 		}
 
+		// 전술 스킬 F (Argument 80 G1) — 캐릭터 선택 UI 가 고르기 전에는 ER Combat 기본값. 바꾸면 SetTacticalSkill 이 회수 → 부여
+		SetTacticalSkill(UERCombatSettings::Get().DefaultTacticalSkill);
+
 		// ⭐ 스킬 포인트 지급 (F10-03) — 시작 포인트 + 레벨업마다 테이블 행의 SkillPointGranted.
 		//   Growth 가 스탯 GE 를 먼저 적용한 뒤 브로드캐스트한다 (F10-02). P 도 포인트로 찍는다 — 자동 강화 없음.
 		AddSkillPoints(UERGrowthSettings::Get().StartingSkillPoints);
@@ -213,6 +216,7 @@ void AERPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 
 	// 스킨은 모두가 본다 (F12.5-01).
 	DOREPLIFETIME(AERPlayerState, SkinIndex);
+	DOREPLIFETIME(AERPlayerState, TacticalIndex);   // 전술 스킬 선택 — 팀원 것도 UI 가 읽는다 (Argument 80)
 	DOREPLIFETIME(AERPlayerState, GatherSeconds);   // 채집 포즈 재생 속도 (F12.5-04 · Argument 47)
 }
 
@@ -234,6 +238,56 @@ void AERPlayerState::SetSkinIndex(int32 NewIndex)
 void AERPlayerState::OnRep_SkinIndex()
 {
 	OnSkinChanged.Broadcast();
+}
+
+// ─────────────────────────────────────────────────────────────
+// 전술 스킬 F (Argument 80)
+// ─────────────────────────────────────────────────────────────
+
+void AERPlayerState::SetTacticalSkill(int32 Index)
+{
+	if (!HasAuthority() || !AbilitySystemComponent)
+	{
+		return;
+	}
+	const TArray<TSoftObjectPtr<UERSkillData>>& List = UERCombatSettings::Get().TacticalSkills;
+	if (Index == INDEX_NONE)
+	{
+		return;   // 기본값 없음 — 설정이 비었으면 F 없이 시작
+	}
+	if (!List.IsValidIndex(Index))
+	{
+		UE_LOG(LogEternalReturn, Warning, TEXT("[전술 스킬] %s 번호 %d — ER Combat TacticalSkills 범위 밖 (%d 개)"), *GetName(), Index, List.Num());
+		return;
+	}
+	UERSkillData* Skill = List[Index].LoadSynchronous();
+	if (!Skill)
+	{
+		// GAS 처럼 조용히 건너뛰지 않는다 — 경로가 틀렸거나 ER.Skill.ImportJson Tactical 전
+		UE_LOG(LogEternalReturn, Warning, TEXT("[전술 스킬] ER Combat TacticalSkills[%d] — 애셋이 없다: %s"), Index, *List[Index].ToString());
+		return;
+	}
+
+	ERSkill::TakeSkills(AbilitySystemComponent, TacticalSkills);
+	ERSkill::GrantSkills(AbilitySystemComponent, { Skill }, TacticalSkills);
+	TacticalIndex = Index;
+	UE_LOG(LogEternalReturn, Log, TEXT("[전술 스킬] %s -> %d %s"), *GetName(), Index, *GetNameSafe(Skill));
+	OnTacticalChanged.Broadcast();   // 서버는 OnRep 이 안 불린다
+}
+
+bool AERPlayerState::ServerSelectTacticalSkill_Validate(int32 Index)
+{
+	return Index >= 0 && Index < 64;   // 목록 범위는 Implementation 이 설정으로 다시 본다 (끊지 않고 Warning)
+}
+
+void AERPlayerState::ServerSelectTacticalSkill_Implementation(int32 Index)
+{
+	SetTacticalSkill(Index);
+}
+
+void AERPlayerState::OnRep_TacticalIndex()
+{
+	OnTacticalChanged.Broadcast();
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -30,6 +30,8 @@ void UERSkillFragment_TimedTag::OnExecute(FERSkillContext& Ctx) const
 	}
 	Spec.Data->SetSetByCallerMagnitude(ERTags::SetByCaller_StateDuration, Seconds);
 	Spec.Data->DynamicGrantedTags.AddTag(Tag);
+	Spec.Data->DynamicGrantedTags.AppendTags(ExtraTags);
 	A->ApplySpecToSelf(Spec);
-	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 시간 태그 %s %.1f초"), *GetNameSafe(Ctx.Avatar), *GetNameSafe(Ctx.Skill), *Tag.ToString(), Seconds);
+	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 시간 태그 %s%s %.1f초"), *GetNameSafe(Ctx.Avatar), *GetNameSafe(Ctx.Skill), *Tag.ToString(),
+		ExtraTags.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" + %s"), *ExtraTags.ToStringSimple()), Seconds);
 }

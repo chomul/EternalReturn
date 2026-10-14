@@ -18,4 +18,23 @@ void UERSkillFragment_Sfx::OnExecute(FERSkillContext& Ctx) const
 	{
 		UERPresentationComponent::SendSfxCue(Ctx.Avatar, ExecuteSfx, Ctx.Avatar->GetActorLocation());
 	}
+	if (Ctx.bAuthority && Ctx.Avatar && ExecuteSound && !Ctx.bActivatedByRecast)
+	{
+		UERPresentationComponent::SendSoundAssetCue(Ctx.Avatar, ExecuteSound, Ctx.Avatar->GetActorLocation());
+	}
+}
+
+void UERSkillFragment_Sfx::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
+{
+	if (!Ctx.bAuthority || !Ctx.Avatar || !HitSound)
+	{
+		return;
+	}
+	for (const AActor* T : Targets)
+	{
+		if (T)
+		{
+			UERPresentationComponent::SendSoundAssetCue(Ctx.Avatar, HitSound, T->GetActorLocation());
+		}
+	}
 }

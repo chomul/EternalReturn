@@ -11,6 +11,22 @@
 class UERSkillData;
 struct FGameplayEventData;
 
+/** 시전자 기본 공격 사거리로 나누는 조건 — 전술 스트라이더 근거리 / 원거리 차등 (Argument 80) */
+UENUM()
+enum class EERAttackRangeCond : uint8
+{
+	Any    UMETA(DisplayName = "상관없음"),
+	/** 사거리 ≤ ERSkillFragmentCond::MeleeRangeMax */
+	Melee  UMETA(DisplayName = "근거리만"),
+	Ranged UMETA(DisplayName = "원거리만"),
+};
+
+namespace ERSkillFragmentCond
+{
+	/** 근거리 = 기본 공격 사거리 3m 이하 `[자체]` (원작 기준을 못 찾음 · Argument 80 ③) */
+	constexpr float MeleeRangeMax = 3.f;
+}
+
 /**
  * 스킬 기능 조각. UERSkillData.Fragments 에 Instanced 로 들어간다 — 애셋에는 그 스킬이 쓰는 조각만 보인다.
  *
@@ -25,6 +41,17 @@ class ETERNALRETURN_API UERSkillFragment : public UObject
 	GENERATED_BODY()
 
 public:
+	/** 이 스킬 레벨부터 돈다 — 전술 스킬 Lv2 에만 있는 효과 (Argument 80). 기본 1 = 항상. 어빌리티의 RunFragments* · ApplyOnTargets 가 본다 */
+	UPROPERTY(EditDefaultsOnly, Category = "조건", meta = (ClampMin = "1"))
+	int32 MinLevel = 1;
+
+	/** 시전자가 근거리 / 원거리일 때만 돈다 (스트라이더 이속 · 둔화). 기본 상관없음 */
+	UPROPERTY(EditDefaultsOnly, Category = "조건")
+	EERAttackRangeCond AttackRangeCond = EERAttackRangeCond::Any;
+
+	/** MinLevel · AttackRangeCond 둘 다 통과하나 */
+	bool IsOnAt(const FERSkillContext& Ctx) const;
+
 	/** 커밋 **전** — false 면 발동을 없던 일로 (쿨다운 · 리캐스트 창 소비 없음). 단검 블링크의 "대상 없음 · 사거리 밖". */
 	virtual bool CanExecute(const FERSkillContext& Ctx, FString& OutReason) const { return true; }
 

@@ -68,6 +68,9 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** 같은 묶음의 발들이 맞은 대상을 나눠 쓴다 — 여러 발이 맞아도 대상당 한 번 (전술 플라즈마 대시 · Argument 80). [서버] 발사 직후 */
+	void SetVolleyHits(const TSharedPtr<TSet<TWeakObjectPtr<const AActor>>>& InHits) { VolleyHits = InHits; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -108,6 +111,8 @@ protected:
 	/** 팀 · 시전자 · 이미 맞은 대상 (IgnoredActors) — 액터 포인터를 들고 있어 UPROPERTY (GC 가 지워진 액터를 null 로) */
 	UPROPERTY()
 	FTargetQuery Filter;
+	/** 묶음 공유 적중 목록 — 비면 발마다 따로 (지금까지와 같다) */
+	TSharedPtr<TSet<TWeakObjectPtr<const AActor>>> VolleyHits;
 
 	// ── 서버 · 클라 ──
 	FVector LastLocation = FVector::ZeroVector;

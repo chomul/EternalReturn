@@ -591,6 +591,11 @@ void UERPresentationComponent::HandlePresCue(FGameplayTag CueTag, const FGamepla
 	{
 		return;   // 조준 0 = 끝 신호 — 소리 없음
 	}
+	// 전술 스킬 (F) — 무기 공통 시전 · 타격음을 내지 않는다. 소리는 스킬 데이터의 소리 조각이 파일로 보낸다 (Argument 82 A)
+	if (Params.AggregatedSourceTags.HasTagExact(ERTags::Ability_Slot_F))
+	{
+		return;
+	}
 	FGameplayTag Key = bAimCue ? ERTags::Pres_Sfx_SkillAim_R
 		: bReadyCue ? ERTags::Pres_Sfx_EnhanceReady
 		: bLandCue ? (EventSlot == ERTags::Ability_Slot_R ? ERTags::Pres_Sfx_SkillLand_R : ERTags::Pres_Sfx_SkillLand_E)   // 늦춘 판정 순간 — 재키 E 착지 · 시셀라 R 폭발

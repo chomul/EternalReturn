@@ -101,6 +101,11 @@ void UERPassiveAbility::OnHitDealt(FGameplayEventData Payload)
 	{
 		return;
 	}
+	if (Payload.InstigatorTags.HasTag(ERTags::Damage_Source_Tactical))
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[패시브] %s — 전술 스킬 피해라 무시 (%s)"), *GetNameSafe(Skill), *GetNameSafe(Target));
+		return;   // 전술 스킬엔 패시브 적중 효과 X (사용자 2026-10-13)
+	}
 	FERSkillContext Ctx = MakeContext(Skill, 1.f);
 	for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
 	{

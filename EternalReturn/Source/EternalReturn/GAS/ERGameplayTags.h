@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -78,6 +78,9 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_DownedSkill_SelfReviving); // 빈사 스킬 R 자가 제세동 집중 중 — 다른 빈사 스킬 막힘 (재입력 = 취소)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_DownedSkill_Fuse);         // 빈사 스킬 Q 분열 폭발 도화선 중 — 다른 빈사 스킬 막힘
 	// ⭐ 위 셋 중 하나라도 있으면 빈사 스킬 전부 막힌다 (UERDownedAbility · 사용자 2026-10-12 "스킬 하나 쓰면 다른 스킬 못 씀")
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Tactical_LightWing);   // 전술 라이트 윙 버프 중 — 평타 둔화 · Lv2 연장 (조각 WhileBuff 가 듣는다 · Argument 80)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Tactical_Strider);    // 전술 스트라이더 5초 — 적 쪽 이속 · 첫 피해 추가 피해 (조각 ChaseSpeed · WhileBuff · Argument 80)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Ghost);          // 충돌 무시 — 캐릭터를 통과한다 (전술 블링크 Lv2 · AERCharacterBase::OnGhostChanged)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_CCImmune);       // 이동 방해 면역 (매그너스 R)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Bleeding);       // 출혈 중 (재키 P · UERBleedEffect 동적 태그 · Argument 65 D1)
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(State_Adrenaline);     // 아드레날린 분비 (재키 P — 적중마다 출혈 최대 · 추가 피해 · 회복)
@@ -154,6 +157,7 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Downed_Q);   // 분열 폭발
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Downed_W);   // 집념
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_Downed_R);   // 자가 제세동
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Slot_F);   // 전술 스킬 — 플레이어가 고른 1개 · PlayerState 가 부여 (Argument 80 G1)
 
 	// ── 리캐스트 연출 키 (F12.5-03 · 사용자 2026-09-29) ── 슬롯의 **자식**이라 슬롯 매칭(HasTagExact)에는 안 걸린다.
 	//   리캐스트(재입력)로 발동하면 연출 컴포넌트가 이 키를 먼저 찾고, 없으면 슬롯 키로 떨어진다 — 단검 D: 1번째(망토) 모션 없음 · 2번째 = 찌르기
@@ -184,6 +188,7 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Downed_Q);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Downed_W);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_Downed_R);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Cooldown_Slot_F);
 
 	// ── 무기별 D 쿨다운 (F11-04 · Docs/4_Argument/25 방안 B) ─────
 	// D 는 슬롯 태그 대신 이 태그로 쿨다운을 건다 (UERSkillData.CooldownTagOverride) — 무기를 바꿔도 각자 보존. 초기 8계열.
@@ -212,6 +217,7 @@ namespace ERTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Type_Skill);       // 방어력 O / 치명타 X
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Type_True);        // 방어력 X / 치명타 X
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Secondary);        // 부가 피해 (도트 틱 · 적중 시 추가 피해) — 적중 이벤트를 안 보낸다. 안 막으면 출혈이 출혈을 영원히 갱신 (Argument 65)
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Damage_Source_Tactical); // 전술 스킬(F 슬롯) 피해 — 패시브 적중 훅이 무시한다 (사용자 2026-10-13 "전술 스킬엔 패시브 X")
 
 	// ── 초기 스탯 SetByCaller 키 ───────────────────────────────
 	//

@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+﻿// Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "GAS/ERGameplayTags.h"
 
@@ -27,6 +27,9 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(State_DownedSkill_Obstinacy, "State.DownedSkill.Obstinacy");
 	UE_DEFINE_GAMEPLAY_TAG(State_DownedSkill_SelfReviving, "State.DownedSkill.SelfReviving");
 	UE_DEFINE_GAMEPLAY_TAG(State_DownedSkill_Fuse, "State.DownedSkill.Fuse");
+	UE_DEFINE_GAMEPLAY_TAG(State_Ghost, "State.Ghost");
+	UE_DEFINE_GAMEPLAY_TAG(State_Tactical_LightWing, "State.Tactical.LightWing");
+	UE_DEFINE_GAMEPLAY_TAG(State_Tactical_Strider, "State.Tactical.Strider");
 	UE_DEFINE_GAMEPLAY_TAG(State_CCImmune,       "State.CCImmune");
 	UE_DEFINE_GAMEPLAY_TAG(State_Bleeding,       "State.Bleeding");
 	UE_DEFINE_GAMEPLAY_TAG(State_Adrenaline,     "State.Adrenaline");
@@ -52,6 +55,7 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Downed_Q, "Ability.Slot.Downed.Q");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Downed_W, "Ability.Slot.Downed.W");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Downed_R, "Ability.Slot.Downed.R");
+	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_F, "Ability.Slot.F");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_Q_Recast, "Ability.Slot.Q.Recast");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_W_Recast, "Ability.Slot.W.Recast");
 	UE_DEFINE_GAMEPLAY_TAG(Ability_Slot_E_Recast, "Ability.Slot.E.Recast");
@@ -73,6 +77,7 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Downed_Q, "Cooldown.Slot.Downed.Q");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Downed_W, "Cooldown.Slot.Downed.W");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_Downed_R, "Cooldown.Slot.Downed.R");
+	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Slot_F, "Cooldown.Slot.F");
 
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Hammer,      "Cooldown.Weapon.Hammer");
 	UE_DEFINE_GAMEPLAY_TAG(Cooldown_Weapon_Bat,         "Cooldown.Weapon.Bat");
@@ -95,6 +100,7 @@ namespace ERTags
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_Skill,       "Damage.Type.Skill");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Type_True,        "Damage.Type.True");
 	UE_DEFINE_GAMEPLAY_TAG(Damage_Secondary,        "Damage.Secondary");
+	UE_DEFINE_GAMEPLAY_TAG(Damage_Source_Tactical,  "Damage.Source.Tactical");
 
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_CCDuration,           "SetByCaller.CCDuration");
 	UE_DEFINE_GAMEPLAY_TAG(SetByCaller_Cooldown,             "SetByCaller.Cooldown");

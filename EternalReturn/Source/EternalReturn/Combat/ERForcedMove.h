@@ -55,6 +55,12 @@ namespace ERForcedMove
 	bool ApplySelfMove(ACharacter* Target, const FVector& Direction, float DistanceUU, float Duration, bool bPassThroughPawns = false, float WallCrossExtraUU = 0.f, bool bThroughWalls = false);
 
 	/**
+	 * 순간이동 설 자리 — Dest 부터 시전자 쪽으로 25cm 씩 당기며 캡슐이 벽에 안 겹치고 바닥이 있는 첫 자리 (벽 너머 자리도 된다 — 전술 블링크 · Argument 80).
+	 * 없으면 false (제자리). 캐릭터(Pawn) 는 막지 않는다 — 겹치면 이동 컴포넌트가 밀어낸다.
+	 */
+	bool FindBlinkSpot(const ACharacter* Target, const FVector& Dest, FVector& OutSpot);
+
+	/**
 	 * [모든 머신] 실제로 RootMotionSource 를 붙인다. **직접 부르지 않는다** —
 	 * ApplyForcedMove 가 서버에서, Multicast RPC 가 각 클라에서 부른다.
 	 */

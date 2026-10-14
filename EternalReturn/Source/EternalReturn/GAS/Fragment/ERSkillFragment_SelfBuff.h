@@ -21,6 +21,17 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	bool bOnlyOnHit = false;
 
+	/**
+	 * 맞힌 수 비례 — 첫 대상 뒤 **추가 대상마다** 크기 + 이 값 (진실의 칼날 이속 0.05 / 0.1 · Argument 80).
+	 * 쓰면 시전 때가 아니라 **판정 뒤** 에 건다 (0명이어도 기본 크기로). 비우면 지금까지와 같다.
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> MagnitudePerExtraHit;
+
+	/** 위로 늘린 크기의 상한 (1.3 = +30%). 0 = 상한 없음 */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> MagnitudeMax;
+
 	virtual void OnExecute(FERSkillContext& Ctx) const override;
 	virtual void OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const override;
 	/** 맞혔을 때만이면 적중 조각 — 장판 · 투사체 도착(ApplyOnTargets)에서도 돈다. */
@@ -28,5 +39,7 @@ public:
 	virtual FString GetDebugName() const override { return TEXT("자기 버프"); }
 
 private:
-	void ApplyEffects(FERSkillContext& Ctx) const;
+	/** HitCount < 0 = 맞힌 수 비례 안 씀 */
+	void ApplyEffects(FERSkillContext& Ctx, int32 HitCount = -1) const;
+	bool ScalesByHits() const { return !MagnitudePerExtraHit.IsEmpty(); }
 };

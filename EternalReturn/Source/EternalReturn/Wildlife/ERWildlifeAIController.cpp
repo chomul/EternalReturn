@@ -29,6 +29,17 @@ AERWildlifeAIController::AERWildlifeAIController()
 	PrimaryActorTick.bStartWithTickEnabled = false;
 }
 
+namespace
+{
+/** 야생동물이 노릴 수 있나 — 살아 있고 · 대상 제외(시체 등) 아님 · **빈사 아님** (사용자 2026-10-12 "야생동물이 빈사 상태는 공격 안 해") */
+bool IsWildlifePrey(const UAbilitySystemComponent* ASC)
+{
+	return ASC && ASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 0.f
+		&& !ASC->HasMatchingGameplayTag(ERTags::State_Untargetable)
+		&& !ASC->HasMatchingGameplayTag(ERTags::State_Downed);
+}
+}
+
 const TCHAR* AERWildlifeAIController::StateName(EERWildlifeAIState InState)
 {
 	switch (InState)
@@ -154,7 +165,7 @@ void AERWildlifeAIController::AggroNearestInRadius(float Meters)
 	{
 		const AERPlayerState* ERPS = Cast<AERPlayerState>(PS);
 		const APawn* Candidate = ERPS ? ERPS->GetPawn() : nullptr;
-		if (!Candidate || ERPS->TeamId == INDEX_NONE)
+		if (!Candidate || ERPS->TeamId == INDEX_NONE || !IsWildlifePrey(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Candidate)))
 		{
 			continue;
 		}
@@ -290,7 +301,7 @@ APawn* AERWildlifeAIController::PickTarget() const
 		const AERPlayerState* ERPS = Cast<AERPlayerState>(PS);
 		APawn* Candidate = ERPS && ERPS->TeamId == AggroTeam ? ERPS->GetPawn() : nullptr;
 		const UAbilitySystemComponent* ASC = Candidate ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Candidate) : nullptr;
-		if (!ASC || ASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) <= 0.f || ASC->HasMatchingGameplayTag(ERTags::State_Untargetable))
+		if (!IsWildlifePrey(ASC))
 		{
 			continue;
 		}
@@ -343,7 +354,7 @@ void AERWildlifeAIController::Think()
 	APawn* Target = PickTarget();
 	if (!Target)
 	{
-		SetState(EERWildlifeAIState::Return, TEXT("어그로 팀에 생존자 없음"));
+		SetState(EERWildlifeAIState::Return, TEXT("어그로 팀에 노릴 대상 없음 (사망 · 빈사 제외)"));
 		return;
 	}
 
@@ -511,7 +522,7 @@ void AERWildlifeAIController::StartTrackingNearest(float Meters)
 	{
 		APawn* Candidate = PS ? PS->GetPawn() : nullptr;
 		const UAbilitySystemComponent* ASC = Candidate ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Candidate) : nullptr;
-		if (!ASC || ASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) <= 0.f)
+		if (!IsWildlifePrey(ASC))
 		{
 			continue;
 		}
@@ -548,7 +559,7 @@ void AERWildlifeAIController::ThinkTracking()
 	}
 	APawn* Target = TrackTarget.Get();
 	const UAbilitySystemComponent* TASC = Target ? UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target) : nullptr;
-	if (!TASC || TASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) <= 0.f
+	if (!IsWildlifePrey(TASC)
 		|| FVector::DistSquared2D(Target->GetActorLocation(), Me->GetActorLocation()) > FMath::Square(TrackRadiusUU))
 	{
 		TrackTarget.Reset();

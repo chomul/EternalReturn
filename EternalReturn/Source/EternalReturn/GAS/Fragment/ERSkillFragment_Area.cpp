@@ -14,7 +14,10 @@ void UERSkillFragment_Area::OnExecute(FERSkillContext& Ctx) const
 	{
 		return;
 	}
-	Ctx.bSkipTargeting = true;   // 판정은 장판이 한다
+	if (!PulseSkill)
+	{
+		Ctx.bSkipTargeting = true;   // 판정은 장판이 한다
+	}
 
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -42,6 +45,6 @@ void UERSkillFragment_Area::OnExecute(FERSkillContext& Ctx) const
 		{
 			Area->AttachToActor(Ctx.Avatar, FAttachmentTransformRules::KeepWorldTransform);
 		}
-		Area->InitializeFromFragment(Ctx.Ability, Ctx.Skill, Ctx.Level, Duration, Radius, Interval, DamageDecay, this, Pulses);
+		Area->InitializeFromFragment(Ctx.Ability, PulseSkill ? PulseSkill.Get() : Ctx.Skill, Ctx.Level, Duration, Radius, Interval, DamageDecay, this, Pulses);
 	}
 }

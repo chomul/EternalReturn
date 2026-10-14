@@ -19,6 +19,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, meta = (Categories = "State"))
 	FGameplayTag Tag;
 
+	/** 같은 시간 동안 같이 거는 태그 — 전술 아티팩트 경직 (무적 + 이동 · 스킬 · 평타 막기 · Argument 80). 비면 Tag 하나 (지금까지와 같다) */
+	UPROPERTY(EditDefaultsOnly, meta = (Categories = "State"))
+	FGameplayTagContainer ExtraTags;
+
 	/** 레벨별 초 */
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> Duration;

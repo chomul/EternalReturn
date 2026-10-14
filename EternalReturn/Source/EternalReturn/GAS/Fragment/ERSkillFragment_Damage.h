@@ -93,6 +93,10 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> PerCasterLostHPPercent;
 
+	/** **시전자 추가 체력** (최대 체력 Current − Base · ERSkill::CasterBonusMaxHP) × 이 값을 기본 피해에 더한다 (전술 퀘이크 0.1 · Argument 80) */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> CasterBonusHPRatio;
+
 	/** 시전자 자신도 맞는다 (시셀라 R) — 대상이 없어도 자신은 맞는다 */
 	UPROPERTY(EditDefaultsOnly)
 	bool bIncludeSelf = false;

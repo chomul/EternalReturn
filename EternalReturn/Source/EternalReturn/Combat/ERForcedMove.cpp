@@ -425,4 +425,43 @@ bool CheckWallImpact(ACharacter* Target, FHitResult& OutHit)
 	return true;
 }
 
+bool FindBlinkSpot(const ACharacter* Target, const FVector& Dest, FVector& OutSpot)
+{
+	const UCapsuleComponent* Cap = Target ? Target->GetCapsuleComponent() : nullptr;
+	UWorld* World = Target ? Target->GetWorld() : nullptr;
+	if (!Cap || !World)
+	{
+		return false;
+	}
+	// 벽 넘기와 같은 기준 (FindWallCrossLanding) — 조금 줄인 캡슐 · 벽 = WorldStatic · WorldDynamic
+	const FCollisionShape Shape = FCollisionShape::MakeCapsule(Cap->GetScaledCapsuleRadius() * 0.9f, Cap->GetScaledCapsuleHalfHeight() * 0.8f);
+	FCollisionObjectQueryParams Walls;
+	Walls.AddObjectTypesToQuery(ECC_WorldStatic);
+	Walls.AddObjectTypesToQuery(ECC_WorldDynamic);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(ERBlinkSpot), /*bTraceComplex=*/false, Target);
+	const float FloorProbe = Cap->GetScaledCapsuleHalfHeight() + 100.f;
+
+	const FVector Start = Target->GetActorLocation();
+	FVector Back = Start - Dest;
+	Back.Z = 0.f;
+	const float Len = Back.Size();
+	Back = Len > KINDA_SMALL_NUMBER ? Back / Len : FVector::ZeroVector;
+	for (float D = 0.f; D <= Len + KINDA_SMALL_NUMBER; D += 25.f)
+	{
+		FVector P = Dest + Back * D;
+		P.Z = Start.Z;
+		if (World->OverlapAnyTestByObjectType(P, FQuat::Identity, Walls, Shape, Params))
+		{
+			continue;   // 벽 속
+		}
+		FHitResult Floor;
+		if (World->LineTraceSingleByObjectType(Floor, P, P - FVector(0.f, 0.f, FloorProbe), Walls, Params))
+		{
+			OutSpot = P;
+			return true;
+		}
+	}
+	return false;
+}
+
 } // namespace ERForcedMove

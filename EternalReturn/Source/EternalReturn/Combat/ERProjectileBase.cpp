@@ -137,12 +137,20 @@ bool AERProjectileBase::CanHit(const AActor* Target) const
 	{
 		return false;   // 대상만 (원거리 평타 · Argument 60 H1)
 	}
+	if (VolleyHits.IsValid() && VolleyHits->Contains(Target))
+	{
+		return false;   // 같은 묶음의 다른 발이 이미 맞혔다 — 지나간다
+	}
 	return Target && !Filter.IgnoredActors.Contains(Target);
 }
 
 void AERProjectileBase::OnHitTarget(AActor* Target)
 {
 	Filter.IgnoredActors.Add(Target);   // 같은 대상은 한 번 (관통이어도)
+	if (VolleyHits.IsValid())
+	{
+		VolleyHits->Add(Target);
+	}
 	static const IConsoleVariable* CVarDraw = IConsoleManager::Get().FindConsoleVariable(TEXT("ER.Skill.DebugDraw"));
 	if (CVarDraw && CVarDraw->GetInt() != 0)
 	{

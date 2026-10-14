@@ -185,7 +185,7 @@ void UERGameplayAbility::ActivateAbility(const FGameplayAbilitySpecHandle Handle
 			FERSkillContext CastCtx = MakeContext(Skill, 1.f);
 			for (const TObjectPtr<UERSkillFragment>& F : Skill->Fragments)
 			{
-				if (F) { F->OnCastStart(CastCtx); }
+				if (F && F->IsOnAt(CastCtx)) { F->OnCastStart(CastCtx); }
 			}
 		}
 		BeginCast(*Skill);       // [2] -> OnCastFinished -> ExecuteAndRecover
@@ -571,7 +571,8 @@ void UERGameplayAbility::ResolveAim(const FGameplayEventData* TriggerEventData, 
 	// ⭐ 몸을 조준 방향으로 돌린다 (사용자 요청 2026-09-20). 서버 · 소유 클라 양쪽에서 돌고, 다른 클라는 이동 복제로 받는다.
 	//   Yaw 만 — 탑다운이라 Pitch/Roll 은 건드리지 않는다. 이동 중이면 CharacterMovement 가 다시 돌릴 수 있지만
 	//   시전 페이즈에선 이동이 막히거나(Block.Movement) 취소되므로 문제 없다.
-	if (AActor* MutableAvatar = GetAvatarActorFromActorInfo())
+	//   방향 없는 스킬은 안 돈다 (bKeepFacing · Argument 81 A)
+	if (AActor* MutableAvatar = Skill.bKeepFacing ? nullptr : GetAvatarActorFromActorInfo())
 	{
 		FVector Flat = AimDirection; Flat.Z = 0.f;
 		if (Flat.SizeSquared() > KINDA_SMALL_NUMBER)
@@ -811,7 +812,7 @@ void UERGameplayAbility::ApplyOnTargets(const UERSkillData* Data, const TArray<A
 	// ⚠ 대상 효과 조각(피해 · 적중 효과)만 — 리캐스트 · 강화 · 2차 판정은 "시전 결과" 라 여기서 돌면 안 된다 (평타 강화 무한 루프).
 	for (const TObjectPtr<UERSkillFragment>& F : Data->Fragments)
 	{
-		if (F && F->IsHitEffect()) { F->OnTargetsResolved(Ctx, Targets); }
+		if (F && F->IsHitEffect() && F->IsOnAt(Ctx)) { F->OnTargetsResolved(Ctx, Targets); }
 	}
 }
 
@@ -970,7 +971,7 @@ const UERSkillFragment* UERGameplayAbility::FindFragmentBlocking(const FERSkillC
 	if (!Ctx.Skill) { return nullptr; }
 	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments)
 	{
-		if (F && !F->CanExecute(Ctx, OutReason)) { return F.Get(); }
+		if (F && F->IsOnAt(Ctx) && !F->CanExecute(Ctx, OutReason)) { return F.Get(); }
 	}
 	return nullptr;
 }
@@ -978,25 +979,25 @@ const UERSkillFragment* UERGameplayAbility::FindFragmentBlocking(const FERSkillC
 void UERGameplayAbility::RunFragmentsExecute(FERSkillContext& Ctx)
 {
 	if (!Ctx.Skill) { return; }
-	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F) { F->OnExecute(Ctx); } }
+	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F && F->IsOnAt(Ctx)) { F->OnExecute(Ctx); } }
 }
 
 void UERGameplayAbility::RunFragmentsTargets(FERSkillContext& Ctx, const TArray<AActor*>& Targets)
 {
 	if (!Ctx.Skill) { return; }
-	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F) { F->OnTargetsResolved(Ctx, Targets); } }
+	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F && F->IsOnAt(Ctx)) { F->OnTargetsResolved(Ctx, Targets); } }
 }
 
 void UERGameplayAbility::RunFragmentsLocal(FERSkillContext& Ctx)
 {
 	if (!Ctx.Skill) { return; }
-	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F) { F->OnLocalExecute(Ctx); } }
+	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F && F->IsOnAt(Ctx)) { F->OnLocalExecute(Ctx); } }
 }
 
 void UERGameplayAbility::RunFragmentsEnd(FERSkillContext& Ctx, bool bCancelled)
 {
 	if (!Ctx.Skill) { return; }
-	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F) { F->OnEnd(Ctx, bCancelled); } }
+	for (const TObjectPtr<UERSkillFragment>& F : Ctx.Skill->Fragments) { if (F && F->IsOnAt(Ctx)) { F->OnEnd(Ctx, bCancelled); } }
 }
 
 void UERGameplayAbility::ExecuteOther(const UERSkillData* Other, float Scale, bool bWithExecuteHooks)

@@ -129,6 +129,9 @@ public:
 	/** 발 사이 각도(도) */
 	UPROPERTY(EditDefaultsOnly, Category = "발사", meta = (ClampMin = "0", ClampMax = "180", EditCondition = "FirePattern == EERFirePattern::Simultaneous", EditConditionHides))
 	float SpreadAngleDeg = 15.f;
+	/** 여러 발이 같은 대상을 맞혀도 **한 번** 만 (전술 플라즈마 대시 "피해는 한 번만" · Argument 80). 끄면 발마다 (지금까지와 같다) */
+	UPROPERTY(EditDefaultsOnly, Category = "발사", meta = (EditCondition = "FirePattern == EERFirePattern::Simultaneous", EditConditionHides))
+	bool bOneHitPerTarget = false;
 
 	/** 발 사이 간격(초) — 사격 애니 길이 (`@Length(…)`) */
 	UPROPERTY(EditDefaultsOnly, Category = "발사", meta = (ClampMin = "0", EditCondition = "FirePattern == EERFirePattern::Sequential", EditConditionHides))
@@ -142,6 +145,12 @@ public:
 	/** 대상이 이 거리(m)보다 멀어지면 그 발은 안 쏜다. 0 = 끔 */
 	UPROPERTY(EditDefaultsOnly, Category = "발사", meta = (ClampMin = "0", EditCondition = "FirePattern == EERFirePattern::Sequential", EditConditionHides))
 	float CancelDistance = 0.f;
+	/** 대상 한 명에게 몇 발 — 전술 리펄서 미사일 "가장 가까운 적에게 5 / 8발" (대상 MaxTargets 1 · Argument 80). 레벨별 · 비우면 1 */
+	UPROPERTY(EditDefaultsOnly, Category = "발사", meta = (EditCondition = "FirePattern == EERFirePattern::Sequential", EditConditionHides))
+	TArray<int32> ShotsPerTarget;
+	/** 스캔 · 사격을 N초 뒤에 — **그때 시전자 자리**에서 스캔 (리펄서 "3m 이동 뒤 착지 지점 8.5m"). 0 = 바로 (지금까지와 같다) */
+	UPROPERTY(EditDefaultsOnly, Category = "발사", meta = (ClampMin = "0", EditCondition = "FirePattern == EERFirePattern::Sequential", EditConditionHides))
+	float ScanDelay = 0.f;
 
 	virtual void Deliver(UERGameplayAbility& Ability, const UERSkillData& Skill, const FTargetQuery& Q, const FERShapeContext& Ctx) const override;
 	virtual bool IsSingleHit() const override { return !bPierce && FirePattern == EERFirePattern::Single; }
@@ -155,7 +164,7 @@ private:
 	/** 비우면 기본 클래스 */
 	UClass* ResolveClass() const;
 	/** 순차 — 스캔 → 대상마다 한 발씩 Interval 간격 (카티야 R) */
-	void FireSequential(UERGameplayAbility& Ability, const UERSkillData& Skill, const FTargetQuery& Q, const FERShapeContext& Ctx) const;
+	void FireSequential(UERGameplayAbility& Ability, const UERSkillData& Skill, const FTargetQuery& Q, const FERShapeContext& Ctx, bool bBeginDeferred = true) const;
 	/** 순차의 한 발 — 대상이 CancelDistance 밖이거나 사라졌으면 건너뛴다 */
 	void FireShotAt(UERGameplayAbility& Ability, const UERSkillData& Skill, AActor* Target, int32 ShotIndex, int32 Level, const FTargetQuery& Filter) const;
 };

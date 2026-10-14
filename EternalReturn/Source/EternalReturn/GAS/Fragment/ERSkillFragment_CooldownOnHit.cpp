@@ -14,9 +14,17 @@ namespace
 	void ReduceCooldown(FERSkillContext& Ctx, const FGameplayTagContainer& CooldownTags, float Sec);
 }
 
+void UERSkillFragment_CooldownOnHit::OnExecute(FERSkillContext& Ctx) const
+{
+	if (bOnCast && Ctx.bAuthority && Ctx.ASC)
+	{
+		ReduceCooldown(Ctx, CooldownTags, UERSkillData::LevelValue(Seconds, Ctx.Level));
+	}
+}
+
 void UERSkillFragment_CooldownOnHit::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
 {
-	if (bFromHitEvent || !Ctx.bAuthority || Targets.IsEmpty() || !Ctx.ASC || !Ctx.Ability)
+	if (bOnCast || bFromHitEvent || !Ctx.bAuthority || Targets.IsEmpty() || !Ctx.ASC || !Ctx.Ability)
 	{
 		return;
 	}

@@ -7,10 +7,12 @@
 #include "GAS/ERGameplayAbility.h"
 #include "GAS/ERGameplayTags.h"
 #include "TimerManager.h"
+#include "Core/ERPlayerState.h"
+#include "Growth/ERGrowthComponent.h"
 
 void UERSkillFragment_SelfBuff::OnExecute(FERSkillContext& Ctx) const
 {
-	if (!bOnlyOnHit)
+	if (!bOnlyOnHit && !ScalesByHits())
 	{
 		ApplyEffects(Ctx);
 	}
@@ -18,13 +20,22 @@ void UERSkillFragment_SelfBuff::OnExecute(FERSkillContext& Ctx) const
 
 void UERSkillFragment_SelfBuff::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
 {
+	if (ScalesByHits())
+	{
+		// 진실의 칼날 — 판정 뒤 맞힌 수로 (bOnlyOnHit 면 0명일 때 안 건다)
+		if (!bOnlyOnHit || !Targets.IsEmpty())
+		{
+			ApplyEffects(Ctx, Targets.Num());
+		}
+		return;
+	}
 	if (bOnlyOnHit && !Targets.IsEmpty())
 	{
 		ApplyEffects(Ctx);   // 여러 명 맞아도 한 번
 	}
 }
 
-void UERSkillFragment_SelfBuff::ApplyEffects(FERSkillContext& Ctx) const
+void UERSkillFragment_SelfBuff::ApplyEffects(FERSkillContext& Ctx, int32 HitCount) const
 {
 	UERGameplayAbility* A = Ctx.Ability;
 	if (!A || !Ctx.ASC || !Ctx.bAuthority || Effects.IsEmpty())
@@ -46,7 +57,30 @@ void UERSkillFragment_SelfBuff::ApplyEffects(FERSkillContext& Ctx) const
 			continue;
 		}
 		const float Duration = UERSkillData::LevelValue(SE.Duration, Level);
-		const float Magnitude = UERSkillData::LevelValueSigned(SE.Magnitude, Level);   // 음수 허용
+		float Magnitude = UERSkillData::LevelValueSigned(SE.Magnitude, Level);   // 음수 허용
+		if (const float PerBonusHP = UERSkillData::LevelValue(SE.MagnitudePerBonusHP, Level); PerBonusHP != 0.f)
+		{
+			const float BonusHP = ERSkill::CasterBonusMaxHP(Ctx.ASC);
+			UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 자기 버프 추가 체력 %.0f × %.4f → 크기 %.3f + %.3f"), *GetNameSafe(Ctx.Skill), BonusHP, PerBonusHP, Magnitude, BonusHP * PerBonusHP);
+			Magnitude += BonusHP * PerBonusHP;
+		}
+		if (const float PerCharLevel = UERSkillData::LevelValue(SE.MagnitudePerCharLevel, Level); PerCharLevel != 0.f)
+		{
+			const UERGrowthComponent* Growth = Ctx.PlayerState ? Ctx.PlayerState->GetGrowth() : nullptr;
+			const int32 CharLevel = Growth ? Growth->GetLevel() : 0;
+			UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 자기 버프 실험체 레벨 %d × %.3f → 크기 %.3f + %.3f"), *GetNameSafe(Ctx.Skill), CharLevel, PerCharLevel, Magnitude, CharLevel * PerCharLevel);
+			Magnitude += CharLevel * PerCharLevel;
+		}
+		if (HitCount >= 0)
+		{
+			const float Base = Magnitude;
+			Magnitude += FMath::Max(0, HitCount - 1) * UERSkillData::LevelValue(MagnitudePerExtraHit, Level);
+			if (const float Max = UERSkillData::LevelValue(MagnitudeMax, Level); Max > 0.f)
+			{
+				Magnitude = FMath::Min(Magnitude, Max);
+			}
+			UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 자기 버프 맞힌 수 %d → 크기 %.2f → %.2f"), *GetNameSafe(Ctx.Skill), HitCount, Base, Magnitude);
+		}
 		if (Duration > 0.f)   { Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_CCDuration, Duration); }
 		if (Magnitude != 0.f) { Spec->SetSetByCallerMagnitude(ERTags::SetByCaller_OnHitMagnitude, Magnitude); }
 		if (SE.GrantTag.IsValid()) { Spec->DynamicGrantedTags.AddTag(SE.GrantTag); }

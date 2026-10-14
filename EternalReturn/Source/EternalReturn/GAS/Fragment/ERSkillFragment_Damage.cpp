@@ -78,6 +78,12 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 시전자 잃은 체력 %.1f%% × %.1f → 기본 %.1f + %.1f"), *GetNameSafe(Ctx.Skill), LostPct, PerLost, Base, LostPct * PerLost);
 		Base += LostPct * PerLost;
 	}
+	if (const float BonusHPRatio = UERSkillData::LevelValue(CasterBonusHPRatio, Level); BonusHPRatio != 0.f)
+	{
+		const float BonusHP = ERSkill::CasterBonusMaxHP(Ctx.ASC);
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 시전자 추가 체력 %.0f × %.3f → 기본 %.1f + %.1f"), *GetNameSafe(Ctx.Skill), BonusHP, BonusHPRatio, Base, BonusHP * BonusHPRatio);
+		Base += BonusHP * BonusHPRatio;
+	}
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_Base,          Base * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_APRatio,       AP * Scale);
 	Spec->SetSetByCallerMagnitude(ERTags::Data_Damage_BonusAPRatio,  UERSkillData::LevelValue(BonusAPRatio, Level) * Scale);
@@ -92,6 +98,11 @@ void UERSkillFragment_Damage::Apply(FERSkillContext& Ctx, const TArray<AActor*>&
 	case ESkillDamageType::BasicAttack: Spec->AddDynamicAssetTag(ERTags::Damage_Type_BasicAttack); break;
 	case ESkillDamageType::Fixed:       Spec->AddDynamicAssetTag(ERTags::Damage_Type_True);        break;
 	default:                            Spec->AddDynamicAssetTag(ERTags::Damage_Type_Skill);       break;
+	}
+	// 전술 스킬 피해 — 패시브(출혈 · 근성 …)가 안 탄다 (사용자 2026-10-13). 추가 피해 데이터(스트라이더)도 어빌리티 슬롯으로 판단
+	if (A->GetSlotTag() == ERTags::Ability_Slot_F)
+	{
+		Spec->AddDynamicAssetTag(ERTags::Damage_Source_Tactical);
 	}
 
 	// ⭐ 형상 태그는 시전 쪽이 붙인다 — Execution 이 형상을 추측하지 않는다 (F03-05 흡혈 치유 감소).

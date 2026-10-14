@@ -1,0 +1,801 @@
+{
+  "_설명": "ER.Skill.ImportJson Tactical — 전술 스킬 F (Argument 80). 실험체 DA 가 아니라 Project Settings › ER Combat › 전술 스킬 › Tactical Skills 목록 (순서 = 캐릭터 선택 UI 번호) 에서 PlayerState 가 고른 1개를 준다. 수치 = 나무위키 「이터널 리턴/전술 스킬」 2026-10-12. Lv2 = 전술 강화 모듈 (지금은 ER.Tactical.Level 2) · Lv2 에만 있는 효과는 조각 MinLevel 2. \"레벨\" 계수 = 실험체 레벨 (미확인). 펄스 · 2차 판정 데이터를 본 스킬보다 먼저 적는다 (@ 참조). 형식은 Katja.json 과 같다. 소리 = 소리 조각 ExecuteSound · HitSound (Argument 82 A · 배치표 Audio/Tactical.md) — 같은 이름이 SFX/Skill · SFX/TacticalSkill 두 폴더에 있어 (원본 md5 31개 같음) 전체 경로로 적는다.",
+  "Folder": "/Game/GAS/Skill/Tactical",
+  "Skills": [
+    {
+      "Asset": "DA_Skill_Tactical_Blink",
+      "_메모": "블링크 — 지정 위치로 3m 순간이동 · 벽 통과 · 쿨 90/45. Lv2 2.5초 이속 15% + 충돌 무시 (State.Ghost). 판정 없음 (반경 0)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(90,45)",
+        "bIgnoreCooldownReduction": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "ShapeOrigin": "AimPoint",
+          "AimRange": 3,
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfMove",
+          "Props": {
+            "Mode": "BlinkToAimPoint"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "MinLevel": 2,
+            "Effects": "((Effect=@GE_Wild_MoveSpeedUp,Duration=(2.5),Magnitude=(1.15),GrantTag=(TagName=\"State.Ghost\")))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Blink.TacticalSkill_Blink"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "MinLevel": 2,
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Blink_Swift.TacticalSkill_Blink_Swift"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_Quake_Pulse",
+      "_메모": "퀘이크 Lv2 장판 펄스 데이터 (F 슬롯 아님 · 장판 조각 PulseSkill 이 쓴다) — 0.5초마다 3.5m 적에게 10 (+실험체 레벨×2) (+추가 체력 2.5%) 스킬 피해",
+      "Props": {
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(10)",
+            "PerCharLevel": "(2)",
+            "CasterBonusHPRatio": "(0.025)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "HitSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Quake_CycloneHit.TacticalSkill_Quake_CycloneHit"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_Quake",
+      "_메모": "퀘이크 — 주변 4m 적에게 50/100 (+실험체 레벨×10) (+추가 체력 10%) 스킬 피해 · 이속 40/50% 감소 2초 · 쿨 40/30. Lv2 6초간 0.5초마다 3.5m 틱 피해 (Quake_Pulse · 나를 따라다님)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(40,30)",
+        "bIgnoreCooldownReduction": true,
+        "bKeepFacing": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 4
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(50,100)",
+            "PerCharLevel": "(10)",
+            "CasterBonusHPRatio": "(0.1)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(2)",
+            "SlowPercent": "(0.4,0.5)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Area",
+          "Props": {
+            "MinLevel": 2,
+            "Duration": 6,
+            "Radius": 3.5,
+            "TickInterval": 0.5,
+            "bFollowCaster": true,
+            "PulseSkill": "@DA_Skill_Tactical_Quake_Pulse"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Quake.TacticalSkill_Quake"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "MinLevel": 2,
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Quake_Cyclone.TacticalSkill_Quake_Cyclone"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_TruthBlade_Second",
+      "_메모": "진실의 칼날 Lv2 두 번째 칼날 (F 슬롯 아님 · 2차 판정 조각이 쓴다) — 주변 2.5m 적에게 50 (+실험체 레벨×10) 스킬 피해",
+      "Props": {
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 2.5
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(50)",
+            "PerCharLevel": "(10)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "HitSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_TruthBladeHit.TacticalSkill_TruthBladeHit"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_TruthBlade",
+      "_메모": "진실의 칼날 — 주변 2.5m 적에게 140 (+실험체 레벨×20) 스킬 피해 · 2.5초 이속 20% + 추가 대상마다 5/10% (최대 30/40%) · 쿨 10/8. Lv2 칼날 하나 더 (TruthBlade_Second · 0.3초 뒤 [자체])",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(10,8)",
+        "bIgnoreCooldownReduction": true,
+        "bKeepFacing": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 2.5
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(140)",
+            "PerCharLevel": "(20)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "Effects": "((Effect=@GE_Wild_MoveSpeedUp,Duration=(2.5),Magnitude=(1.2)))",
+            "MagnitudePerExtraHit": "(0.05,0.1)",
+            "MagnitudeMax": "(1.3,1.4)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_FollowUp",
+          "Props": {
+            "MinLevel": 2,
+            "Skill": "@DA_Skill_Tactical_TruthBlade_Second",
+            "Delay": 0.3
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_TruthBladeSlash.TacticalSkill_TruthBladeSlash",
+            "HitSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_TruthBladeHit.TacticalSkill_TruthBladeHit"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_RedStorm",
+      "_메모": "붉은 폭풍 — 커서 방향 0.1초 2.5m 이동 (벽 못 넘음) → 정전기: 기본 공격 사거리 +10/15% 10/12초 (Lv2 지속 표 12 · 본문 15 — 표 값 · Argument 80 ③) · 쿨 40/30. GE_AttackRangeUp = 에디터 애셋 (AttackRange Multiply)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(40,30)",
+        "bIgnoreCooldownReduction": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfMove",
+          "Props": {
+            "Mode": "TowardAim",
+            "Distance": 2.5,
+            "Duration": 0.1
+          }
+        },
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "Effects": "((Effect=@GE_AttackRangeUp,Duration=(10,12),Magnitude=(1.1,1.15)))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_RedStorm_Move.TacticalSkill_RedStorm_Move"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_RedStorm_Buff.TacticalSkill_RedStorm_Buff"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_Transcendence",
+      "_메모": "초월 — 즉시 3초 보호막 150/200 (+추가 체력 80/100%) · 쿨 40/30. Lv2 3초 방해 효과 저항 10% (+추가 체력의 3%)% → 0.1 + 추가 체력 × 0.0003",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(40,30)",
+        "bIgnoreCooldownReduction": true,
+        "bKeepFacing": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Shield",
+          "Props": {
+            "bSelf": true,
+            "Amount": "(Base=(150,200),CasterBonusHPRatio=(0.8,1.0))",
+            "Duration": 3
+          }
+        },
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "MinLevel": 2,
+            "Effects": "((Effect=@GE_CCResistUp,Duration=(3),Magnitude=(0.1),MagnitudePerBonusHP=(0.0003)))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_TranscendenceOn.TacticalSkill_TranscendenceOn"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_Artifact",
+      "_메모": "아티팩트 — 2.5초 경직 (아무 행동 못 함) · 그동안 무적 · 대상 지정 불가 (State.Untargetable · 사용자 2026-10-14) · 쿨 90/45. Lv2 경직 중 쿨다운 150% 빠르게 = 발동 때 다른 슬롯 쿨 −3.75초 (2.5 × 1.5 · [자체] 결과 같음)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(90,45)",
+        "bIgnoreCooldownReduction": true,
+        "bKeepFacing": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_TimedTag",
+          "Props": {
+            "Tag": "(TagName=\"State.Invulnerable\")",
+            "ExtraTags": "(GameplayTags=((TagName=\"State.Block.Movement\"),(TagName=\"State.Block.Skill\"),(TagName=\"State.Block.BasicAttack\"),(TagName=\"State.Untargetable\")))",
+            "Duration": "(2.5)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_CooldownOnHit",
+          "Props": {
+            "MinLevel": 2,
+            "bOnCast": true,
+            "Seconds": "(3.75)",
+            "CooldownTags": "(GameplayTags=((TagName=\"Cooldown.Slot.Q\"),(TagName=\"Cooldown.Slot.W\"),(TagName=\"Cooldown.Slot.E\"),(TagName=\"Cooldown.Slot.R\"),(TagName=\"Cooldown.Slot.D\"),(TagName=\"Cooldown.Weapon\")))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Respite.TacticalSkill_Respite"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_PlasmaDash",
+      "_메모": "플라즈마 대시 — 2.5m 이동 (18m/s ≈ 0.14초) 하며 전방 60° 부채꼴로 투사체 (7m · 17m/s) → 120/150 (+레벨×5/10) 스킬 피해 · 1초 이속 30% 감소 · 여러 발 맞아도 한 번. 투사체 수 (미확인) → 5발 15° 간격 [자체]. Lv2 적중 대상 방어력 10% 감소 5초 · 쿨 50/40",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(50,40)",
+        "bIgnoreCooldownReduction": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Line",
+        "Props": {
+          "Length": 7,
+          "Width": 0.6
+        }
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Simultaneous",
+          "Count": 5,
+          "SpreadAngleDeg": 15,
+          "Speed": 17,
+          "Radius": 0.3,
+          "bPierce": false,
+          "bOneHitPerTarget": true
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfMove",
+          "Props": {
+            "Mode": "TowardAim",
+            "Distance": 2.5,
+            "Duration": 0.14
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(120,150)",
+            "PerCharLevel": "(5,10)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(1)",
+            "SlowPercent": "(0.3)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "MinLevel": 2,
+            "Effect": "@GE_ArmorBreak",
+            "Duration": "(5)",
+            "Magnitude": "(0.9)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Repulsor_Spray_fire.TacticalSkill_Repulsor_Spray_fire",
+            "HitSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Repulsor_Spray_hit.TacticalSkill_Repulsor_Spray_hit"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_Defeasance",
+      "_메모": "무효화 — 자신 + 주변 6m 아군의 해로운 상태 해제 (에어본 제외 · 넉백은 GE 가 아니라 원래 안 지워짐 · 붙잡힘 · 경직은 우리 쪽에 없음) · 이동 속도 20/30% 1초 · 해제된 사람은 추가로 30% 1초 · 쿨 40/30. Lv2 자신 + 아군 방해 효과 저항 60% 3초. 이속 수치 = Argument 80 ③ 기본값 (원작 표 · 1.26 패치 노트 엇갈림)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(40,30)",
+        "bIgnoreCooldownReduction": true,
+        "bKeepFacing": true,
+        "CastTime": 0,
+        "Targets": "(Team=Ally,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 6
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Cleanse",
+          "Props": {
+            "bSelf": true,
+            "bTargets": true,
+            "KeepTags": "(GameplayTags=((TagName=\"State.CC.Airborne\")))",
+            "IfRemoved": "((Effect=@GE_Wild_MoveSpeedUp,Duration=(1),Magnitude=(1.3)))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "Effects": "((Effect=@GE_Wild_MoveSpeedUp,Duration=(1),Magnitude=(1.2,1.3)))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "Effect": "@GE_Wild_MoveSpeedUp",
+            "Duration": "(1)",
+            "Magnitude": "(1.2,1.3)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "MinLevel": 2,
+            "Effects": "((Effect=@GE_CCResistUp,Duration=(3),Magnitude=(0.6)))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "MinLevel": 2,
+            "Effect": "@GE_CCResistUp",
+            "Duration": "(3)",
+            "Magnitude": "(0.6)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Nullification.TacticalSkill_Nullification"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "MinLevel": 2,
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Nullification_CcImmunity.TacticalSkill_Nullification_CcImmunity"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_LightWing",
+      "_메모": "라이트 윙 — 이동 속도 감소 제거 · 7초 이동 속도 15/20% (+실험체 레벨×1%) · 공격 속도 20% · 쿨 50/40. Lv2 적 실험체 평타 적중마다 +0.5초 · 평타 둔화 없음 (나무위키 본문 · Argument 80 D6 d)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(50,40)",
+        "bIgnoreCooldownReduction": true,
+        "bKeepFacing": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Cleanse",
+          "Props": {
+            "bSelf": true,
+            "RemoveTags": "(GameplayTags=((TagName=\"State.CC.Slow\")))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_SelfBuff",
+          "Props": {
+            "Effects": "((Effect=@GE_Wild_MoveSpeedUp,Duration=(7),Magnitude=(1.15,1.2),MagnitudePerCharLevel=(0.01),GrantTag=(TagName=\"State.Tactical.LightWing\")),(Effect=@GE_AttackSpeedUp,Duration=(7),Magnitude=(1.2),GrantTag=(TagName=\"State.Tactical.LightWing\")))"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_WhileBuff",
+          "Props": {
+            "WhileTag": "(TagName=\"State.Tactical.LightWing\")",
+            "bBasicAttackOnly": true,
+            "ExtendSeconds": "(0,0.5)",
+            "bExtendOnPlayersOnly": true
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_LightWing_Start.TacticalSkill_LightWing_Start"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_RepulsorMissile",
+      "_메모": "리펄서 미사일 — 조준 방향 3m 이동 (18m/s ≈ 0.17초) → 착지 지점 8.5m 안 가장 가까운 적 실험체에게 추적 미사일 5/8발 (25m/s) · 발당 10 (+실험체 레벨×1) (+대상 최대 체력 0.6%) 고정 피해 · 쿨 50/40. 발 사이 간격 (미확인) → 0.1초 [자체]. 대상이 없으면 이동만",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(50,40)",
+        "bIgnoreCooldownReduction": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=True,MaxTargets=1,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 8.5
+        }
+      },
+      "Delivery": {
+        "Type": "Projectile",
+        "Props": {
+          "FirePattern": "Sequential",
+          "Speed": 25,
+          "Radius": 0.3,
+          "bPierce": false,
+          "bHoming": true,
+          "bHitOnlyTarget": true,
+          "Interval": 0.1,
+          "AimTime": 0,
+          "ShotsPerTarget": "(5,8)",
+          "ScanDelay": 0.17
+        }
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_SelfMove",
+          "Props": {
+            "Mode": "TowardAim",
+            "Distance": 3,
+            "Duration": 0.17
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Fixed",
+            "BaseDamage": "(10)",
+            "PerCharLevel": "(1)",
+            "MaxHPRatio": "(0.006)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Repulsor_Missile_start.TacticalSkill_Repulsor_Missile_start",
+            "HitSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_Repulsor_Missile_hit.TacticalSkill_Repulsor_Missile_hit"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_Strider_Hit",
+      "_메모": "스트라이더 추가 피해 데이터 (F 슬롯 아님 · 버프 중 적중 조각 HitSkill 이 쓴다) — 100/150 (+실험체 레벨×5/10) 스킬 피해. Lv2 이속 감소 2초 근거리 50% · 원거리 30% (근거리 = 기본 공격 사거리 3m 이하 [자체]) · 단일 대상 (MaxTargets 1 — 광역 아님 · D6 c)",
+      "Props": {
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Targets": "(Team=Enemy,bPlayersOnly=True,MaxTargets=1,AimAssistRadius=0)"
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_Damage",
+          "Props": {
+            "DamageType": "Skill",
+            "BaseDamage": "(100,150)",
+            "PerCharLevel": "(5,10)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "MinLevel": 2,
+            "AttackRangeCond": "Melee",
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(2)",
+            "SlowPercent": "(0.5)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_OnHitEffect",
+          "Props": {
+            "MinLevel": 2,
+            "AttackRangeCond": "Ranged",
+            "Effect": "@GE_CC_Slow",
+            "Duration": "(2)",
+            "SlowPercent": "(0.3)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "HitSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_TheChase_Attack.TacticalSkill_TheChase_Attack"
+          }
+        }
+      ]
+    },
+    {
+      "Asset": "DA_Skill_Tactical_Strider",
+      "_메모": "스트라이더 - A13 — 5초 동안 10m 안 적 실험체 쪽으로 이동하면 이속 근거리 30/40% · 원거리 20/30% · 그동안 적에게 처음 피해를 주면 추가 스킬 피해 1회 (Strider_Hit) · 쿨 40/30. '적 쪽' 각도 (미확인) → 60° [자체] · 적 실험체 적중만 · 광역이면 가장 가까운 한 명 · 발동 뒤 적 쪽 이속 5초로 다시 (Argument 80 D6 b c T1)",
+      "Props": {
+        "SlotTag": "(TagName=\"Ability.Slot.F\")",
+        "AbilityClass": "@GA_Test",
+        "MaxLevel": 2,
+        "InitialLevel": 1,
+        "bUsesSkillPoints": false,
+        "Cooldowns": "(40,30)",
+        "bIgnoreCooldownReduction": true,
+        "bKeepFacing": true,
+        "CastTime": 0,
+        "Targets": "(Team=Enemy,bPlayersOnly=False,MaxTargets=0,AimAssistRadius=0)"
+      },
+      "Area": {
+        "Type": "Circle",
+        "Props": {
+          "Radius": 0
+        }
+      },
+      "Delivery": {
+        "Type": "Instant",
+        "Props": {}
+      },
+      "Fragments": [
+        {
+          "Class": "ERSkillFragment_TimedTag",
+          "Props": {
+            "Tag": "(TagName=\"State.Tactical.Strider\")",
+            "Duration": "(5)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_ChaseSpeed",
+          "Props": {
+            "AttackRangeCond": "Melee",
+            "WhileTag": "(TagName=\"State.Tactical.Strider\")",
+            "Radius": 10,
+            "MaxAngleDeg": 60,
+            "CheckInterval": 0.2,
+            "Effect": "@GE_Wild_MoveSpeedUp",
+            "Magnitude": "(1.3,1.4)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_ChaseSpeed",
+          "Props": {
+            "AttackRangeCond": "Ranged",
+            "WhileTag": "(TagName=\"State.Tactical.Strider\")",
+            "Radius": 10,
+            "MaxAngleDeg": 60,
+            "CheckInterval": 0.2,
+            "Effect": "@GE_Wild_MoveSpeedUp",
+            "Magnitude": "(1.2,1.3)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_WhileBuff",
+          "Props": {
+            "WhileTag": "(TagName=\"State.Tactical.Strider\")",
+            "bBasicAttackOnly": false,
+            "HitSkill": "@DA_Skill_Tactical_Strider_Hit",
+            "bOnce": true,
+            "bPlayersOnly": true,
+            "RefreshOnTrigger": "(5)"
+          }
+        },
+        {
+          "Class": "ERSkillFragment_Sfx",
+          "Props": {
+            "ExecuteSound": "/Game/ER/Audio/SFX/Skill/TacticalSkill_TheChase_Start.TacticalSkill_TheChase_Start"
+          }
+        }
+      ]
+    }
+  ]
+}

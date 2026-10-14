@@ -99,6 +99,22 @@ public:
 	DECLARE_MULTICAST_DELEGATE(FOnSkinChanged);
 	FOnSkinChanged OnSkinChanged;
 
+	// ── 전술 스킬 F (Argument 80 · C2 · G1) ─────────────────────
+	// ⭐ 인덱스 = ER Combat TacticalSkills. 전원 복제 — 캐릭터 선택 UI 가 팀원 선택도 읽는다. -1 = 없음.
+
+	int32 GetTacticalIndex() const { return TacticalIndex; }
+
+	/** [서버] 옛 F 회수 → 목록의 Index 번 부여 (레벨 1). 범위 밖이면 Warning 후 그대로. */
+	void SetTacticalSkill(int32 Index);
+
+	/** [클라 -> 서버] 캐릭터 선택 UI 가 부르는 입구 (로비 전에는 ER.Tactical). 범위는 서버가 다시 본다. */
+	UFUNCTION(Server, Reliable, WithValidation, BlueprintCallable, Category = "Skill")
+	void ServerSelectTacticalSkill(int32 Index);
+
+	/** 전술 스킬이 바뀌었다 — 서버는 SetTacticalSkill, 클라는 OnRep 에서. UI 가 구독한다. */
+	DECLARE_MULTICAST_DELEGATE(FOnTacticalChanged);
+	FOnTacticalChanged OnTacticalChanged;
+
 	// ── 채집 시간 (F12.5-04 · Argument 47 E2) ──────────────────
 	// ⭐ 채집 포즈 애니를 채집 시간에 맞춰 재생하려고 **모든 머신이** 알아야 한다. 채집 태그(State.Gathering)와 같은 액터(ASC 가 여기)라 같은 번들로 도착한다.
 	float GetGatherSeconds() const { return GatherSeconds; }
@@ -117,6 +133,15 @@ protected:
 
 	UPROPERTY(Replicated)
 	float GatherSeconds = 0.f;
+
+	UFUNCTION()
+	void OnRep_TacticalIndex();
+
+	UPROPERTY(ReplicatedUsing = OnRep_TacticalIndex)
+	int32 TacticalIndex = INDEX_NONE;
+
+	/** [서버] 지금 F 스킬 핸들 — 바꿀 때 회수 */
+	FERGrantedSkillHandles TacticalSkills;
 
 	/**
 	 * 초기화 전에는 유효하지 않을 수 있다. 호출부는 항상 null 검사를 한다.

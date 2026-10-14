@@ -17,6 +17,8 @@
 #include "Item/ERInventoryComponent.h"
 #include "Item/ERItemData.h"
 #include "Presentation/ERPresentationComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "GAS/ERGameplayTags.h"
 
 AERCharacterBase::AERCharacterBase(const FObjectInitializer& ObjectInitializer)
 	// ⭐ 이동 차단이 들어 있는 CMC 로 교체한다. **생성자에서만 가능하다.**
@@ -197,6 +199,7 @@ void AERCharacterBase::InitAbilityActorInfo()
 
 	// ⭐ 서버·클라 양쪽에서 건다. 각자 자기 CMC 를 갱신한다.
 	BindMoveSpeed();
+	BindGhost();
 
 	InitPresentation(ERPlayerState);
 }
@@ -307,6 +310,32 @@ void AERCharacterBase::BindMoveSpeed()
 	ApplyMoveSpeed(ASC->GetNumericAttribute(UERAttributeSet::GetMoveSpeedAttribute()));
 }
 
+void AERCharacterBase::BindGhost()
+{
+	UAbilitySystemComponent* ASC = GetAbilitySystemComponent();
+	if (!ASC || GhostTagHandle.IsValid())
+	{
+		return;
+	}
+	GhostTagHandle = ASC->RegisterGameplayTagEvent(ERTags::State_Ghost, EGameplayTagEventType::NewOrRemoved)
+		.AddUObject(this, &AERCharacterBase::OnGhostChanged);
+	if (const int32 Count = ASC->GetTagCount(ERTags::State_Ghost); Count > 0)
+	{
+		OnGhostChanged(ERTags::State_Ghost, Count);   // 구독 전에 이미 붙어 있을 수 있다 (없으면 기본 Block 그대로 — 로그 안 남김)
+	}
+}
+
+void AERCharacterBase::OnGhostChanged(const FGameplayTag Tag, int32 Count)
+{
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		// 캐릭터만 통과 — 벽(WorldStatic)은 그대로 막힌다. 밀어내며 돌진(ERForcedMove)과 같은 채널
+		Capsule->SetCollisionResponseToChannel(ECC_Pawn, Count > 0 ? ECR_Overlap : ECR_Block);
+		UE_LOG(LogEternalReturn, Log, TEXT("[전술 스킬] %s 충돌 무시 %s (%s)"), *GetName(), Count > 0 ? TEXT("시작") : TEXT("끝"),
+			HasAuthority() ? TEXT("서버") : TEXT("클라"));
+	}
+}
+
 void AERCharacterBase::OnMoveSpeedChanged(const FOnAttributeChangeData& Data)
 {
 	ApplyMoveSpeed(Data.NewValue);
@@ -338,6 +367,14 @@ void AERCharacterBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 				UERAttributeSet::GetMoveSpeedAttribute()).Remove(MoveSpeedHandle);
 		}
 		MoveSpeedHandle.Reset();
+	}
+	if (GhostTagHandle.IsValid())
+	{
+		if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+		{
+			ASC->RegisterGameplayTagEvent(ERTags::State_Ghost, EGameplayTagEventType::NewOrRemoved).Remove(GhostTagHandle);
+		}
+		GhostTagHandle.Reset();
 	}
 
 	// 연출 구독 해제 — PlayerState 는 폰보다 오래 산다 (부활).

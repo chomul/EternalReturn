@@ -107,6 +107,30 @@ void UERDelivery_Projectile::Deliver(UERGameplayAbility& Ability, const UERSkill
 	{
 		return;
 	}
+	if (FirePattern == EERFirePattern::Sequential && ScanDelay > 0.f)
+	{
+		// 리펄서 — 이동이 끝난 뒤 그 자리에서 스캔. 빗나감 판단 보류는 지금 (어빌리티는 먼저 끝나도 된다 · 람다 타이머 E19)
+		Ability.BeginDeferredHits(Skill, /*bAttackCue=*/false);
+		TWeakObjectPtr<UERGameplayAbility> WeakAbility(&Ability);
+		TWeakObjectPtr<const UERDelivery_Projectile> WeakThis(this);
+		TWeakObjectPtr<const UERSkillData> WeakSkill(&Skill);
+		const FVector CastLoc = Ctx.Avatar->GetActorLocation();
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 스캔 %.2f초 뒤 (이동 뒤 자리)"), *GetNameSafe(&Skill), ScanDelay);
+		FTimerHandle Unused;
+		Ctx.Avatar->GetWorld()->GetTimerManager().SetTimer(Unused, FTimerDelegate::CreateLambda([WeakAbility, WeakThis, WeakSkill, Q, Ctx, CastLoc]()
+		{
+			UERGameplayAbility* A = WeakAbility.Get();
+			const UERDelivery_Projectile* Self = WeakThis.Get();
+			const UERSkillData* S = WeakSkill.Get();
+			if (A && Self && S && Ctx.Avatar && IsValid(Ctx.Avatar))
+			{
+				FTargetQuery Moved = Q;
+				Moved.Origin += Ctx.Avatar->GetActorLocation() - CastLoc;   // 판정 원점(바닥 높이)을 이동한 만큼 옮긴다
+				Self->FireSequential(*A, *S, Moved, Ctx, /*bBeginDeferred=*/false);
+			}
+		}), ScanDelay, false);
+		return;
+	}
 	if (FirePattern == EERFirePattern::Sequential)
 	{
 		FireSequential(Ability, Skill, Q, Ctx);
@@ -119,6 +143,11 @@ void UERDelivery_Projectile::Deliver(UERGameplayAbility& Ability, const UERSkill
 		Aim = Avatar->GetActorForwardVector().GetSafeNormal2D();
 	}
 	const int32 N = FirePattern == EERFirePattern::Simultaneous ? FMath::Max(1, Count) : 1;
+	TSharedPtr<TSet<TWeakObjectPtr<const AActor>>> Shared;
+	if (N > 1 && bOneHitPerTarget)
+	{
+		Shared = MakeShared<TSet<TWeakObjectPtr<const AActor>>>();
+	}
 	for (int32 i = 0; i < N; ++i)
 	{
 		const float Yaw = (i - (N - 1) * 0.5f) * SpreadAngleDeg;   // 여러 발이면 부채처럼 (즉시 판정과 같은 규칙)
@@ -136,14 +165,18 @@ void UERDelivery_Projectile::Deliver(UERGameplayAbility& Ability, const UERSkill
 			L.RangeUU = FMath::Max(1.f, FVector::Dist2D(L.Start, Ctx.AimPoint));
 		}
 		L.bOnlyHomingTarget = bHitOnlyTarget && L.HomingTarget != nullptr;
-		Ability.SpawnProjectile(Skill, ResolveClass(), L, Q, Ability.GetAbilityLevel(), /*ShotIndex=*/-1, bPierce);
+		AERProjectileBase* P = Ability.SpawnProjectile(Skill, ResolveClass(), L, Q, Ability.GetAbilityLevel(), /*ShotIndex=*/-1, bPierce);
+		if (P && Shared.IsValid())
+		{
+			P->SetVolleyHits(Shared);
+		}
 	}
 	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 투사체 %d발 발사 (%.0f m/s · 사거리 %.1fm) — 적중은 도착 때"),
 		*GetNameSafe(Ability.GetOwningActorFromActorInfo()), *GetNameSafe(&Skill), N, Speed, Q.RangeMax);
 	Ability.BeginDeferredHits(Skill, /*bAttackCue=*/!Ability.IsExecutingOther());
 }
 
-void UERDelivery_Projectile::FireSequential(UERGameplayAbility& Ability, const UERSkillData& Skill, const FTargetQuery& Q, const FERShapeContext& Ctx) const
+void UERDelivery_Projectile::FireSequential(UERGameplayAbility& Ability, const UERSkillData& Skill, const FTargetQuery& Q, const FERShapeContext& Ctx, bool bBeginDeferred) const
 {
 	UWorld* World = Ctx.Avatar ? Ctx.Avatar->GetWorld() : nullptr;
 	if (!World || !Skill.Area)
@@ -166,10 +199,21 @@ void UERDelivery_Projectile::FireSequential(UERGameplayAbility& Ability, const U
 	FTargetQuery Filter = Q;             // 팀 · 시전자 · 실험체만 — 투사체 스윕이 쓴다
 	Filter.DesignatedTarget = nullptr;   // 타이머 동안 들고 있으니 사라질 수 있는 포인터는 뺀다
 	const int32 Lv = Ability.GetAbilityLevel();
-	// 인식된 사람 수만큼 (최대 MaxTargets) **한 명에 한 발씩** · 가까운 순 — 발마다 Fire 애니 · 사격음 (사용자 2026-10-02 "shot 애니가 인식된 사람 수만큼 한 명씩")
-	for (int32 i = 0; i < Scan.HitActors.Num(); ++i)
+	// 한 명에 몇 발 (리펄서 5 / 8 — 레벨별 · 비우면 1). 발 순서 = 대상 순서대로 이어서
+	const int32 PerTarget = ShotsPerTarget.IsEmpty() ? 1 : FMath::Max(1, ShotsPerTarget[FMath::Clamp(Lv - 1, 0, ShotsPerTarget.Num() - 1)]);
+	TArray<TWeakObjectPtr<AActor>> Shots;
+	for (const auto& A : Scan.HitActors)
 	{
-		TWeakObjectPtr<AActor> WeakTarget(Scan.HitActors[i].Get());
+		for (int32 k = 0; k < PerTarget; ++k) { Shots.Add(A.Get()); }
+	}
+	if (PerTarget > 1 && !Shots.IsEmpty())
+	{
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 대상마다 %d발 → 모두 %d발 (%.2f초 간격)"), *GetNameSafe(&Skill), PerTarget, Shots.Num(), Interval + AimTime);
+	}
+	// 인식된 사람 수만큼 (최대 MaxTargets) **한 명에 한 발씩** · 가까운 순 — 발마다 Fire 애니 · 사격음 (사용자 2026-10-02 "shot 애니가 인식된 사람 수만큼 한 명씩")
+	for (int32 i = 0; i < Shots.Num(); ++i)
+	{
+		TWeakObjectPtr<AActor> WeakTarget = Shots[i];
 		// 발마다 조준 → 사격 (사용자 2026-10-02 "Loop 시작할 때 Aiming · 소리 끝나면 Fire 잠시 · 다시 Loop + Aiming_02")
 		//   i 번째 조준 = i × (사격 Interval + 조준 AimTime) · 사격 = 그 + AimTime. 1발도 스캔 직후 조준부터
 		const float AimAt = i * (Interval + AimTime);
@@ -218,7 +262,10 @@ void UERDelivery_Projectile::FireSequential(UERGameplayAbility& Ability, const U
 			}
 		}), Delay, false);
 	}
-	Ability.BeginDeferredHits(Skill, /*bAttackCue=*/false);   // 시전음 · Fire 애니는 발마다 (FireShotAt)
+	if (bBeginDeferred)   // ScanDelay 면 시전 때 이미 했다
+	{
+		Ability.BeginDeferredHits(Skill, /*bAttackCue=*/false);   // 시전음 · Fire 애니는 발마다 (FireShotAt)
+	}
 }
 
 void UERDelivery_Projectile::FireShotAt(UERGameplayAbility& Ability, const UERSkillData& Skill, AActor* Target, int32 ShotIndex, int32 Lv, const FTargetQuery& Filter) const
@@ -271,6 +318,8 @@ FString UERDelivery_Projectile::Describe() const
 		bPierce ? TEXT(" · 관통") : TEXT(""), bHoming ? (bHitOnlyTarget ? TEXT(" · 따라감(대상만)") : TEXT(" · 따라감")) : TEXT(""), *GetNameSafe(ProjectileClass.Get()));
 	if (FirePattern == EERFirePattern::Simultaneous) { S += FString::Printf(TEXT(" · %d발 %.0f°"), Count, SpreadAngleDeg); }
 	if (FirePattern == EERFirePattern::Sequential)   { S += FString::Printf(TEXT(" · 간격 %.2f · 조준 %.2f · 취소 %.0f"), Interval, AimTime, CancelDistance); }
+	if (FirePattern == EERFirePattern::Sequential && !ShotsPerTarget.IsEmpty()) { S += FString::Printf(TEXT(" · 대상당 %d발~"), ShotsPerTarget[0]); }
+	if (FirePattern == EERFirePattern::Sequential && ScanDelay > 0.f)           { S += FString::Printf(TEXT(" · 스캔 %.2f초 뒤"), ScanDelay); }
 	return S + TEXT(")");
 }
 

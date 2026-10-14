@@ -21,6 +21,10 @@ struct FERSupportAmount
 	UPROPERTY(EditDefaultsOnly)
 	TArray<float> SkillAmpRatio;
 
+	/** 시전자 추가 체력 (ERSkill::CasterBonusMaxHP) × 이 값 — 전술 초월 0.8 / 1.0 (Argument 80) */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> CasterBonusHPRatio;
+
 	float Evaluate(const FERSkillContext& Ctx) const;
 };
 
@@ -56,6 +60,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0"))
 	float Duration = 2.5f;
 
+	/** 시전자 자신에게 — 판정과 무관하게 발동 때 한 번 (전술 초월 · Argument 80). 맞은 대상에게도 주던 것은 그대로 */
+	UPROPERTY(EditDefaultsOnly)
+	bool bSelf = false;
+
+	virtual void OnExecute(FERSkillContext& Ctx) const override;
 	virtual void OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const override;
 	virtual FString GetDebugName() const override { return TEXT("보호막"); }
 	virtual bool IsHitEffect() const override { return true; }

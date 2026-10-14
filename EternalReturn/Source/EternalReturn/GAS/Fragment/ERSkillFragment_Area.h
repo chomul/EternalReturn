@@ -69,6 +69,13 @@ public:
 	UPROPERTY(EditDefaultsOnly, meta = (ClampMin = "0", EditCondition = "BasePulses > 0"))
 	float BonusDefensePerPulse = 0.f;
 
+	/**
+	 * 펄스 데이터 — 비우면 **이 스킬** 의 적중 조각으로 판정 대신 친다 (지금까지와 같다).
+	 * 넣으면 이 스킬의 판정은 그대로 하고, 장판은 **이 데이터** 의 적중 조각 · 대상 조건으로 친다 (전술 퀘이크 Lv2 — 4m 즉시 피해 + 3.5m 0.5초 틱 · Argument 80).
+	 */
+	UPROPERTY(EditDefaultsOnly)
+	TObjectPtr<UERSkillData> PulseSkill;
+
 	virtual void OnExecute(FERSkillContext& Ctx) const override;
 	virtual FString GetDebugName() const override { return TEXT("장판"); }
 };

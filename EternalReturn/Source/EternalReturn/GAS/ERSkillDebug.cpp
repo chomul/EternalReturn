@@ -18,6 +18,7 @@
 #include "GAS/ERGameplayTags.h"
 #include "GAS/ERSkillData.h"
 #include "GAS/ERShield.h"
+#include "Combat/ERCombatSettings.h"
 #include "Combat/ERWilson.h"
 #include "GameFramework/Character.h"
 
@@ -86,6 +87,7 @@ bool ParseSlot(const FString& Name, FGameplayTag& OutTag)
 	if (Name.Equals(TEXT("E"), ESearchCase::IgnoreCase)) { OutTag = ERTags::Ability_Slot_E; return true; }
 	if (Name.Equals(TEXT("R"), ESearchCase::IgnoreCase)) { OutTag = ERTags::Ability_Slot_R; return true; }
 	if (Name.Equals(TEXT("D"), ESearchCase::IgnoreCase)) { OutTag = ERTags::Ability_Slot_D; return true; }
+	if (Name.Equals(TEXT("F"), ESearchCase::IgnoreCase)) { OutTag = ERTags::Ability_Slot_F; return true; }
 	return false;
 }
 
@@ -244,6 +246,40 @@ void SkillHasteCmd(const TArray<FString>& Args, UWorld* World)
 }
 
 // ─────────────────────────────────────────────────────────────
+// ER.Skill.ResetCooldown [슬롯] — 전원 쿨다운 GE 제거 (서버 창). 슬롯 없으면 P Q W E R D F 전부
+//   전술 스킬을 바꿔 가며 테스트할 때 슬롯 쿨(Cooldown.Slot.F)이 이어져 막히는 것 대용
+// ─────────────────────────────────────────────────────────────
+void SkillResetCooldownCmd(const TArray<FString>& Args, UWorld* World)
+{
+	FGameplayTagContainer Tags;
+	if (Args.Num() > 0)
+	{
+		FGameplayTag SlotTag;
+		if (!ParseSlot(Args[0], SlotTag))
+		{
+			UE_LOG(LogEternalReturn, Error, TEXT("[스킬디버그] 사용법: ER.Skill.ResetCooldown [P|Q|W|E|R|D|F]"));
+			return;
+		}
+		Tags.AddTag(ERSkill::CooldownTagForSlot(SlotTag));
+	}
+	else
+	{
+		for (const TCHAR* S : {TEXT("P"), TEXT("Q"), TEXT("W"), TEXT("E"), TEXT("R"), TEXT("D"), TEXT("F")})
+		{
+			FGameplayTag SlotTag;
+			ParseSlot(S, SlotTag);
+			Tags.AddTag(ERSkill::CooldownTagForSlot(SlotTag));
+		}
+	}
+	ForEachServerPlayer(World, [&Tags](AERPlayerState* PS)
+	{
+		UAbilitySystemComponent* ASC = PS->GetAbilitySystemComponent();
+		const int32 N = ASC ? ASC->RemoveActiveEffects(FGameplayEffectQuery::MakeQuery_MatchAnyOwningTags(Tags)) : 0;
+		UE_LOG(LogEternalReturn, Warning, TEXT("[스킬디버그] %s 쿨다운 %d개 제거 (%s)"), *PS->GetName(), N, *Tags.ToStringSimple());
+	});
+}
+
+// ─────────────────────────────────────────────────────────────
 // ER.Skill.Tags — 이 월드가 아는 모든 플레이어의 ASC 소유 태그 (어느 창에서든)
 //   다른 플레이어의 State.Casting 이 복제되는지 볼 때.
 // ─────────────────────────────────────────────────────────────
@@ -269,6 +305,57 @@ void SkillTagsCmd(const TArray<FString>& Args, UWorld* World)
 }
 
 } // namespace
+
+// ─────────────────────────────────────────────────────────────
+// ER.Tactical <이름|번호> — 전술 스킬 고르기 (Argument 80 · 로비 전 대용). 클라 창 = 자기 것 · 캐릭터 선택 UI 와 같은 RPC
+// ER.Tactical.Level <1|2> — 전원 F 레벨 (서버 창 · 전술 강화 모듈 전 대용 · D4 L1)
+// ─────────────────────────────────────────────────────────────
+void TacticalCmd(const TArray<FString>& Args, UWorld* World)
+{
+	const TArray<TSoftObjectPtr<UERSkillData>>& List = UERCombatSettings::Get().TacticalSkills;
+	if (Args.Num() < 1)
+	{
+		for (int32 i = 0; i < List.Num(); ++i)
+		{
+			UE_LOG(LogEternalReturn, Log, TEXT("[전술 스킬] %d %s"), i, *List[i].GetAssetName());
+		}
+		return;
+	}
+	int32 Index = INDEX_NONE;
+	if (Args[0].IsNumeric())
+	{
+		Index = FCString::Atoi(*Args[0]);
+	}
+	else
+	{
+		Index = List.IndexOfByPredicate([&](const TSoftObjectPtr<UERSkillData>& S) { return S.GetAssetName().Contains(Args[0]); });
+	}
+	if (!List.IsValidIndex(Index))
+	{
+		UE_LOG(LogEternalReturn, Error, TEXT("[전술 스킬] '%s' 없음 — 인자 없이 ER.Tactical 로 목록"), *Args[0]);
+		return;
+	}
+	if (AERPlayerState* PS = GetLocalERPlayerState(World))
+	{
+		PS->ServerSelectTacticalSkill(Index);
+	}
+}
+
+void TacticalLevelCmd(const TArray<FString>& Args, UWorld* World)
+{
+	const int32 Level = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : 2;
+	ForEachServerPlayer(World, [Level](AERPlayerState* PS)
+	{
+		ERSkill::SetSkillLevel(PS->GetAbilitySystemComponent(), ERTags::Ability_Slot_F, Level, TEXT("ER.Tactical.Level"));
+	});
+}
+
+static FAutoConsoleCommandWithWorldAndArgs GERTacticalCmd(
+	TEXT("ER.Tactical"), TEXT("[임시] 전술 스킬 고르기 (자기 것). ER.Tactical <이름 일부|번호> · 인자 없으면 목록"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&TacticalCmd));
+static FAutoConsoleCommandWithWorldAndArgs GERTacticalLevelCmd(
+	TEXT("ER.Tactical.Level"), TEXT("[임시] 전원 전술 스킬 레벨 (서버 창). ER.Tactical.Level <1|2>"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&TacticalLevelCmd));
 
 static FAutoConsoleCommandWithWorldAndArgs GERSkillTagsCmd(
 	TEXT("ER.Skill.Tags"), TEXT("[임시] 모든 플레이어의 ASC 소유 태그"),
@@ -301,6 +388,10 @@ static FAutoConsoleCommandWithWorldAndArgs GERSkillCooldownCmd(
 	TEXT("ER.Skill.Cooldown"),
 	TEXT("[임시] 스킬별 쿨다운 남은/전체 시간"),
 	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SkillCooldownCmd));
+static FAutoConsoleCommandWithWorldAndArgs GERSkillResetCooldownCmd(
+	TEXT("ER.Skill.ResetCooldown"),
+	TEXT("[임시] 전원 쿨다운 초기화 (서버 창). ER.Skill.ResetCooldown [P|Q|W|E|R|D|F] · 없으면 전부"),
+	FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SkillResetCooldownCmd));
 
 static FAutoConsoleCommandWithWorldAndArgs GERSkillHasteCmd(
 	TEXT("ER.Skill.Haste"),

@@ -39,6 +39,12 @@ public:
 	UPROPERTY(EditDefaultsOnly)
 	bool bRequireTargetMaxBleed = false;
 
+	/** 적중과 무관하게 **발동 때** CooldownTags 를 줄인다 (전술 아티팩트 Lv2 "경직 중 쿨다운 150% 빠르게" = 2.5 × 1.5 초를 미리 · Argument 80 `[자체]`) */
+	UPROPERTY(EditDefaultsOnly)
+	bool bOnCast = false;
+
+	virtual void OnExecute(FERSkillContext& Ctx) const override;
+
 	virtual bool IsHitEffect() const override { return true; }
 	virtual void OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const override;
 	virtual void OnHitDealt(FERSkillContext& Ctx, AActor* Target, const FGameplayTagContainer& HitTags) const override;

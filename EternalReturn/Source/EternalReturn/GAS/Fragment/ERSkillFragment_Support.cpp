@@ -21,7 +21,8 @@ float FERSupportAmount::Evaluate(const FERSkillContext& Ctx) const
 	const float SkillAmp = Ctx.ASC ? Ctx.ASC->GetNumericAttribute(UERAttributeSet::GetSkillAmpAttribute()) : 0.f;
 	return UERSkillData::LevelValue(Base, Ctx.Level)
 		+ CharLevel * UERSkillData::LevelValue(PerCharLevel, Ctx.Level)
-		+ SkillAmp * UERSkillData::LevelValue(SkillAmpRatio, Ctx.Level);
+		+ SkillAmp * UERSkillData::LevelValue(SkillAmpRatio, Ctx.Level)
+		+ ERSkill::CasterBonusMaxHP(Ctx.ASC) * UERSkillData::LevelValue(CasterBonusHPRatio, Ctx.Level);
 }
 
 void UERSkillFragment_Heal::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const
@@ -51,6 +52,14 @@ void UERSkillFragment_Heal::OnTargetsResolved(FERSkillContext& Ctx, const TArray
 		}
 	}
 	UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s 회복 %.1f × %d명"), *GetNameSafe(Ctx.Skill), Heal, Targets.Num());
+}
+
+void UERSkillFragment_Shield::OnExecute(FERSkillContext& Ctx) const
+{
+	if (bSelf && Ctx.bAuthority && Ctx.ASC)
+	{
+		ERShield::Apply(Ctx.ASC, Amount.Evaluate(Ctx), Duration, GetNameSafe(Ctx.Skill));
+	}
 }
 
 void UERSkillFragment_Shield::OnTargetsResolved(FERSkillContext& Ctx, const TArray<AActor*>& Targets) const

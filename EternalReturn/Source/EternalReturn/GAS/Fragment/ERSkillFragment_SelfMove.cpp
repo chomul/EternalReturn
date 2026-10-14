@@ -67,6 +67,26 @@ void UERSkillFragment_SelfMove::OnExecute(FERSkillContext& Ctx) const
 			*GetNameSafe(Owner), *GetNameSafe(Ctx.Skill), *GetNameSafe(Ctx.AimActor), DistanceUU, *Dest.ToCompactString());
 		return;
 	}
+	case ESkillSelfMove::BlinkToAimPoint:
+	{
+		// 전술 블링크 — 조준점(ResolveAim 이 사거리로 클램프)으로 텔레포트. 벽 너머도 된다 · 이동 복제로 클라에 간다
+		const FVector From = Avatar->GetActorLocation();
+		FVector Spot;
+		if (!ERForcedMove::FindBlinkSpot(Avatar, Ctx.AimPoint, Spot))
+		{
+			UE_LOG(LogEternalReturn, Warning, TEXT("[스킬] %s <- %s 블링크 — 설 자리 없음 (제자리)"), *GetNameSafe(Owner), *GetNameSafe(Ctx.Skill));
+			return;
+		}
+		Avatar->SetActorLocation(Spot, /*bSweep=*/false, nullptr, ETeleportType::TeleportPhysics);
+		FVector Facing = Spot - From; Facing.Z = 0.f;
+		if (!Facing.IsNearlyZero())
+		{
+			Avatar->SetActorRotation(FRotator(0.f, Facing.Rotation().Yaw, 0.f));
+		}
+		UE_LOG(LogEternalReturn, Log, TEXT("[스킬] %s <- %s 블링크 %.0fcm -> %s"),
+			*GetNameSafe(Owner), *GetNameSafe(Ctx.Skill), FVector::Dist2D(From, Spot), *Spot.ToCompactString());
+		return;
+	}
 	case ESkillSelfMove::TowardAim:
 		break;
 	case ESkillSelfMove::AwayFromAim:

@@ -92,6 +92,14 @@ struct FERSelfEffect
 	/** 이 버프에 붙일 태그 (Spec 동적 태그) — 공용 GE 로 "이 스킬의 버프" 를 찾게 (재키 R Mode.Chainsaw → 처치 시 +5초 · 전기톱 모드 연출 · Argument 65 · 66) */
 	UPROPERTY(EditDefaultsOnly)
 	FGameplayTag GrantTag;
+
+	/** 크기 + 시전자 추가 체력 × 이 값 (레벨별 · 전술 초월 Lv2 CC 저항 "10 + 추가 체력 3%" % → 0.0003 · Argument 80). 자기 버프 조각만 본다 */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> MagnitudePerBonusHP;
+
+	/** 크기 + 시전자 실험체 레벨 × 이 값 (레벨별 · 전술 라이트 윙 이속 "+캐릭터 레벨×1%" → 0.01 · Argument 80). 자기 버프 조각만 본다 */
+	UPROPERTY(EditDefaultsOnly)
+	TArray<float> MagnitudePerCharLevel;
 };
 
 /**
@@ -176,6 +184,8 @@ enum class ESkillSelfMove : uint8
 	ToAimPoint,
 	/** 지정 대상(AimActor) 의 **건너편** SelfMoveDistance 로 **순간이동** (지형 통과 ○ — RootMotion 아님, 텔레포트) — 단검 D (F11-05 C). 대상 없으면 실패 */
 	BlinkBehindTarget,
+	/** 클램프된 조준점으로 **순간이동** (지형 통과 ○ · 벽 속이면 내 쪽으로 당긴 빈 자리) — 전술 블링크 (Argument 80). 설 자리 없으면 제자리 */
+	BlinkToAimPoint,
 };
 
 /**
@@ -445,6 +455,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "시전")
 	bool bCastWhileMoving = false;
 
+	/** 시전 때 몸을 조준 방향으로 돌리지 않는다 — 방향 없는 스킬 (진실의 칼날 · 초월 · 아티팩트 · 사용자 2026-10-14 · Argument 81 A) */
+	UPROPERTY(EditDefaultsOnly, Category = "시전")
+	bool bKeepFacing = false;
+
 	/** 누르는 순간 커서 = **자리 고정** · 누르고 있는 동안 커서 = **방향** · 떼면 발동 (레니 R · 사용자 2026-10-07). 방향 점은 어빌리티 GetSecondAimPoint */
 	UPROPERTY(EditDefaultsOnly, Category = "시전")
 	bool bAimDirectionOnHold = false;
@@ -594,4 +608,10 @@ namespace ERSkill
 	 * MaxLevel 로 클램프 · 같으면 아무것도 안 한다. 포인트 스킬에 부르면 Warning + false.
 	 */
 	bool SetSkillLevel(UAbilitySystemComponent* ASC, const FGameplayTag& SlotTag, int32 NewLevel, const TCHAR* Reason);
+
+	/**
+	 * 추가 체력 = 최대 체력 Current − Base. 레벨 성장은 Base 에 (Instant) · 장비는 Current 에 (Infinite) — 추가 공격력과 같은 기준 (Argument 5).
+	 * 전술 스킬 퀘이크 · 초월 (Argument 80). ASC 가 없으면 0.
+	 */
+	float CasterBonusMaxHP(const UAbilitySystemComponent* ASC);
 }

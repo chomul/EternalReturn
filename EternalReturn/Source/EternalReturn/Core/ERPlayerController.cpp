@@ -708,7 +708,8 @@ void AERPlayerController::OnMoveToCursor()
 			}
 			UE_LOG(LogEternalReturn, Log, TEXT("[소생] %s — %s · 다가간다"), *GetNameSafe(Clicked), *Why);
 		}
-		else if (ClickedASC && GetPawn() && !bIncapacitated && ERTeamStatics::IsHostile(GetPawn(), Clicked) && ClickedASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 0.f)
+		else if (ClickedASC && GetPawn() && !bIncapacitated && ERTeamStatics::IsHostile(GetPawn(), Clicked) && ClickedASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) > 0.f
+			&& !ClickedASC->HasMatchingGameplayTag(ERTags::State_Untargetable))   // 대상 지정 불가면 그 자리로 이동만
 		{
 			// 적 실험체를 새로 찍으면 혼잣말 (Argument 73 · 본인 · 클라 로컬 — 네트워크 없음). 확률 · 간격은 _Voice.json
 			UERPresentationComponent* Pres = Clicked != AttackTarget.Get() && Clicked->IsA<AERCharacterBase>()
@@ -907,6 +908,11 @@ void AERPlayerController::TickAutoAttack()
 	if (!Target || !TargetASC || TargetASC->GetNumericAttribute(UERAttributeSet::GetHPAttribute()) <= 0.f || !ERTeamStatics::IsHostile(Me, Target))
 	{
 		SetAttackTarget(nullptr, TEXT("대상 사망 · 사라짐"));
+		return;
+	}
+	if (TargetASC->HasMatchingGameplayTag(ERTags::State_Untargetable))
+	{
+		SetAttackTarget(nullptr, TEXT("대상 지정 불가"));   // 아티팩트 등 (사용자 2026-10-14)
 		return;
 	}
 	if (UERRideComponent* Ride = Me->FindComponentByClass<UERRideComponent>(); Ride && Ride->IsSteering())
